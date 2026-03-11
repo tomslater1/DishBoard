@@ -4,8 +4,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Fix SSL certificate path for the requests library inside a PyInstaller bundle.
-# requests cannot find cacert.pem via its own pkg_resources lookup when frozen,
-# so we point it at the certifi bundle explicitly before any network code runs.
 import certifi
 os.environ.setdefault("SSL_CERT_FILE",      certifi.where())
 os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
@@ -26,44 +24,32 @@ ICON_PATH      = get_resource_path("assets/icons/DishBoard-darkicon.png")
 ICON_DOCK_PATH = get_resource_path("assets/icons/DishBoard-darkicon.png")
 
 
-def _load_api_keys_from_db(db: Database):
-    """Load non-AI API keys from DB into os.environ.
+def _load_supabase_credentials(db: Database):
+    """Ensure SUPABASE_URL and SUPABASE_ANON_KEY are in os.environ.
 
-    Anthropic API key is intentionally excluded — Dishy always routes through
-    the Supabase server-side proxy authenticated by the user's session.
-    Loading a local Anthropic key would bypass the proxy entirely.
-
-    Also loads SUPABASE_URL and SUPABASE_ANON_KEY so the auth client is ready.
-    Keys stored in the DB always take priority over os.environ defaults.
-    Supabase credentials are persisted back to the DB on first run so they
-    survive across launches without any configuration file.
+    Reads from DB first (persisted on previous runs), then falls back to the
+    bundled defaults.  No other API keys are loaded here — Dishy uses the
+    server-side proxy, and all other third-party keys are managed server-side.
     """
-    key_map = {
-        "google_api_key":    "GOOGLE_API_KEY",
-        "google_cx":         "GOOGLE_CX",
-        "supabase_url":      "SUPABASE_URL",
-        "supabase_anon_key": "SUPABASE_ANON_KEY",
-    }
-    for db_key, env_key in key_map.items():
+    for db_key, env_key in [("supabase_url", "SUPABASE_URL"),
+                             ("supabase_anon_key", "SUPABASE_ANON_KEY")]:
         if not os.environ.get(env_key):
             val = db.get_setting(db_key, "")
             if val:
                 os.environ[env_key] = val
 
-    # Ensure Supabase URL is always in os.environ — the AI proxy reads it from here.
-    # If nothing was found in DB, fall back to the bundled defaults.
+    # Fall back to bundled defaults if still not set
     if not os.environ.get("SUPABASE_URL"):
         from auth.supabase_client import _DEFAULT_URL, _DEFAULT_KEY
         os.environ["SUPABASE_URL"] = _DEFAULT_URL
         os.environ["SUPABASE_ANON_KEY"] = _DEFAULT_KEY
 
-    # Persist Supabase credentials to DB so they survive across launches
+    # Persist to DB so they survive across launches
     for env_key, db_key in [("SUPABASE_URL", "supabase_url"),
                              ("SUPABASE_ANON_KEY", "supabase_anon_key")]:
         val = os.environ.get(env_key)
         if val:
             db.set_setting(db_key, val)
-
 
 
 # ── Global references kept alive so Qt doesn't GC them ───────────────────────
@@ -74,7 +60,6 @@ _sync_service     = None
 _db               = None
 _onboarding_view  = None
 _app_tour         = None   # AppTourOverlay — kept alive during tour
-_pending_tour     = False  # True when offline mode chosen (tour always shown)
 
 
 def _start_cloud_sync(user: dict) -> None:
@@ -91,7 +76,7 @@ def _show_app_tour() -> None:
     """Create and launch the AppTourOverlay over the main window."""
     global _app_tour
     if _app_tour is not None:
-        return  # already running
+        return
     from views.app_tour import AppTourOverlay
     _app_tour = AppTourOverlay(_main_window, _db)
     _app_tour.finished.connect(_on_tour_finished)
@@ -100,81 +85,47 @@ def _show_app_tour() -> None:
 
 def _on_tour_finished() -> None:
     """Called when the user completes or skips the tour."""
-    global _app_tour, _pending_tour
+    global _app_tour
     if _app_tour is not None:
         _app_tour.hide()
         _app_tour.deleteLater()
         _app_tour = None
-    # Only mark the tour complete for authenticated (non-offline) users
-    if not _pending_tour:
-        _db.set_setting("app_tour_complete", "1")
-    _pending_tour = False
+    _db.set_setting("app_tour_complete", "1")
 
 
 def _on_login_success(user: dict) -> None:
     """Called (on main thread) after a successful sign-in."""
     global _main_window, _root_stack, _db
 
-    # Switch to the main app
     _root_stack.setCurrentIndex(1)
 
-    # Check if local data exists → offer migration to new account
-    if not user.get("offline"):
-        try:
-            recipe_count = len(_db.get_saved_recipes())
-            if recipe_count > 0:
-                from auth.migration_dialog import MigrationDialog
-                dlg = MigrationDialog(recipe_count, user_id=user["id"],
-                                      parent=_main_window)
-                dlg.exec()
-        except Exception:
-            pass
+    # Offer migration of local data to the new account
+    try:
+        recipe_count = len(_db.get_saved_recipes())
+        if recipe_count > 0:
+            from auth.migration_dialog import MigrationDialog
+            dlg = MigrationDialog(recipe_count, user_id=user["id"],
+                                  parent=_main_window)
+            dlg.exec()
+    except Exception:
+        pass
 
-    # Start background cloud sync (skip if offline mode)
-    if not user.get("offline"):
-        _start_cloud_sync(user)
-    else:
-        _main_window.set_offline_mode()
-
-    # Tell Settings about the logged-in user
+    _start_cloud_sync(user)
     _main_window.set_account_user(user, _sync_service)
-
-    # Show onboarding if profile not yet set up
     _maybe_show_onboarding()
-
-
-def _on_continue_offline() -> None:
-    """User chose to skip account creation — run fully local."""
-    global _root_stack, _main_window, _pending_tour
-    _pending_tour = True   # always show tour for offline sessions
-    _root_stack.setCurrentIndex(1)
-    _main_window.set_offline_mode()
-    _main_window.set_account_user(None, None)
-
-    # Show onboarding if profile not yet set up
-    _maybe_show_onboarding()
-
-    # If onboarding is already complete, show the tour immediately
-    if _db.get_setting("onboarding_complete", "") == "1":
-        QTimer.singleShot(400, _show_app_tour)
-        _pending_tour = False
 
 
 def _maybe_show_onboarding() -> None:
     """Switch to the full-screen onboarding wizard if profile not yet set up."""
-    global _db, _root_stack, _onboarding_view
     if _db.get_setting("onboarding_complete", "") != "1":
         _root_stack.setCurrentIndex(2)
 
 
 def _on_onboarding_finished() -> None:
     """Called when the user completes or skips onboarding — go to main app."""
-    global _root_stack, _pending_tour
     _root_stack.setCurrentIndex(1)
-    # Show tour for: new authenticated users (no flag yet) OR pending offline session
-    if _pending_tour or _db.get_setting("app_tour_complete", "") != "1":
+    if _db.get_setting("app_tour_complete", "") != "1":
         QTimer.singleShot(400, _show_app_tour)
-    _pending_tour = False
 
 
 def main():
@@ -209,25 +160,24 @@ def main():
     font.setStyleHint(QFont.StyleHint.SansSerif)
     app.setFont(font)
 
-    # Initialise local database
+    # Initialise local database (used as a local cache / offline buffer)
     _db = Database()
     _db.connect()
     _db.init_db()
 
-    # Load API keys from DB into os.environ (includes Supabase keys)
-    _load_api_keys_from_db(_db)
+    # Ensure Supabase credentials are in os.environ before creating the client
+    _load_supabase_credentials(_db)
 
     # Reset Supabase client so it picks up the freshly loaded env vars
     from auth.supabase_client import reset_client
     reset_client()
 
-    # ── Root stack: [0] LoginView  [1] MainWindow ────────────────────────────
+    # ── Root stack: [0] LoginView  [1] MainWindow  [2] OnboardingWizard ──────
     _root_stack = QStackedWidget()
     _root_stack.setWindowTitle("DishBoard")
     _root_stack.resize(1200, 800)
     _root_stack.setMinimumSize(900, 600)
 
-    # Centre on screen
     from PySide6.QtGui import QGuiApplication
     screen = QGuiApplication.primaryScreen().availableGeometry()
     _root_stack.move(
@@ -241,7 +191,6 @@ def main():
     from views.login import LoginView
     _login_view = LoginView()
     _login_view.login_successful.connect(_on_login_success)
-    _login_view.continue_offline.connect(_on_continue_offline)
 
     # Build main window
     from main_window import MainWindow
@@ -264,15 +213,15 @@ def main():
     user = get_current_user()
 
     if user:
-        # Valid (or offline) session — skip login screen
+        # Valid session (or session valid but temporarily offline) — skip login
         _root_stack.setCurrentIndex(1)
-        if not user.get("offline"):
+        if not user.get("_network_unavailable"):
             _start_cloud_sync(user)
         else:
-            _main_window.set_offline_mode()
+            _main_window.set_sync_unavailable()
         _main_window.set_account_user(user, _sync_service)
     else:
-        # No session — show login
+        # No valid session — require login
         _root_stack.setCurrentIndex(0)
 
     _root_stack.show()

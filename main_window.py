@@ -692,7 +692,11 @@ class MainWindow(QMainWindow):
             pass
 
     def set_offline_mode(self) -> None:
-        """Show the offline indicator in the sidebar."""
+        """Legacy alias — calls set_sync_unavailable."""
+        self.set_sync_unavailable()
+
+    def set_sync_unavailable(self) -> None:
+        """Show a sync-unavailable indicator (network down, still signed in)."""
         self._sync_indicator.setVisible(True)
         self._sync_indicator.set_state("offline")
 

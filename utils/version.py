@@ -1,9 +1,21 @@
-APP_VERSION = "v0.45.4"
+APP_VERSION = "v0.46"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.46",
+        "title": "Cloud-first, login required",
+        "changes": [
+            "DishBoard now requires an account — all data is stored securely in the cloud against your personal account",
+            "Removed offline/anonymous mode: data is always tied to your account",
+            "Redesigned login screen: clear Sign In / Create Account tabs, field validation, and much more specific error messages",
+            "Google and Apple sign-in buttons are correctly shown as coming soon instead of silently failing",
+            "No API keys are stored locally — all AI and cloud features are handled server-side",
+            "Dishy session reliability: proxy now falls back to macOS Keychain if the in-memory session is lost",
+        ],
+    },
     {
         "version": "v0.45.4",
         "title": "Dishy connection reliability fix",

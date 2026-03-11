@@ -4,8 +4,8 @@ CloudSyncService — bidirectional sync between local SQLite and Supabase.
 All methods are blocking and designed to run inside run_async() workers.
 Conflict resolution: last-write-wins on updated_at.
 
-Settings keys that are NEVER synced to the cloud (security):
-  anthropic_api_key, google_api_key, google_cx, daily_tip, daily_tip_date
+Settings keys that are NEVER synced to the cloud:
+  anthropic_api_key, daily_tip, daily_tip_date
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from auth.supabase_client import get_client
 
 # Settings keys that must never leave the device
 _EXCLUDED_SETTINGS = {
-    "anthropic_api_key", "google_api_key", "google_cx",
+    "anthropic_api_key",
     "daily_tip", "daily_tip_date",
 }
 

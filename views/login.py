@@ -2,7 +2,8 @@
 LoginView — pre-app authentication screen.
 
 Shown when no valid Supabase session is found at startup.
-Offers email/password, Google OAuth, Apple placeholder, and offline mode.
+Offers email/password sign-in and account creation.
+Google and Apple OAuth are placeholders (coming soon).
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from utils.theme import manager as theme_manager
 
 class LoginView(QWidget):
     login_successful = Signal(dict)   # emits user dict on success
-    continue_offline = Signal()       # emits when user chooses no-account mode
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,7 +35,6 @@ class LoginView(QWidget):
     # ── UI ─────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        # Full-screen dark bg
         self.setStyleSheet(
             f"background: {theme_manager.c('#090909', '#f5f5f5')};"
         )
@@ -45,13 +44,12 @@ class LoginView(QWidget):
         root.setSpacing(0)
         root.addStretch(2)
 
-        # Centre column — fixed width card
         centre_row = QHBoxLayout()
         centre_row.setContentsMargins(0, 0, 0, 0)
         centre_row.addStretch()
 
         card = QWidget()
-        card.setFixedWidth(400)
+        card.setFixedWidth(420)
         card.setStyleSheet(
             f"background: {theme_manager.c('#111111', '#ffffff')};"
             " border-radius: 16px;"
@@ -60,7 +58,7 @@ class LoginView(QWidget):
         card_layout.setContentsMargins(40, 40, 40, 40)
         card_layout.setSpacing(0)
 
-        # Logo + title
+        # ── Logo + title ───────────────────────────────────────────────────────
         logo_row = QHBoxLayout()
         logo_row.setSpacing(12)
         logo_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -92,23 +90,45 @@ class LoginView(QWidget):
 
         card_layout.addSpacing(6)
 
-        tagline = QLabel("Your recipes, everywhere.")
+        tagline = QLabel("Your recipes, meal plans, and nutrition — everywhere.")
         tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tagline.setWordWrap(True)
         tagline.setStyleSheet(
-            f"font-size: 13px; color: {theme_manager.c('#666', '#888')}; background: transparent;"
+            f"font-size: 12px; color: {theme_manager.c('#666', '#888')}; background: transparent;"
         )
         card_layout.addWidget(tagline)
 
         card_layout.addSpacing(28)
 
-        # ── Mode toggle label ──────────────────────────────────────────────────
-        self._mode_lbl = QLabel("Sign in to your account")
-        self._mode_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._mode_lbl.setStyleSheet(
-            f"font-size: 15px; font-weight: 700;"
-            f" color: {theme_manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
-        )
-        card_layout.addWidget(self._mode_lbl)
+        # ── Mode header ────────────────────────────────────────────────────────
+        # A coloured pill that clearly shows whether user is signing in or signing up
+        self._mode_pill = QWidget()
+        self._mode_pill.setFixedHeight(36)
+        pill_layout = QHBoxLayout(self._mode_pill)
+        pill_layout.setContentsMargins(0, 0, 0, 0)
+        pill_layout.setSpacing(0)
+
+        self._signin_tab = QPushButton("Sign In")
+        self._signin_tab.setFixedHeight(36)
+        self._signin_tab.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._signin_tab.clicked.connect(lambda: self._set_mode(False))
+
+        self._signup_tab = QPushButton("Create Account")
+        self._signup_tab.setFixedHeight(36)
+        self._signup_tab.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._signup_tab.clicked.connect(lambda: self._set_mode(True))
+
+        for btn in (self._signin_tab, self._signup_tab):
+            btn.setStyleSheet(
+                "QPushButton { background: transparent; border: none;"
+                f" color: {theme_manager.c('#888', '#888')};"
+                " font-size: 13px; font-weight: 600; border-radius: 8px; }"
+                "QPushButton:hover { color: #ff6b35; }"
+            )
+
+        pill_layout.addWidget(self._signin_tab)
+        pill_layout.addWidget(self._signup_tab)
+        card_layout.addWidget(self._mode_pill)
 
         card_layout.addSpacing(16)
 
@@ -126,7 +146,7 @@ class LoginView(QWidget):
         )
 
         self._email_input = QLineEdit()
-        self._email_input.setPlaceholderText("Email")
+        self._email_input.setPlaceholderText("Email address")
         self._email_input.setFixedHeight(44)
         self._email_input.setStyleSheet(field_style)
         self._email_input.returnPressed.connect(self._on_sign_in)
@@ -142,7 +162,17 @@ class LoginView(QWidget):
         self._pw_input.returnPressed.connect(self._on_sign_in)
         card_layout.addWidget(self._pw_input)
 
-        card_layout.addSpacing(12)
+        card_layout.addSpacing(4)
+
+        # Password hint shown only in signup mode
+        self._pw_hint = QLabel("Minimum 6 characters")
+        self._pw_hint.setStyleSheet(
+            f"color: {theme_manager.c('#555', '#999')}; font-size: 11px; background: transparent;"
+        )
+        self._pw_hint.setVisible(False)
+        card_layout.addWidget(self._pw_hint)
+
+        card_layout.addSpacing(8)
 
         # ── Error label ────────────────────────────────────────────────────────
         self._error_lbl = QLabel("")
@@ -156,7 +186,7 @@ class LoginView(QWidget):
 
         card_layout.addSpacing(4)
 
-        # ── Sign In button ─────────────────────────────────────────────────────
+        # ── Primary action button ──────────────────────────────────────────────
         self._signin_btn = QPushButton("Sign In")
         self._signin_btn.setFixedHeight(46)
         self._signin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -170,20 +200,6 @@ class LoginView(QWidget):
         )
         self._signin_btn.clicked.connect(self._on_sign_in)
         card_layout.addWidget(self._signin_btn)
-
-        card_layout.addSpacing(6)
-
-        # ── Toggle: Create Account / Sign In ───────────────────────────────────
-        self._toggle_btn = QPushButton("Don't have an account?  Create one →")
-        self._toggle_btn.setFixedHeight(32)
-        self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._toggle_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none;"
-            f" color: {theme_manager.c('#888', '#888')}; font-size: 12px; }}"
-            "QPushButton:hover { color: #ff6b35; }"
-        )
-        self._toggle_btn.clicked.connect(self._toggle_mode)
-        card_layout.addWidget(self._toggle_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         card_layout.addSpacing(20)
 
@@ -208,59 +224,40 @@ class LoginView(QWidget):
 
         card_layout.addSpacing(16)
 
-        # ── OAuth buttons ──────────────────────────────────────────────────────
-        oauth_style = (
+        # ── OAuth buttons — both disabled pending setup ─────────────────────────
+        oauth_disabled_style = (
             "QPushButton {"
-            f"  background: {theme_manager.c('#1a1a1a', '#f7f7f7')};"
-            f"  color: {theme_manager.c('#e0e0e0', '#1a1a1a')};"
-            f"  border: 1px solid {theme_manager.c('#2a2a2a', '#ddd')};"
+            f"  background: {theme_manager.c('#141414', '#f3f3f3')};"
+            f"  color: {theme_manager.c('#444', '#bbb')};"
+            f"  border: 1px solid {theme_manager.c('#1e1e1e', '#e5e5e5')};"
             "  border-radius: 10px; font-size: 13px; font-weight: 600;"
             "  text-align: center; padding: 0 16px;"
             "}"
-            "QPushButton:hover {"
-            f"  background: {theme_manager.c('#222', '#efefef')};"
-            "  border-color: rgba(255,107,53,0.5);"
-            "}"
-            "QPushButton:disabled {"
-            f"  background: {theme_manager.c('#141414', '#f3f3f3')};"
-            f"  color: {theme_manager.c('#444', '#bbb')};"
-            f"  border-color: {theme_manager.c('#1e1e1e', '#e5e5e5')};"
-            "}"
         )
 
-        self._google_btn = QPushButton("  Sign in with Google")
-        self._google_btn.setIcon(qta.icon("fa5b.google", color="#4285F4"))
+        self._google_btn = QPushButton("  Sign in with Google  (coming soon)")
+        self._google_btn.setIcon(qta.icon("fa5b.google", color="#555555"))
         self._google_btn.setIconSize(QSize(16, 16))
         self._google_btn.setFixedHeight(46)
-        self._google_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._google_btn.setStyleSheet(oauth_style)
-        self._google_btn.clicked.connect(self._on_google)
+        self._google_btn.setEnabled(False)
+        self._google_btn.setToolTip(
+            "Google sign-in is coming soon — use email and password for now"
+        )
+        self._google_btn.setStyleSheet(oauth_disabled_style)
         card_layout.addWidget(self._google_btn)
 
         card_layout.addSpacing(8)
 
-        self._apple_btn = QPushButton("  Sign in with Apple")
+        self._apple_btn = QPushButton("  Sign in with Apple  (coming soon)")
         self._apple_btn.setIcon(qta.icon("fa5b.apple", color=theme_manager.c("#555", "#aaa")))
         self._apple_btn.setIconSize(QSize(16, 16))
         self._apple_btn.setFixedHeight(46)
         self._apple_btn.setEnabled(False)
         self._apple_btn.setToolTip("Coming soon — requires Apple Developer account setup")
-        self._apple_btn.setStyleSheet(oauth_style)
+        self._apple_btn.setStyleSheet(oauth_disabled_style)
         card_layout.addWidget(self._apple_btn)
 
         card_layout.addSpacing(24)
-
-        # ── Continue without account ───────────────────────────────────────────
-        offline_btn = QPushButton("Continue without account  →")
-        offline_btn.setFixedHeight(32)
-        offline_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        offline_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none;"
-            f" color: {theme_manager.c('#555', '#aaa')}; font-size: 12px; }}"
-            "QPushButton:hover { color: #ff6b35; }"
-        )
-        offline_btn.clicked.connect(self.continue_offline.emit)
-        card_layout.addWidget(offline_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
         centre_row.addWidget(card)
         centre_row.addStretch()
@@ -268,28 +265,51 @@ class LoginView(QWidget):
         root.addStretch(3)
 
         self._is_signup_mode = False
+        self._update_tab_style()
 
-    # ── Mode toggle ────────────────────────────────────────────────────────────
+    # ── Mode switching ──────────────────────────────────────────────────────────
 
-    def _toggle_mode(self):
-        self._is_signup_mode = not self._is_signup_mode
-        if self._is_signup_mode:
-            self._mode_lbl.setText("Create a new account")
-            self._signin_btn.setText("Create Account")
-            self._toggle_btn.setText("Already have an account?  Sign in →")
-        else:
-            self._mode_lbl.setText("Sign in to your account")
-            self._signin_btn.setText("Sign In")
-            self._toggle_btn.setText("Don't have an account?  Create one →")
+    def _set_mode(self, signup: bool):
+        if self._is_signup_mode == signup:
+            return
+        self._is_signup_mode = signup
+        self._signin_btn.setText("Create Account" if signup else "Sign In")
+        self._pw_hint.setVisible(signup)
         self._clear_error()
+        self._update_tab_style()
+
+    def _update_tab_style(self):
+        active = (
+            f"QPushButton {{ background: rgba(255,107,53,0.15);"
+            f" border: none; color: #ff6b35;"
+            f" font-size: 13px; font-weight: 700; border-radius: 8px; }}"
+        )
+        inactive = (
+            f"QPushButton {{ background: transparent; border: none;"
+            f" color: {theme_manager.c('#888', '#888')};"
+            f" font-size: 13px; font-weight: 600; border-radius: 8px; }}"
+            f"QPushButton:hover {{ color: #ff6b35; }}"
+        )
+        self._signup_tab.setStyleSheet(active if self._is_signup_mode else inactive)
+        self._signin_tab.setStyleSheet(inactive if self._is_signup_mode else active)
 
     # ── Email / Password auth ─────────────────────────────────────────────────
 
     def _on_sign_in(self):
         email = self._email_input.text().strip()
         pw    = self._pw_input.text()
-        if not email or not pw:
-            self._show_error("Please enter your email and password.")
+
+        if not email:
+            self._show_error("Please enter your email address.")
+            return
+        if "@" not in email or "." not in email.split("@")[-1]:
+            self._show_error("Please enter a valid email address.")
+            return
+        if not pw:
+            self._show_error("Please enter your password.")
+            return
+        if self._is_signup_mode and len(pw) < 6:
+            self._show_error("Password must be at least 6 characters.")
             return
 
         self._set_loading(True)
@@ -298,89 +318,77 @@ class LoginView(QWidget):
         from utils.workers import run_async
         from auth.supabase_client import get_client
 
+        is_signup = self._is_signup_mode
+
         def _work():
             client = get_client()
             if client is None:
-                raise RuntimeError(
-                    "Supabase is not configured. Please check your internet connection."
-                )
-            if self._is_signup_mode:
+                raise RuntimeError("no_connection")
+            if is_signup:
                 return client.auth.sign_up({"email": email, "password": pw})
             else:
                 return client.auth.sign_in_with_password({"email": email, "password": pw})
 
         def _done(response):
             self._set_loading(False)
-            if response and response.user:
+            if response and response.user and response.session:
                 from auth.session_manager import build_session_dict, save_session
                 session = build_session_dict(response)
                 save_session(session)
                 self.login_successful.emit(session["user"])
+            elif response and response.user and not response.session:
+                # Sign-up with email confirmation required
+                self._show_error(
+                    "Account created! Check your email for a confirmation link, then sign in."
+                )
             else:
-                if self._is_signup_mode:
-                    self._show_error(
-                        "Account created! Check your email to confirm, then sign in."
-                    )
+                if is_signup:
+                    self._show_error("Could not create account. Please try again.")
                 else:
-                    self._show_error("Sign-in failed. Please check your credentials.")
+                    self._show_error("Sign-in failed. Check your email and password.")
 
         def _err(err: str):
             self._set_loading(False)
             msg = err.lower()
-            if "rate limit" in msg:
-                self._show_error("Too many attempts. Please wait a few minutes and try again.")
-            elif "invalid" in msg or "credentials" in msg or ("email" in msg and "password" in msg):
-                self._show_error("Incorrect email or password.")
-            elif "not confirmed" in msg or "confirm" in msg:
+            if "no_connection" in msg or "supabase is not configured" in msg:
                 self._show_error(
-                    "Email not confirmed. Check your inbox for a confirmation link."
+                    "No internet connection. Check your network and try again."
                 )
-            elif "already registered" in msg or "already exists" in msg:
-                self._show_error("An account with this email already exists. Try signing in.")
-            elif "configure" in msg or "supabase" in msg.lower():
-                self._show_error(err)
+            elif "rate limit" in msg or "too many" in msg:
+                self._show_error(
+                    "Too many attempts. Please wait a few minutes and try again."
+                )
+            elif "invalid" in msg and ("login" in msg or "credentials" in msg or "password" in msg):
+                self._show_error(
+                    "Incorrect email or password. "
+                    "Check your details or use 'Create Account' to sign up."
+                )
+            elif "not confirmed" in msg or "email not confirmed" in msg:
+                self._show_error(
+                    "Email not confirmed yet. Check your inbox for the confirmation link."
+                )
+            elif "already registered" in msg or "already exists" in msg or "user_already_exists" in msg:
+                self._show_error(
+                    "An account with this email already exists — try signing in instead."
+                )
+            elif "password" in msg and ("weak" in msg or "short" in msg or "characters" in msg):
+                self._show_error("Password is too weak. Use at least 6 characters.")
+            elif "network" in msg or "connect" in msg or "timeout" in msg or "unreachable" in msg:
+                self._show_error(
+                    "Could not connect to DishBoard servers. Check your internet connection."
+                )
+            elif "invalid_email" in msg or ("email" in msg and "invalid" in msg):
+                self._show_error("Please enter a valid email address.")
             else:
-                self._show_error(f"Error: {err[:120]}")
+                # Show the raw error for unrecognised failures so the user can report it
+                self._show_error(f"Sign-in error: {err.strip().splitlines()[-1][:140]}")
 
         run_async(_work, on_result=_done, on_error=_err)
 
-    # ── Google OAuth ──────────────────────────────────────────────────────────
+    # ── Google OAuth (stub — kept for future use) ─────────────────────────────
 
     def _on_google(self):
-        from auth.supabase_client import get_client
-        client = get_client()
-        if client is None:
-            self._show_error(
-                "Supabase is not configured. Please check your internet connection."
-            )
-            return
-
-        self._set_loading(True)
-        self._clear_error()
-
-        try:
-            from auth.oauth_server import start_oauth_callback_server, CALLBACK_URL
-            done_event = start_oauth_callback_server()
-
-            response = client.auth.sign_in_with_oauth({
-                "provider": "google",
-                "options": {"redirect_to": CALLBACK_URL},
-            })
-            url = getattr(response, "url", None)
-            if not url:
-                self._show_error("Could not get Google sign-in URL from Supabase.")
-                self._set_loading(False)
-                return
-
-            webbrowser.open(url)
-
-            # Store reference so we know which event to poll
-            self._oauth_done_event = done_event
-            self._oauth_poll_timer.start()
-
-        except Exception as exc:
-            self._set_loading(False)
-            self._show_error(f"Google sign-in error: {exc}")
+        pass   # button is disabled; this is never called
 
     def _poll_oauth(self):
         """Called every 500ms to check if OAuth callback has completed."""
@@ -414,9 +422,10 @@ class LoginView(QWidget):
 
     def _set_loading(self, loading: bool):
         self._signin_btn.setEnabled(not loading)
-        self._google_btn.setEnabled(not loading)
         self._email_input.setEnabled(not loading)
         self._pw_input.setEnabled(not loading)
+        self._signin_tab.setEnabled(not loading)
+        self._signup_tab.setEnabled(not loading)
         if loading:
             self._signin_btn.setText("Please wait…")
         else:

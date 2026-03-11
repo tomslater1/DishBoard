@@ -19,7 +19,7 @@ _KEYCHAIN_USERNAME = "supabase_session"
 
 # Keys in the settings dict that we never sync to the cloud
 _SENSITIVE_SETTING_KEYS = {
-    "anthropic_api_key", "google_api_key", "google_cx",
+    "anthropic_api_key",
     "daily_tip", "daily_tip_date",
 }
 
@@ -67,8 +67,8 @@ def get_current_user() -> dict | None:
 
     Returns:
         dict with at least {"id": ..., "email": ...} if session is valid.
-        dict with {"id": ..., "email": ..., "offline": True} if tokens exist
-            but network is unavailable (app can run offline).
+        dict with {"_network_unavailable": True, ...} if tokens exist but the
+            network is down — the user stays logged in with cached local data.
         None if no session exists or the token is truly invalid/expired.
     """
     stored = load_session()
@@ -85,8 +85,8 @@ def get_current_user() -> dict | None:
     from auth.supabase_client import get_client
     client = get_client()
     if client is None:
-        # Supabase not configured — return offline placeholder so the app opens
-        return {**user_info, "offline": True}
+        # Supabase client could not be created — treat as network unavailable
+        return {**user_info, "_network_unavailable": True}
 
     try:
         response = client.auth.set_session(access_token, refresh_token)
@@ -104,11 +104,11 @@ def get_current_user() -> dict | None:
             return new_session["user"]
     except Exception as e:
         err = str(e).lower()
-        # Network error → offline mode (tokens still stored, app can open)
+        # Network error — keep the user logged in with cached local data
         if any(k in err for k in ("connect", "timeout", "network", "name resolution",
                                   "ssl", "socket", "unreachable", "failed to")):
-            return {**user_info, "offline": True}
-        # Auth error (invalid/expired token) → force re-login
+            return {**user_info, "_network_unavailable": True}
+        # Auth error (invalid/expired token) — force re-login
         clear_session()
         return None
 

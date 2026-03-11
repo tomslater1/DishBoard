@@ -159,7 +159,7 @@ class _AccountPage(QWidget):
             f"font-size: 14px; font-weight: 600;"
             f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
         )
-        self._so_sub = QLabel("Your local data stays on this device.")
+        self._so_sub = QLabel("Your account data remains safely stored in the cloud.")
         self._so_sub.setStyleSheet(
             f"font-size: 12px; color: {manager.c('#666', '#888')}; background: transparent;"
         )
@@ -232,9 +232,7 @@ class _AccountPage(QWidget):
         self._user = user
         self._sync_service = sync_service
 
-        no_account = not user or user.get("offline")
-
-        if user and not user.get("offline"):
+        if user and not user.get("_network_unavailable") and not user.get("offline"):
             self._email_lbl.setText(user.get("email", "Signed in"))
             self._status_lbl.setText("Signed in")
             self._sync_status_lbl.setText("Live sync enabled")
@@ -242,17 +240,18 @@ class _AccountPage(QWidget):
             self._sync_now_btn.setEnabled(sync_service is not None)
             self._signout_btn.setEnabled(True)
             self._signin_btn.setVisible(False)
-        elif user and user.get("offline"):
-            self._email_lbl.setText(user.get("email", "Offline"))
-            self._status_lbl.setText("Offline — syncs when internet is available")
-            self._sync_status_lbl.setText("Offline mode")
-            self._sync_sub_lbl.setText("Cloud sync will resume when internet is available.")
+        elif user:
+            # Signed in but network unavailable at startup
+            self._email_lbl.setText(user.get("email", "Signed in"))
+            self._status_lbl.setText("Signed in — sync unavailable")
+            self._sync_status_lbl.setText("Cloud sync unavailable")
+            self._sync_sub_lbl.setText("Sync will resume automatically when internet is available.")
             self._sync_now_btn.setEnabled(False)
             self._signout_btn.setEnabled(True)
             self._signin_btn.setVisible(False)
         else:
-            self._email_lbl.setText("No account")
-            self._status_lbl.setText("Using DishBoard locally")
+            self._email_lbl.setText("Not signed in")
+            self._status_lbl.setText("Sign in to use DishBoard")
             self._sync_status_lbl.setText("Sign in to enable cloud sync")
             self._sync_sub_lbl.setText("Your recipes, meal plans and more will sync across devices.")
             self._sync_now_btn.setEnabled(False)

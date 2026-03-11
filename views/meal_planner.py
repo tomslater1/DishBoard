@@ -1171,7 +1171,7 @@ class MealPlannerView(QWidget):
         if self._shopping_view:
             self._shopping_view.load_from_db()
 
-        self._navigate_to(4)
+        self._navigate_to(5)
 
     # ── Ask Dishy (per-tab button) ────────────────────────────────────────────
 

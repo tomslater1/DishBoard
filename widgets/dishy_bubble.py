@@ -38,8 +38,8 @@ def _clean(text: str) -> str:
     return text.strip()
 
 PAGE_CONTEXTS = {
-    "My Kitchen":
-        "The user is on My Kitchen — the home screen. It shows today's planned meals (breakfast, "
+    "Home":
+        "The user is on Home — the home screen. It shows today's planned meals (breakfast, "
         "lunch, dinner) pulled live from the Meal Planner, a weekly summary, and quick-action "
         "tiles to jump to other sections. Check the live context: if today's meals are planned "
         "but unlogged, sync the nutrition silently. If nothing is planned for today, proactively "
@@ -97,7 +97,7 @@ PAGE_CONTEXTS = {
 }
 
 PAGE_GREETINGS = {
-    "My Kitchen":   "I can see today's plan — want me to sort out meals, log your nutrition, or something else?",
+    "Home":         "I can see today's plan — want me to sort out meals, log your nutrition, or something else?",
     "Recipes":      "Want a new recipe saved to your library, or looking for one you already have?",
     "Meal Planner": "I can fill your whole week or set individual meals — just tell me what you need.",
     "Nutrition":    "I've got your nutrition data loaded. Want me to log today's meals or tell you where you stand?",
@@ -310,7 +310,7 @@ class DishyBubble(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self._open   = False
-        self._page   = "My Kitchen"
+        self._page   = "Home"
         self._history: list[dict] = []
         self._typing_indicator: _MiniTypingIndicator | None = None
 
@@ -402,7 +402,7 @@ class DishyBubble(QWidget):
         )
         self._title_lbl = title_lbl
 
-        self._page_badge = QLabel("My Kitchen")
+        self._page_badge = QLabel("Home")
         self._page_badge.setStyleSheet(
             "color: #555555; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;"
             f" background: {theme_manager.c('rgba(255,255,255,0.05)', '#f0f0f0')};"
@@ -421,9 +421,10 @@ class DishyBubble(QWidget):
         close_btn.setFixedSize(28, 28)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.setStyleSheet(
-            "QPushButton { color: #444444; font-size: 13px;"
+            f"QPushButton {{ color: {theme_manager.c('#888888', '#666666')}; font-size: 13px;"
             "  background: transparent; border: none; border-radius: 14px; }"
-            f"QPushButton:hover {{ color: #b0b0b0; background: {theme_manager.c('#161616', '#e8e8e8')}; }}"
+            f"QPushButton:hover {{ color: {theme_manager.c('#d0d0d0', '#111111')};"
+            f" background: {theme_manager.c('#1e1e1e', '#e0e0e0')}; }}"
         )
         self._close_btn = close_btn
         close_btn.clicked.connect(self._close_panel)
@@ -727,9 +728,10 @@ class DishyBubble(QWidget):
             " border-radius: 5px; padding: 1px 7px;"
         )
         self._close_btn.setStyleSheet(
-            "QPushButton { color: #444444; font-size: 13px;"
+            f"QPushButton {{ color: {theme_manager.c('#888888', '#666666')}; font-size: 13px;"
             "  background: transparent; border: none; border-radius: 14px; }"
-            f"QPushButton:hover {{ color: #b0b0b0; background: {theme_manager.c('#161616', '#e8e8e8')}; }}"
+            f"QPushButton:hover {{ color: {theme_manager.c('#d0d0d0', '#111111')};"
+            f" background: {theme_manager.c('#1e1e1e', '#e0e0e0')}; }}"
         )
         self._panel_footer.setStyleSheet(
             f"background: {theme_manager.c('#0a0a0a', '#f8f8f8')};"

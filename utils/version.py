@@ -1,9 +1,24 @@
-APP_VERSION = "v0.44"
+APP_VERSION = "v0.45"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.45",
+        "title": "Smart macros, My Kitchen tab, recipe search overhaul & bug fixes",
+        "changes": [
+            "Changing your Calorie goal in Settings → Nutrition Goals now automatically recalculates Protein, Carbs & Fat using Dishy AI",
+            "Dishy adjusts the macro split based on your dietary preferences — high protein, keto, vegan, etc.",
+            "Home: the first sidebar tab has been renamed from 'My Kitchen' to 'Home'",
+            "My Kitchen: a new sidebar tab for the upcoming pantry & ingredient storage tracker",
+            "Up to 60 recipe results per search (was 26) — results appear instantly as modern cards with title, source, description, and a Dishy macros badge",
+            "Fixed recipe search returning no results on the packaged app — SSL certificates are now correctly bundled",
+            "Fixed Dishy not working on fresh installs — Supabase credentials are now always available at startup",
+            "Settings and Dishy chats now sync to the cloud instantly on every change",
+            "Theme fixes: all Settings pages and the Dishy panel now correctly update colours when switching between dark and light mode",
+        ],
+    },
     {
         "version": "v0.44",
         "title": "First public release",

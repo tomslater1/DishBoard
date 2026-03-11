@@ -154,17 +154,17 @@ class _AccountPage(QWidget):
         so_col = QVBoxLayout()
         so_col.setSpacing(3)
 
-        so_name = QLabel("Sign out of DishBoard")
-        so_name.setStyleSheet(
+        self._so_name = QLabel("Sign out of DishBoard")
+        self._so_name.setStyleSheet(
             f"font-size: 14px; font-weight: 600;"
             f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
         )
-        so_sub = QLabel("Your local data stays on this device.")
-        so_sub.setStyleSheet(
+        self._so_sub = QLabel("Your local data stays on this device.")
+        self._so_sub.setStyleSheet(
             f"font-size: 12px; color: {manager.c('#666', '#888')}; background: transparent;"
         )
-        so_col.addWidget(so_name)
-        so_col.addWidget(so_sub)
+        so_col.addWidget(self._so_name)
+        so_col.addWidget(self._so_sub)
 
         self._signout_btn = QPushButton("Sign out")
         self._signout_btn.setFixedHeight(36)
@@ -213,16 +213,16 @@ class _AccountPage(QWidget):
         ai_title_lbl.setStyleSheet(
             "font-size: 14px; font-weight: 700; color: #34d399; background: transparent; border: none;"
         )
-        ai_sub_lbl = QLabel(
+        self._ai_sub_lbl = QLabel(
             "Dishy uses a secure server-side connection — no API key needed. "
             "Your AI requests are authenticated with your DishBoard account and never leave our servers."
         )
-        ai_sub_lbl.setWordWrap(True)
-        ai_sub_lbl.setStyleSheet(
+        self._ai_sub_lbl.setWordWrap(True)
+        self._ai_sub_lbl.setStyleSheet(
             f"font-size: 12px; color: {manager.c('#888888', '#555555')}; background: transparent; border: none;"
         )
         ai_text.addWidget(ai_title_lbl)
-        ai_text.addWidget(ai_sub_lbl)
+        ai_text.addWidget(self._ai_sub_lbl)
         ai_layout.addLayout(ai_text, 1)
 
         outer.addWidget(ai_card)
@@ -308,7 +308,30 @@ class _AccountPage(QWidget):
         QApplication.quit()
 
     def apply_theme(self, _mode):
-        pass
+        self._email_lbl.setStyleSheet(
+            f"font-size: 14px; font-weight: 600;"
+            f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+        )
+        self._status_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#666', '#888')}; background: transparent;"
+        )
+        self._sync_status_lbl.setStyleSheet(
+            f"font-size: 14px; font-weight: 600;"
+            f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+        )
+        self._sync_sub_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#666', '#888')}; background: transparent;"
+        )
+        self._so_name.setStyleSheet(
+            f"font-size: 14px; font-weight: 600;"
+            f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+        )
+        self._so_sub.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#666', '#888')}; background: transparent;"
+        )
+        self._ai_sub_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#888888', '#555555')}; background: transparent; border: none;"
+        )
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -367,7 +390,11 @@ class _ProfilePage(QWidget):
         super().__init__(parent)
         self._db = Database()
         self._db.connect()
+        self._sync_fn = None
         self._build()
+
+    def set_sync_fn(self, fn):
+        self._sync_fn = fn
 
     # ── chip / selector helpers (inline so no onboarding import needed) ───────
 
@@ -418,13 +445,13 @@ class _ProfilePage(QWidget):
 
         def _select(chosen_key: str):
             for k, b in btns.items():
-                b.setStyleSheet(_selector_style(k == chosen_key))
+                b.setStyleSheet(self._chip_style(k == chosen_key))
             save_fn()
 
         for key, label in options:
             btn = QPushButton(label)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(_selector_style(key == saved))
+            btn.setStyleSheet(self._chip_style(key == saved))
             btn.clicked.connect(lambda _, k=key: _select(k))
             layout.addWidget(btn)
             btns[key] = btn
@@ -463,9 +490,7 @@ class _ProfilePage(QWidget):
         self._name_input = QLineEdit()
         self._name_input.setPlaceholderText("e.g. Alex")
         self._name_input.setText(self._db.get_setting("user_name", ""))
-        self._name_input.editingFinished.connect(
-            lambda: self._db.set_setting("user_name", self._name_input.text().strip())
-        )
+        self._name_input.editingFinished.connect(self._save_name)
         about_layout.addWidget(self._name_input)
 
         about_layout.addWidget(_make_sep())
@@ -728,22 +753,37 @@ class _ProfilePage(QWidget):
             ""
         )
         self._db.set_setting("user_household_size", chosen)
+        if self._sync_fn:
+            self._sync_fn()
+
+    def _save_name(self):
+        self._db.set_setting("user_name", self._name_input.text().strip())
+        if self._sync_fn:
+            self._sync_fn()
 
     def _save_dietary(self):
         selected = ",".join(k for k, b in self._dietary_btns.items() if b.isChecked())
         self._db.set_setting("dietary_prefs", selected)
+        if self._sync_fn:
+            self._sync_fn()
 
     def _save_allergens(self):
         selected = ",".join(k for k, b in self._allergen_btns.items() if b.isChecked())
         self._db.set_setting("allergens", selected)
+        if self._sync_fn:
+            self._sync_fn()
 
     def _save_scenarios(self):
         selected = ",".join(k for k, b in self._scenario_btns.items() if b.isChecked())
         self._db.set_setting("lifestyle_scenarios", selected)
+        if self._sync_fn:
+            self._sync_fn()
 
     def _save_cuisines(self):
         selected = ",".join(k for k, b in self._cuisine_btns.items() if b.isChecked())
         self._db.set_setting("cuisine_preferences", selected)
+        if self._sync_fn:
+            self._sync_fn()
 
     def _save_skill(self):
         chosen = next(
@@ -752,6 +792,8 @@ class _ProfilePage(QWidget):
             ""
         )
         self._db.set_setting("cooking_skill", chosen)
+        if self._sync_fn:
+            self._sync_fn()
 
     def _save_goal(self):
         chosen = next(
@@ -760,9 +802,68 @@ class _ProfilePage(QWidget):
             ""
         )
         self._db.set_setting("weekly_cooking_goal", chosen)
+        if self._sync_fn:
+            self._sync_fn()
+
+    def refresh(self):
+        """Re-read all profile values from DB and update the UI.
+
+        Called whenever the Profile page is shown, so values set during
+        onboarding (which runs after this page is first constructed) are
+        always reflected correctly.
+        """
+        # Name
+        self._name_input.setText(self._db.get_setting("user_name", ""))
+
+        # Household selector
+        saved_hh = self._db.get_setting("user_household_size", "")
+        for k, b in self._household_btns.items():
+            b.setStyleSheet(self._chip_style(k == saved_hh))
+
+        # Dietary chips — block signals to avoid partial save mid-refresh
+        saved_diet = set(self._db.get_setting("dietary_prefs", "").split(","))
+        for k, b in self._dietary_btns.items():
+            b.blockSignals(True)
+            b.setChecked(k in saved_diet)
+            b.blockSignals(False)
+            b.setStyleSheet(self._chip_style(k in saved_diet))
+
+        # Allergen chips
+        saved_allergens = set(self._db.get_setting("allergens", "").split(","))
+        for k, b in self._allergen_btns.items():
+            b.blockSignals(True)
+            b.setChecked(k in saved_allergens)
+            b.blockSignals(False)
+            b.setStyleSheet(self._chip_style(k in saved_allergens))
+
+        # Scenario chips
+        saved_scenarios = set(self._db.get_setting("lifestyle_scenarios", "").split(","))
+        for k, b in self._scenario_btns.items():
+            b.blockSignals(True)
+            b.setChecked(k in saved_scenarios)
+            b.blockSignals(False)
+            b.setStyleSheet(self._chip_style(k in saved_scenarios))
+
+        # Cuisine chips
+        saved_cuisines = set(self._db.get_setting("cuisine_preferences", "").split(","))
+        for k, b in self._cuisine_btns.items():
+            b.blockSignals(True)
+            b.setChecked(k in saved_cuisines)
+            b.blockSignals(False)
+            b.setStyleSheet(self._chip_style(k in saved_cuisines))
+
+        # Skill selector
+        saved_skill = self._db.get_setting("cooking_skill", "")
+        for k, b in self._skill_btns.items():
+            b.setStyleSheet(self._chip_style(k == saved_skill))
+
+        # Goal selector
+        saved_goal = self._db.get_setting("weekly_cooking_goal", "")
+        for k, b in self._goal_btns.items():
+            b.setStyleSheet(self._chip_style(k == saved_goal))
 
     def apply_theme(self, _mode):
-        pass
+        self.refresh()
 
 
 # ── Page: Dishy Preferences ───────────────────────────────────────────────────
@@ -802,17 +903,17 @@ class _DishyPrefsPage(QWidget):
         clear_row.setSpacing(16)
         clear_col = QVBoxLayout()
         clear_col.setSpacing(3)
-        clear_name = QLabel("Clear Dishy Chat History")
-        clear_name.setStyleSheet(
+        self._clear_name = QLabel("Clear Dishy Chat History")
+        self._clear_name.setStyleSheet(
             f"font-size: 14px; font-weight: 600;"
             f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
         )
-        clear_sub = QLabel("Permanently delete all past conversations with Dishy")
-        clear_sub.setStyleSheet(
+        self._clear_sub = QLabel("Permanently delete all past conversations with Dishy")
+        self._clear_sub.setStyleSheet(
             f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
         )
-        clear_col.addWidget(clear_name)
-        clear_col.addWidget(clear_sub)
+        clear_col.addWidget(self._clear_name)
+        clear_col.addWidget(self._clear_sub)
 
         clear_btn = QPushButton("Clear History")
         clear_btn.setFixedHeight(36)
@@ -850,7 +951,13 @@ class _DishyPrefsPage(QWidget):
             self._db.clear_dishy_history()
 
     def apply_theme(self, _mode):
-        pass
+        self._clear_name.setStyleSheet(
+            f"font-size: 14px; font-weight: 600;"
+            f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+        )
+        self._clear_sub.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
+        )
 
 
 # ── Page: App Preferences ─────────────────────────────────────────────────────
@@ -860,7 +967,11 @@ class _AppPrefsPage(QWidget):
         super().__init__(parent)
         self._db = Database()
         self._db.connect()
+        self._sync_fn = None
         self._build()
+
+    def set_sync_fn(self, fn):
+        self._sync_fn = fn
 
     def _build(self):
         outer = QVBoxLayout(self)
@@ -977,6 +1088,8 @@ class _AppPrefsPage(QWidget):
     def _select_week_day(self, day: str):
         self._db.set_setting("week_start_day", day)
         self._update_week_btns(day)
+        if self._sync_fn:
+            self._sync_fn()
 
     def _update_week_btns(self, day: str):
         self._mon_btn.setChecked(day == "Monday")
@@ -991,6 +1104,8 @@ class _AppPrefsPage(QWidget):
             val = 4
         self._serv_input.setText(str(val))
         self._db.set_setting("default_servings", str(val))
+        if self._sync_fn:
+            self._sync_fn()
 
     def apply_theme(self, mode: str):
         self._update_theme_btns(mode)
@@ -1008,6 +1123,8 @@ class _DataPage(QWidget):
         self._refresh_shopping  = None
         self._refresh_recipes   = None
         self._row_labels: list[tuple[QLabel, QLabel]] = []
+        self._port_row_labels: list[tuple[QLabel, QLabel]] = []
+        self._import_btn: "QPushButton | None" = None
         self._build()
 
     def _build(self):
@@ -1051,6 +1168,7 @@ class _DataPage(QWidget):
             s.setStyleSheet(
                 f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
             )
+            self._port_row_labels.append((t, s))
             col.addWidget(t)
             col.addWidget(s)
 
@@ -1083,6 +1201,7 @@ class _DataPage(QWidget):
                     f"  color: {manager.c('#bbbbbb', '#222222')};"
                     "}"
                 )
+                self._import_btn = btn
             btn.clicked.connect(btn_fn)
             row.addLayout(col, 1)
             row.addWidget(btn, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -1324,13 +1443,27 @@ class _DataPage(QWidget):
             QMessageBox.critical(self, "Import failed", str(e))
 
     def apply_theme(self, _mode):
-        for name_lbl, sub_lbl in self._row_labels:
+        for name_lbl, sub_lbl in self._port_row_labels + self._row_labels:
             name_lbl.setStyleSheet(
                 f"font-size: 14px; font-weight: 600;"
                 f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
             )
             sub_lbl.setStyleSheet(
                 f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
+            )
+        if self._import_btn:
+            self._import_btn.setStyleSheet(
+                "QPushButton {"
+                f"  background-color: {manager.c('rgba(255,255,255,0.04)', 'rgba(0,0,0,0.04)')};"
+                f"  color: {manager.c('#888888', '#555555')};"
+                f"  border: 1px solid {manager.c('#2c2c2c', '#cccccc')}; border-radius: 8px;"
+                "  font-size: 13px; font-weight: 600; padding: 0 14px;"
+                "}"
+                "QPushButton:hover {"
+                f"  background-color: {manager.c('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.08)')};"
+                "  border-color: rgba(255,107,53,0.4);"
+                f"  color: {manager.c('#bbbbbb', '#222222')};"
+                "}"
             )
 
 
@@ -1339,6 +1472,7 @@ class _DataPage(QWidget):
 class _VersionHistoryPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._update_fns: list = []
         self._build()
 
     def _build(self):
@@ -1384,12 +1518,25 @@ class _VersionHistoryPage(QWidget):
                  f" color: {manager.c('#c0c0c0', '#333333')}; background: transparent;")
             )
             ver_lbl.setFixedWidth(44)
+            if not is_latest:
+                self._update_fns.append(
+                    lambda l=ver_lbl: l.setStyleSheet(
+                        f"font-size: 13px; font-weight: 700;"
+                        f" color: {manager.c('#c0c0c0', '#333333')}; background: transparent;"
+                    )
+                )
             ver_row.addWidget(ver_lbl)
 
             title_lbl = QLabel(entry["title"])
             title_lbl.setStyleSheet(
                 f"font-size: 13px; font-weight: 600;"
                 f" color: {manager.c('#e8e8e8', '#1a1a1a')}; background: transparent;"
+            )
+            self._update_fns.append(
+                lambda l=title_lbl: l.setStyleSheet(
+                    f"font-size: 13px; font-weight: 600;"
+                    f" color: {manager.c('#e8e8e8', '#1a1a1a')}; background: transparent;"
+                )
             )
             ver_row.addWidget(title_lbl, 1)
 
@@ -1413,10 +1560,20 @@ class _VersionHistoryPage(QWidget):
                     f"color: {manager.c('#555555', '#aaaaaa')}; background: transparent; font-size: 12px;"
                 )
                 dot.setFixedWidth(10)
+                self._update_fns.append(
+                    lambda l=dot: l.setStyleSheet(
+                        f"color: {manager.c('#555555', '#aaaaaa')}; background: transparent; font-size: 12px;"
+                    )
+                )
                 text = QLabel(change)
                 text.setWordWrap(True)
                 text.setStyleSheet(
                     f"font-size: 12px; color: {manager.c('#888888', '#666666')}; background: transparent;"
+                )
+                self._update_fns.append(
+                    lambda l=text: l.setStyleSheet(
+                        f"font-size: 12px; color: {manager.c('#888888', '#666666')}; background: transparent;"
+                    )
                 )
                 bullet_row.addWidget(dot, 0, Qt.AlignmentFlag.AlignTop)
                 bullet_row.addWidget(text, 1)
@@ -1431,7 +1588,8 @@ class _VersionHistoryPage(QWidget):
         outer.addStretch()
 
     def apply_theme(self, _mode):
-        pass
+        for fn in self._update_fns:
+            fn()
 
 
 # ── Page: Nutrition Goals ─────────────────────────────────────────────────────
@@ -1442,6 +1600,13 @@ class _NutritionGoalsPage(QWidget):
         self._db = Database()
         self._db.connect()
         self._fields: dict[str, QLineEdit] = {}
+        self._macro_worker = None  # prevents Worker GC before signals fire
+        self._sync_fn = None
+        self._auto_note: "QLabel | None" = None
+        self._reset_btn: "QPushButton | None" = None
+        self._macro_name_labels: list = []
+        self._macro_guide_labels: list = []
+        self._macro_unit_labels: list = []
         self._build()
 
     def _build(self):
@@ -1461,11 +1626,35 @@ class _NutritionGoalsPage(QWidget):
 
         desc = QLabel(
             "Set your daily targets for each macro. "
-            "These control the progress rings on the Nutrition page and My Kitchen dashboard."
+            "These control the progress rings on the Nutrition page and Home dashboard."
         )
         desc.setObjectName("card-body")
         desc.setWordWrap(True)
         layout.addWidget(desc)
+
+        # Dishy AI badge + explanation
+        badge_row = QHBoxLayout()
+        badge_row.setSpacing(10)
+        badge_row.setContentsMargins(0, 4, 0, 0)
+        dishy_badge = QLabel("✦ Dishy AI")
+        dishy_badge.setStyleSheet(
+            "background: rgba(52,211,153,0.12); color: #34d399;"
+            " border: 1px solid rgba(52,211,153,0.3); border-radius: 10px;"
+            " font-size: 11px; font-weight: 700; padding: 2px 10px;"
+        )
+        dishy_badge.setFixedHeight(22)
+        auto_note = QLabel(
+            "Updating Calories will automatically recalculate Protein, Carbs & Fat "
+            "using Dishy AI, adjusted for your dietary preferences."
+        )
+        auto_note.setWordWrap(True)
+        auto_note.setStyleSheet(
+            f"color: {manager.c('#888888', '#777777')}; background: transparent; font-size: 12px;"
+        )
+        self._auto_note = auto_note
+        badge_row.addWidget(dishy_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+        badge_row.addWidget(auto_note, 1, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(badge_row)
 
         goals = get_macro_goals(self._db)
 
@@ -1492,11 +1681,13 @@ class _NutritionGoalsPage(QWidget):
                 f"font-size: 14px; font-weight: 600;"
                 f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
             )
+            self._macro_name_labels.append(name_lbl)
             guide_lbl = QLabel(MACRO_GUIDES[key])
             guide_lbl.setWordWrap(True)
             guide_lbl.setStyleSheet(
                 f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
             )
+            self._macro_guide_labels.append(guide_lbl)
             text_col.addWidget(name_lbl)
             text_col.addWidget(guide_lbl)
             row_l.addLayout(text_col, 1)
@@ -1514,15 +1705,21 @@ class _NutritionGoalsPage(QWidget):
                     val = max(1.0, float(f.text().strip()))
                     f.setText(str(int(val)))
                     set_macro_goal(self._db, k, val)
+                    if self._sync_fn:
+                        self._sync_fn()
                 except ValueError:
                     pass
 
-            field.editingFinished.connect(_save)
+            if key == "kcal":
+                field.editingFinished.connect(self._on_kcal_edited)
+            else:
+                field.editingFinished.connect(_save)
 
             unit_lbl = QLabel(unit)
             unit_lbl.setStyleSheet(
                 f"color: {manager.c('#888888', '#666666')}; background: transparent; font-size: 13px;"
             )
+            self._macro_unit_labels.append(unit_lbl)
 
             row_l.addWidget(field)
             row_l.addWidget(unit_lbl)
@@ -1532,7 +1729,8 @@ class _NutritionGoalsPage(QWidget):
 
         # Reset to defaults button
         reset_row = QHBoxLayout()
-        reset_btn = QPushButton("Reset to defaults")
+        self._reset_btn = QPushButton("Reset to defaults")
+        reset_btn = self._reset_btn
         reset_btn.setFixedHeight(34)
         reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         reset_btn.setStyleSheet(
@@ -1556,15 +1754,100 @@ class _NutritionGoalsPage(QWidget):
         outer.addWidget(card)
         outer.addStretch()
 
+    def _on_kcal_edited(self):
+        from utils.macro_goals import set_macro_goal
+        from utils.workers import run_async
+        from api.claude_ai import ClaudeAI
+        field = self._fields["kcal"]
+        try:
+            calories = max(1.0, float(field.text().strip()))
+        except ValueError:
+            return
+        field.setText(str(int(calories)))
+        set_macro_goal(self._db, "kcal", calories)
+        if self._sync_fn:
+            self._sync_fn()
+        prev = {k: self._fields[k].text() for k in ("protein_g", "carbs_g", "fat_g")}
+        self._set_macro_fields_loading(True)
+        dietary_prefs = self._db.get_setting("dietary_prefs", "")
+        self._macro_worker = run_async(
+            ClaudeAI().calculate_macros_from_calories,
+            calories, dietary_prefs,
+            on_result=lambda r: self._on_macros_calculated(r),
+            on_error=lambda e: self._on_macros_error(prev),
+        )
+
+    def _set_macro_fields_loading(self, loading: bool):
+        for key in ("protein_g", "carbs_g", "fat_g"):
+            f = self._fields[key]
+            f.setReadOnly(loading)
+            if loading:
+                f.setPlaceholderText("Calculating…")
+                f.setText("")
+                f.setStyleSheet("color: #888888; font-style: italic;")
+            else:
+                f.setPlaceholderText("")
+                f.setStyleSheet("")
+
+    def _on_macros_calculated(self, result: dict):
+        from utils.macro_goals import set_macro_goal
+        self._set_macro_fields_loading(False)
+        for key in ("protein_g", "carbs_g", "fat_g"):
+            val = max(1.0, float(result.get(key, 1.0)))
+            self._fields[key].setText(str(int(val)))
+            set_macro_goal(self._db, key, val)
+        if self._sync_fn:
+            self._sync_fn()
+
+    def _on_macros_error(self, prev: dict):
+        self._set_macro_fields_loading(False)
+        for key in ("protein_g", "carbs_g", "fat_g"):
+            self._fields[key].setText(prev[key])
+
+    def set_sync_fn(self, fn):
+        self._sync_fn = fn
+
     def _reset_defaults(self):
         from utils.macro_goals import MACRO_SPECS, set_macro_goal
         for key, _, default, *_ in MACRO_SPECS:
             set_macro_goal(self._db, key, default)
             if key in self._fields:
                 self._fields[key].setText(str(int(default)))
+        if self._sync_fn:
+            self._sync_fn()
 
     def apply_theme(self, _mode):
-        pass
+        if self._auto_note:
+            self._auto_note.setStyleSheet(
+                f"color: {manager.c('#888888', '#777777')}; background: transparent; font-size: 12px;"
+            )
+        for lbl in self._macro_name_labels:
+            lbl.setStyleSheet(
+                f"font-size: 14px; font-weight: 600;"
+                f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+            )
+        for lbl in self._macro_guide_labels:
+            lbl.setStyleSheet(
+                f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
+            )
+        for lbl in self._macro_unit_labels:
+            lbl.setStyleSheet(
+                f"color: {manager.c('#888888', '#666666')}; background: transparent; font-size: 13px;"
+            )
+        if self._reset_btn:
+            self._reset_btn.setStyleSheet(
+                f"QPushButton {{"
+                f"  background-color: {manager.c('rgba(255,255,255,0.04)', 'rgba(0,0,0,0.04)')};"
+                f"  color: {manager.c('#888888', '#555555')};"
+                f"  border: 1px solid {manager.c('#2c2c2c', '#cccccc')}; border-radius: 8px;"
+                "  font-size: 12px; font-weight: 600; padding: 0 14px;"
+                f"}}"
+                f"QPushButton:hover {{"
+                f"  background-color: {manager.c('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.08)')};"
+                "  border-color: rgba(255,107,53,0.4);"
+                f"  color: {manager.c('#cccccc', '#222222')};"
+                f"}}"
+            )
 
 
 # ── Settings view ─────────────────────────────────────────────────────────────
@@ -1575,7 +1858,7 @@ _NAV_ITEMS = [
     ("fa5s.robot",        "Dishy"),             # index 2
     ("fa5s.bullseye",     "Nutrition Goals"),   # index 3
     ("fa5s.sliders-h",    "Preferences"),       # index 4
-    ("fa5s.database",     "Data & Backup"),     # index 5
+    ("fa5s.database",     "Data && Backup"),     # index 5
     ("fa5s.list-alt",     "Version History"),   # index 6
 ]
 
@@ -1691,6 +1974,8 @@ class SettingsView(QWidget):
 
     def _select_page(self, index: int):
         self._stack.setCurrentIndex(index)
+        if index == 1:
+            self._pages[1].refresh()
         for i, btn in enumerate(self._nav_btns):
             is_active = i == index
             icon_name, label = _NAV_ITEMS[i]
@@ -1718,6 +2003,12 @@ class SettingsView(QWidget):
             )
 
     # ── Public API (called by MainWindow) ──────────────────────────────────────
+
+    def set_sync_fn(self, fn) -> None:
+        """Wire cloud sync trigger to all sub-pages that save data."""
+        for page in self._pages:
+            if hasattr(page, "set_sync_fn"):
+                page.set_sync_fn(fn)
 
     def set_data_management_callbacks(self, meal_plan_fn=None, shopping_fn=None, recipes_fn=None):
         data_page = self._pages[5]   # _DataPage is at index 5

@@ -11,7 +11,7 @@ VERSION_CLEAN="${VERSION#v}"   # strip leading "v" → "0.44"
 echo "▶ Building DishBoard ${VERSION}"
 
 # ── Safety: refuse to build if dev artifacts exist in the root ───────────────
-for f in dishboard.db config.json .env; do
+for f in dishboard.db config.json; do
     if [ -f "$f" ]; then
         echo "⚠  Warning: dev artifact '$f' found in project root."
         echo "   It will NOT be bundled (paths.py routes it to ~/Library/Application Support/)."
@@ -32,7 +32,7 @@ APP="dist/DishBoard.app"
 # ── Verify no secrets inside the bundle ──────────────────────────────────────
 echo "▶ Verifying bundle contents..."
 FAIL=0
-for f in "Contents/MacOS/dishboard.db" "Contents/MacOS/.env" "Contents/Resources/dishboard.db"; do
+for f in "Contents/MacOS/dishboard.db" "Contents/Resources/dishboard.db"; do
     if [ -f "$APP/$f" ]; then
         echo "❌ ERROR: $f found inside .app bundle — aborting!"
         FAIL=1

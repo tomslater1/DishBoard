@@ -13,7 +13,7 @@ _SECTIONS = [
         "index": 0,
         "icon": "fa5s.home",
         "colour": "#ff6b35",
-        "title": "My Kitchen",
+        "title": "Home",
         "summary": "Your home screen. See today's planned meals, a weekly overview, and quick links to every part of the app.",
         "features": [
             "Today's meals pulled live from the Meal Planner",
@@ -39,7 +39,7 @@ _SECTIONS = [
         ],
         "connects": [
             (2, "fa5s.calendar-alt", "#4caf8a", "Meal Planner"),
-            (5, "fa5s.robot",        "#34d399", "Dishy"),
+            (6, "fa5s.robot",        "#34d399", "Dishy"),
         ],
     },
     {
@@ -57,7 +57,7 @@ _SECTIONS = [
         "connects": [
             (1, "fa5s.book-open",     "#7c6af7", "Recipes"),
             (3, "fa5s.heartbeat",     "#e05c7a", "Nutrition"),
-            (4, "fa5s.shopping-cart", "#f0a500", "Shopping List"),
+            (5, "fa5s.shopping-cart", "#f0a500", "Shopping List"),
         ],
     },
     {
@@ -74,11 +74,24 @@ _SECTIONS = [
         ],
         "connects": [
             (2, "fa5s.calendar-alt", "#4caf8a", "Meal Planner"),
-            (5, "fa5s.robot",        "#34d399", "Dishy"),
+            (6, "fa5s.robot",        "#34d399", "Dishy"),
         ],
     },
     {
         "index": 4,
+        "icon": "fa5s.box-open",
+        "colour": "#e8924a",
+        "title": "My Kitchen",
+        "summary": "Your pantry, fridge, and freezer tracker — coming soon.",
+        "features": [
+            "See exactly what ingredients you have at home",
+            "Get low stock alerts before you run out",
+            "Dishy will use your pantry when planning meals",
+        ],
+        "connects": [],
+    },
+    {
+        "index": 5,
         "icon": "fa5s.shopping-cart",
         "colour": "#f0a500",
         "title": "Shopping List",
@@ -91,11 +104,11 @@ _SECTIONS = [
         ],
         "connects": [
             (2, "fa5s.calendar-alt", "#4caf8a", "Meal Planner"),
-            (5, "fa5s.robot",        "#34d399", "Dishy"),
+            (6, "fa5s.robot",        "#34d399", "Dishy"),
         ],
     },
     {
-        "index": 5,
+        "index": 6,
         "icon": "fa5s.robot",
         "colour": "#34d399",
         "title": "Dishy",
@@ -112,11 +125,11 @@ _SECTIONS = [
             (1, "fa5s.book-open",     "#7c6af7", "Recipes"),
             (2, "fa5s.calendar-alt",  "#4caf8a", "Meal Planner"),
             (3, "fa5s.heartbeat",     "#e05c7a", "Nutrition"),
-            (4, "fa5s.shopping-cart", "#f0a500", "Shopping List"),
+            (5, "fa5s.shopping-cart", "#f0a500", "Shopping List"),
         ],
     },
     {
-        "index": 7,
+        "index": 8,
         "icon": "fa5s.cog",
         "colour": "#888888",
         "title": "Settings",

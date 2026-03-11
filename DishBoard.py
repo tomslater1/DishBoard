@@ -3,13 +3,15 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Fix SSL certificate path for the requests library inside a PyInstaller bundle.
+# requests cannot find cacert.pem via its own pkg_resources lookup when frozen,
+# so we point it at the certifi bundle explicitly before any network code runs.
+import certifi
+os.environ.setdefault("SSL_CERT_FILE",      certifi.where())
+os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+
 # utils.paths must be imported before anything that uses paths
 from utils.paths import get_data_dir, get_resource_path
-
-# Load .env BEFORE any other imports so API clients pick up the keys.
-from dotenv import load_dotenv
-_env_path = os.path.join(get_data_dir(), ".env")
-load_dotenv(_env_path)
 
 from models.database import Database
 from utils.theme import manager as theme_manager
@@ -28,9 +30,9 @@ def _load_api_keys_from_db(db: Database):
     """Read API keys saved via the Settings view and push them into os.environ.
 
     Also loads SUPABASE_URL and SUPABASE_ANON_KEY so the auth client is ready.
-    Existing os.environ values (e.g. from .env) take priority.
-    After loading, Supabase credentials are persisted back to the DB so the
-    packaged .app works without a .env file on subsequent launches.
+    Keys stored in the DB always take priority over os.environ defaults.
+    Supabase credentials are persisted back to the DB on first run so they
+    survive across launches without any configuration file.
     """
     key_map = {
         "anthropic_api_key": "ANTHROPIC_API_KEY",
@@ -45,7 +47,14 @@ def _load_api_keys_from_db(db: Database):
             if val:
                 os.environ[env_key] = val
 
-    # Persist Supabase credentials to DB so the packaged .app never needs .env
+    # Ensure Supabase URL is always in os.environ — the AI proxy reads it from here.
+    # If nothing was found in DB, fall back to the bundled defaults.
+    if not os.environ.get("SUPABASE_URL"):
+        from auth.supabase_client import _DEFAULT_URL, _DEFAULT_KEY
+        os.environ["SUPABASE_URL"] = _DEFAULT_URL
+        os.environ["SUPABASE_ANON_KEY"] = _DEFAULT_KEY
+
+    # Persist Supabase credentials to DB so they survive across launches
     for env_key, db_key in [("SUPABASE_URL", "supabase_url"),
                              ("SUPABASE_ANON_KEY", "supabase_anon_key")]:
         val = os.environ.get(env_key)

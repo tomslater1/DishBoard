@@ -302,7 +302,7 @@ class LoginView(QWidget):
             client = get_client()
             if client is None:
                 raise RuntimeError(
-                    "Supabase is not configured. Add SUPABASE_URL and SUPABASE_ANON_KEY to your .env file."
+                    "Supabase is not configured. Please check your internet connection."
                 )
             if self._is_signup_mode:
                 return client.auth.sign_up({"email": email, "password": pw})
@@ -351,7 +351,7 @@ class LoginView(QWidget):
         client = get_client()
         if client is None:
             self._show_error(
-                "Supabase is not configured. Add SUPABASE_URL and SUPABASE_ANON_KEY to your .env file."
+                "Supabase is not configured. Please check your internet connection."
             )
             return
 

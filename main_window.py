@@ -21,6 +21,7 @@ _BASE_DIR  = os.path.dirname(__file__)
 _ICON_PATH = os.path.join(_BASE_DIR, "assets", "icons", "DishBoard-darkicon.png")
 
 from views.my_kitchen import MyKitchenView
+from views.my_kitchen_coming_soon import MyKitchenComingSoonView
 from views.recipes import RecipesView
 from views.meal_planner import MealPlannerView
 from views.nutrition import NutritionView
@@ -39,10 +40,11 @@ ACCENT = "#ff6b35"
 ICON_COLOUR = "#555555"
 
 NAV_ITEMS = [
-    ("fa5s.home",          "My Kitchen",     "#ff6b35"),
+    ("fa5s.home",          "Home",           "#ff6b35"),
     ("fa5s.book-open",     "Recipes",        "#7c6af7"),
     ("fa5s.calendar-alt",  "Meal Planner",   "#4caf8a"),
     ("fa5s.heartbeat",     "Nutrition",      "#e05c7a"),
+    ("fa5s.box-open",      "My Kitchen",     "#e8924a"),
     ("fa5s.shopping-cart", "Shopping List",  "#f0a500"),
     ("fa5s.robot",         "Dishy",          "#34d399"),
 ]
@@ -405,10 +407,11 @@ class MainWindow(QMainWindow):
             self._recipes_view,                                  # 1
             self._meal_planner_view,                             # 2
             self._nutrition_view,                                # 3
-            self._shopping_view,                                 # 4
-            self._dishy_view,                                    # 5
-            HelpView(navigate_to=self._on_nav_clicked),          # 6
-            self._settings_view,                                 # 7
+            MyKitchenComingSoonView(),                           # 4
+            self._shopping_view,                                 # 5
+            self._dishy_view,                                    # 6
+            HelpView(navigate_to=self._on_nav_clicked),          # 7
+            self._settings_view,                                 # 8
         ]
         for view in views:
             self._stack.addWidget(view)
@@ -421,6 +424,9 @@ class MainWindow(QMainWindow):
         self._meal_planner_view.set_sync_fn(self._trigger_cloud_sync)
         self._recipes_view.set_sync_fn(self._trigger_cloud_sync)
         self._shopping_view.set_sync_fn(self._trigger_cloud_sync)
+        self._dishy_view.set_sync_fn(self._trigger_cloud_sync)
+        self._settings_view.set_sync_fn(self._trigger_cloud_sync)
+
 
         # Wire Settings data management buttons so clearing a section also refreshes the view
         self._settings_view.set_data_management_callbacks(
@@ -455,8 +461,8 @@ class MainWindow(QMainWindow):
 
     # --------------------------------------------------------------- navigation
 
-    _PAGE_NAMES = ["My Kitchen", "Recipes", "Meal Planner",
-                   "Nutrition", "Shopping List", "Dishy", "How to use", "Settings"]
+    _PAGE_NAMES = ["Home", "Recipes", "Meal Planner",
+                   "Nutrition", "My Kitchen", "Shopping List", "Dishy", "How to use", "Settings"]
 
     def _on_nav_clicked(self, index: int):
         current = self._stack.currentIndex()
@@ -479,26 +485,26 @@ class MainWindow(QMainWindow):
 
     def _on_guide_clicked(self):
         current = self._stack.currentIndex()
-        if current != 6:
+        if current != 7:
             self._nav_history.append(current)
             self._back_bar.setVisible(True)
         for btn in self._nav_buttons:
             btn.setChecked(False)
         self._guide_btn.setChecked(True)
         self._settings_btn.setChecked(False)
-        self._stack.setCurrentIndex(6)
+        self._stack.setCurrentIndex(7)
         self._dishy_bubble.set_page("How to use")
 
     def _on_settings_clicked(self):
         current = self._stack.currentIndex()
-        if current != 7:
+        if current != 8:
             self._nav_history.append(current)
             self._back_bar.setVisible(True)
         for btn in self._nav_buttons:
             btn.setChecked(False)
         self._guide_btn.setChecked(False)
         self._settings_btn.setChecked(True)
-        self._stack.setCurrentIndex(7)
+        self._stack.setCurrentIndex(8)
         self._dishy_bubble.set_page("Settings")
 
     def _go_back(self):
@@ -507,8 +513,8 @@ class MainWindow(QMainWindow):
         prev = self._nav_history.pop()
         for i, btn in enumerate(self._nav_buttons):
             btn.setChecked(i == prev)
-        self._guide_btn.setChecked(prev == 6)
-        self._settings_btn.setChecked(prev == 7)
+        self._guide_btn.setChecked(prev == 7)
+        self._settings_btn.setChecked(prev == 8)
         self._stack.setCurrentIndex(prev)
         self._back_bar.setVisible(bool(self._nav_history))
         self._dishy_bubble.set_page(self._PAGE_NAMES[prev])
@@ -561,8 +567,8 @@ class MainWindow(QMainWindow):
         self._sidebar_expanded = not expanded
 
     def _trigger_dishy_prompt(self, text: str):
-        """Navigate to DishyView and auto-send a prompt (called from My Kitchen)."""
-        self._on_nav_clicked(5)
+        """Navigate to DishyView and auto-send a prompt (called from Home)."""
+        self._on_nav_clicked(6)
         self._dishy_view.trigger_prompt(text)
 
     # --------------------------------------------------------------- Dishy refresh
@@ -589,11 +595,11 @@ class MainWindow(QMainWindow):
                 self._nutrition_view.refresh()
         except Exception:
             pass
-        # Always refresh My Kitchen so stats/cards reflect any Dishy changes
+        # Always refresh Home so stats/cards reflect any Dishy changes
         try:
-            my_kitchen = self._stack.widget(0)
-            if hasattr(my_kitchen, "refresh"):
-                my_kitchen.refresh()
+            home_view = self._stack.widget(0)
+            if hasattr(home_view, "refresh"):
+                home_view.refresh()
         except Exception:
             pass
         # Push data changes to cloud immediately
@@ -677,11 +683,11 @@ class MainWindow(QMainWindow):
                 self._nutrition_view.refresh()
         except Exception:
             pass
-        # Always refresh My Kitchen
+        # Always refresh Home
         try:
-            my_kitchen = self._stack.widget(0)
-            if hasattr(my_kitchen, "refresh"):
-                my_kitchen.refresh()
+            home_view = self._stack.widget(0)
+            if hasattr(home_view, "refresh"):
+                home_view.refresh()
         except Exception:
             pass
 

@@ -29,7 +29,7 @@ Tom Slater is the sole developer. It is currently a dev-only Python app run via 
 | Web search | Google Custom Search API |
 | Async | QThreadPool + custom `Worker`/`run_async` in `utils/workers.py` |
 | Icons | qtawesome (Font Awesome 5) |
-| Env / keys | python-dotenv — `.env` file in project root |
+| Env / keys | All API keys stored in SQLite settings table, loaded into `os.environ` at startup |
 
 **Removed APIs (no longer in codebase):** Spoonacular, Nutritionix, USDA FoodData Central, Tesco
 
@@ -44,7 +44,8 @@ DishBoard/
 ├── CONTEXT.md                   # ← this file
 │
 ├── views/
-│   ├── my_kitchen.py            # My Kitchen (home): stat cards, quick actions, recent recipes, Dishy tip
+│   ├── my_kitchen.py            # Home (index 0): stat cards, quick actions, recent recipes, macro rings
+│   ├── my_kitchen_coming_soon.py # My Kitchen (index 4): coming soon placeholder for pantry/storage tracker
 │   ├── recipes.py               # Recipe browser + create/edit form + detail view (QStackedWidget)
 │   ├── meal_planner.py          # Weekly meal planner grid (Mon–Sun × Breakfast/Lunch/Dinner)
 │   ├── nutrition.py             # Daily nutrition log + macro rings (custom QPainter widget)
@@ -123,16 +124,17 @@ The `QStackedWidget` in `MainWindow` has views at fixed indices:
 
 | Index | View | Section colour |
 |---|---|---|
-| 0 | MyKitchenView | #ff6b35 (orange) |
+| 0 | MyKitchenView (Home) | #ff6b35 (orange) |
 | 1 | RecipesView | #7c6af7 (purple) |
 | 2 | MealPlannerView | #4caf8a (teal/green) |
 | 3 | NutritionView | #e05c7a (pink) |
-| 4 | ShoppingListView | #f0a500 (amber) |
-| 5 | DishyView | #34d399 (green) |
-| 6 | HelpView | — |
-| 7 | SettingsView | — |
+| 4 | MyKitchenComingSoonView (My Kitchen) | #e8924a (warm amber) |
+| 5 | ShoppingListView | #f0a500 (amber) |
+| 6 | DishyView | #34d399 (green) |
+| 7 | HelpView | — |
+| 8 | SettingsView | — |
 
-Sidebar also has: How to use (→ index 6), Settings (→ index 7) pinned at bottom.
+Sidebar also has: How to use (→ index 7), Settings (→ index 8) pinned at bottom.
 
 ---
 
@@ -338,11 +340,12 @@ color = theme_manager.c('#c8c8c8', '#333333')  # dark, light
 | v0.34 | Dishy chat overhaul: modern glassy UI, green user bubbles with Dishy avatar, wide bubbles, horizontal chip row, persistent SQLite chat history, history browser dialog, resume-last-session banner |
 | v0.33 | Shopping list overhaul: collapsible category sections, stats strip (total/to-get/in-basket/categories), amber progress bar, meal-plan source badges, full dark/light mode support |
 
+| v0.45 | Smart macro recalc via Dishy AI on calorie change; Home/My Kitchen sidebar split; recipe search 60 results as instant modern cards; SSL + Dishy proxy fixes for packaged app; instant cloud sync for Settings + Dishy chats; theme colour fixes across all Settings pages and Dishy panel |
 | v0.43 | Editable macro goals in Settings → Nutrition Goals; goals saved to DB (cloud synced); goals_changed Signal updates nutrition rings and My Kitchen rings instantly; MACRO_SPECS moved to utils/macro_goals.py |
 | v0.42 | Server-side AI proxy (Supabase Edge Function); Supabase Storage for recipe images; Realtime WebSocket sync; "Live" sync indicator state; polling reduced to 5 min |
 | v0.41 | Full light mode: Dishy chat, Settings header/nav, login logo all theme-adaptive at runtime; new icon set |
 
-**Current version: v0.43**
+**Current version: v0.45**
 
 > IMPORTANT: Always increment version on every session that makes changes. Do NOT reach v1.0 without explicit user approval.
 > When bumping version: (1) update `APP_VERSION` in `utils/version.py`, (2) prepend a new entry to `VERSION_HISTORY` in the same file, (3) update CONTEXT.md and MEMORY.md version tables.
@@ -373,9 +376,4 @@ cd /Users/thomasslater/Documents/VSCODE/DishBoard
 python3 DishBoard.py
 ```
 
-Requires `.env` in project root:
-```
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=...
-GOOGLE_CSE_ID=...
-```
+No `.env` file needed. API keys (Anthropic, Google) are entered in Settings and saved to the local DB. This mirrors exactly how the packaged app works.

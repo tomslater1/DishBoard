@@ -29,7 +29,7 @@ their nutrition history, and their shopping list at all times. Use that knowledg
 
 ## The app — every section in detail
 
-My Kitchen — The home screen. Shows today's planned meals (breakfast, lunch, dinner) pulled \
+Home — The home screen. Shows today's planned meals (breakfast, lunch, dinner) pulled \
 live from the Meal Planner, plus a weekly summary. Quick-action tiles jump to Recipes, Meal \
 Planner, Nutrition, and Shopping List. When the user opens Dishy here, reference what they \
 have planned today — if nothing is planned, offer to set up their day. If meals are planned \
@@ -453,6 +453,44 @@ class ClaudeAI:
         )
         raw = self._ask(prompt)
         raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        return _json.loads(raw.strip())
+
+    def calculate_macros_from_calories(self, calories: float, dietary_prefs: str = "") -> dict:
+        """Return protein_g, carbs_g, fat_g that sum to the given calorie target.
+
+        Adjusts standard ratios (25/50/25) based on dietary preferences
+        (e.g. 'high protein', 'keto', 'vegan'). Fiber and sugar are independent
+        health targets and are NOT included in this calculation.
+
+        Returns:
+            {
+                "protein_g": float,
+                "carbs_g":   float,
+                "fat_g":     float,
+                "note":      str,   # explains the ratios used
+            }
+        """
+        import json as _json
+        prefs_str = f" Dietary preferences: {dietary_prefs}." if dietary_prefs.strip() else ""
+        prompt = (
+            f"A person has set a daily calorie goal of {calories:.0f} kcal.{prefs_str}\n\n"
+            "Calculate appropriate daily macro targets (protein, carbs, fat) that add up to "
+            "this calorie goal. Use these standard ratios as your starting point:\n"
+            "- Protein: 25% of calories (4 kcal per gram)\n"
+            "- Carbs:   50% of calories (4 kcal per gram)\n"
+            "- Fat:     25% of calories (9 kcal per gram)\n\n"
+            "Adjust the ratios if dietary preferences suggest otherwise "
+            "(e.g. high-protein → 35% protein; keto → 70% fat, 25% protein, 5% carbs; "
+            "low-carb → 40% fat, 30% protein, 30% carbs). "
+            "The gram values must mathematically sum to the calorie target. Round to whole grams.\n\n"
+            "Respond with ONLY valid JSON — no markdown, no code fences, no prose:\n"
+            '{"protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0, "note": "..."}'
+        )
+        raw = self._ask(prompt).strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):

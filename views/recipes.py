@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
 
 from api.claude_ai import ClaudeAI
 from api.google_search import GoogleSearchAPI
-from api.recipe_scraper import scrape_recipe, check_scrapeable
+from api.recipe_scraper import scrape_recipe
 from models.database import Database
 from utils.workers import run_async
 from widgets.ingredient_row import NutritionIngredientList
@@ -619,52 +619,121 @@ class SavedRecipeRow(QWidget):
         self.mousePressEvent = lambda e: on_select()
 
 
-# ── Search result row ─────────────────────────────────────────────────────────
+# ── Search result card ────────────────────────────────────────────────────────
 
 class SearchResultRow(QWidget):
+    """Modern card-style search result. Shows title, source domain, snippet
+    and a Dishy AI badge indicating macros will be auto-analysed on import."""
+
     def __init__(self, result: dict, on_select, parent=None):
         super().__init__(parent)
         self._callback = lambda: on_select(result)
-        self.setObjectName("shopping-item")
-        self.setFixedHeight(64)
+        tm = theme_manager
+
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMinimumHeight(86)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 16, 0)
-        layout.setSpacing(12)
+        self._normal_bg  = tm.c("#161616", "#ffffff")
+        self._hover_bg   = tm.c("#1c1c1c", "#f5f5f5")
+        self._normal_bdr = tm.c("#242424", "#e8e8e8")
+        self._hover_bdr  = "#ff6b35"
+        self._apply_style(hover=False)
 
-        icon_lbl = QLabel()
-        icon_lbl.setPixmap(qta.icon("fa5s.link", color=theme_manager.c("#555555", "#888888")).pixmap(QSize(12, 12)))
-        icon_lbl.setStyleSheet("background: transparent;")
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(16, 14, 16, 14)
+        outer.setSpacing(14)
 
+        # Site initial badge
+        host = urlparse(result.get("url", "")).netloc.replace("www.", "")
+        initial = host[0].upper() if host else "R"
+        site_badge = QLabel(initial)
+        site_badge.setFixedSize(38, 38)
+        site_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        site_badge.setStyleSheet(
+            f"background: {tm.c('#242424', '#f0f0f0')};"
+            " border-radius: 10px;"
+            f" color: {tm.c('#888888', '#999999')};"
+            " font-size: 15px; font-weight: 700;"
+        )
+
+        # Text column
         text_col = QVBoxLayout()
-        text_col.setSpacing(2)
+        text_col.setSpacing(4)
+        text_col.setContentsMargins(0, 0, 0, 0)
+
         title = result.get("title", "")
-        title_lbl = QLabel(title[:80] + ("…" if len(title) > 80 else ""))
+        title_lbl = QLabel(title[:78] + ("…" if len(title) > 78 else ""))
         title_lbl.setStyleSheet(
-            f"background: transparent; color: {theme_manager.c('#c8c8c8', '#1a1a1a')};"
+            f"background: transparent;"
+            f" color: {tm.c('#e8e8e8', '#111111')};"
             " font-size: 13px; font-weight: 600;"
         )
-        host = urlparse(result.get("url", "")).netloc.replace("www.", "")
+
+        # Domain + Dishy badge row
+        meta_row = QHBoxLayout()
+        meta_row.setSpacing(8)
+        meta_row.setContentsMargins(0, 0, 0, 0)
+
         host_lbl = QLabel(host)
         host_lbl.setStyleSheet(
-            f"background: transparent; color: {theme_manager.c('#555555', '#888888')};"
+            f"background: transparent;"
+            f" color: {tm.c('#555555', '#999999')};"
             " font-size: 11px;"
         )
+
+        dishy_badge = QLabel("✦  Dishy macros")
+        dishy_badge.setStyleSheet(
+            "background: rgba(52,211,153,0.13);"
+            " color: #34d399;"
+            " font-size: 10px; font-weight: 700;"
+            " border-radius: 4px; padding: 2px 7px;"
+        )
+
+        meta_row.addWidget(host_lbl)
+        meta_row.addWidget(dishy_badge)
+        meta_row.addStretch()
+
         text_col.addWidget(title_lbl)
-        text_col.addWidget(host_lbl)
+        text_col.addLayout(meta_row)
 
-        arrow = QPushButton()
-        arrow.setObjectName("delete-btn")
-        arrow.setIcon(qta.icon("fa5s.chevron-right", color=theme_manager.c("#555555", "#888888")))
-        arrow.setIconSize(QSize(11, 11))
-        arrow.setFixedSize(28, 28)
-        arrow.clicked.connect(self._callback)
+        snippet = result.get("snippet", "")
+        if snippet:
+            snippet_lbl = QLabel(snippet[:110] + ("…" if len(snippet) > 110 else ""))
+            snippet_lbl.setStyleSheet(
+                f"background: transparent;"
+                f" color: {tm.c('#484848', '#999999')};"
+                " font-size: 11px;"
+            )
+            snippet_lbl.setWordWrap(False)
+            text_col.addWidget(snippet_lbl)
 
-        layout.addWidget(icon_lbl)
-        layout.addLayout(text_col, 1)
-        layout.addWidget(arrow)
+        # Arrow
+        arrow_lbl = QLabel()
+        arrow_lbl.setPixmap(
+            qta.icon("fa5s.chevron-right", color=tm.c("#444444", "#cccccc")).pixmap(QSize(10, 10))
+        )
+        arrow_lbl.setStyleSheet("background: transparent;")
+
+        outer.addWidget(site_badge)
+        outer.addLayout(text_col, 1)
+        outer.addWidget(arrow_lbl)
+
+    def _apply_style(self, hover: bool):
+        bg  = self._hover_bg  if hover else self._normal_bg
+        bdr = self._hover_bdr if hover else self._normal_bdr
+        self.setStyleSheet(
+            f"SearchResultRow {{ background: {bg}; border: 1px solid {bdr};"
+            " border-radius: 10px; }"
+        )
+
+    def enterEvent(self, event):
+        self._apply_style(hover=True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._apply_style(hover=False)
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         self._callback()
@@ -1707,8 +1776,6 @@ class RecipesView(QWidget):
         self._ask_dishy_fn = None        # set by MainWindow via set_ask_dishy()
         self._nutrition_refresh_fn = None # set by MainWindow via set_nutrition_refresh()
         self._sync_fn = None              # set by MainWindow to trigger cloud sync
-        self._pending_checks = 0
-        self._valid_result_count = 0
         self._claude = ClaudeAI()
         self._build_ui()
 
@@ -1965,14 +2032,24 @@ class RecipesView(QWidget):
         wrapper.setStyleSheet("background: transparent;")
         wl = QVBoxLayout(wrapper)
         wl.setContentsMargins(0, 0, 0, 0)
-        wl.setSpacing(8)
+        wl.setSpacing(10)
 
+        # Header row: back button + result count label
+        hdr = QHBoxLayout()
         back_btn = QPushButton("← Back to Saved")
         back_btn.setObjectName("ghost-btn")
         back_btn.setFixedHeight(34)
         back_btn.setFixedWidth(150)
         back_btn.clicked.connect(self._show_saved)
-        wl.addWidget(back_btn)
+        self._result_count_lbl = QLabel("")
+        self._result_count_lbl.setStyleSheet(
+            f"background: transparent; color: {theme_manager.c('#555555', '#999999')};"
+            " font-size: 12px;"
+        )
+        hdr.addWidget(back_btn)
+        hdr.addStretch()
+        hdr.addWidget(self._result_count_lbl)
+        wl.addLayout(hdr)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1980,8 +2057,8 @@ class RecipesView(QWidget):
         self._results_container = QWidget()
         self._results_container.setStyleSheet("background: transparent;")
         self._results_layout = QVBoxLayout(self._results_container)
-        self._results_layout.setContentsMargins(0, 0, 0, 0)
-        self._results_layout.setSpacing(6)
+        self._results_layout.setContentsMargins(0, 0, 8, 0)
+        self._results_layout.setSpacing(8)
         self._results_layout.addStretch()
         scroll.setWidget(self._results_container)
         wl.addWidget(scroll, 1)
@@ -2319,38 +2396,20 @@ class RecipesView(QWidget):
             self._status.setText("No results found — try a different search")
             self._stack.setCurrentIndex(0)
             return
-        self._status.setText(f"Checking {len(results)} results…")
         self._stack.setCurrentIndex(1)
-        self._pending_checks = len(results)
-        self._valid_result_count = 0
+        n = len(results)
+        self._status.setText(f"{n} recipe{'s' if n != 1 else ''} found — click one to load")
+        self._result_count_lbl.setText(f"{n} results")
         for r in results:
-            run_async(
-                check_scrapeable, r["url"],
-                on_result=lambda ok, result=r: self._on_check_result(ok, result),
-                on_error=lambda _err, result=r: self._on_check_result(False, result),
-            )
-
-    def _on_check_result(self, scrapeable: bool, result: dict):
-        self._pending_checks -= 1
-        if scrapeable:
-            self._valid_result_count += 1
-            row = SearchResultRow(result, on_select=self._scrape_recipe)
-            self._results_layout.insertWidget(self._results_layout.count() - 1, row)
-        if self._pending_checks == 0:
-            n = self._valid_result_count
-            if n == 0:
-                self._status.setText("No usable recipes found — try a different search")
-                self._stack.setCurrentIndex(0)
-            else:
-                self._status.setText(
-                    f"{n} recipe{'s' if n != 1 else ''} found — click one to load"
-                )
+            card = SearchResultRow(r, on_select=self._scrape_recipe)
+            self._results_layout.insertWidget(self._results_layout.count() - 1, card)
 
     def _on_search_error(self, _err: str):
         self._status.setText("Search failed — check your connection")
         self._stack.setCurrentIndex(0)
 
     def _clear_results(self):
+        self._result_count_lbl.setText("")
         while self._results_layout.count() > 1:
             item = self._results_layout.takeAt(0)
             if item.widget():

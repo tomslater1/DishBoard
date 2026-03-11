@@ -77,8 +77,6 @@ def _stat_card(icon_name: str, value: str, label: str, colour: str, on_click=Non
 _DISHY_CHIPS = [
     ("Give me a meal plan for this week", "fa5s.calendar-alt"),
     ("High-protein dinner ideas",          "fa5s.fire"),
-    ("What can I make with chicken?",      "fa5s.drumstick-bite"),
-    ("Healthy lunch ideas",                "fa5s.apple-alt"),
 ]
 
 _DASH_MACROS = [
@@ -217,7 +215,7 @@ class MyKitchenView(QWidget):
         row.setSpacing(12)
         row.addWidget(_stat_card("fa5s.calendar-check", str(meals), "Meals this week", "#4caf8a", lambda: self._navigate_to(2)))
         row.addWidget(_stat_card("fa5s.book-open",       str(saved), "Saved recipes",   "#7c6af7", lambda: self._navigate_to(1)))
-        row.addWidget(_stat_card("fa5s.shopping-basket", str(items), "Items in list",   "#f0a500", lambda: self._navigate_to(4)))
+        row.addWidget(_stat_card("fa5s.shopping-basket", str(items), "Items in list",   "#f0a500", lambda: self._navigate_to(5)))
         return row
 
     # ── Today's Plan ────────────────────────────────────────────────────────
@@ -477,16 +475,15 @@ class MyKitchenView(QWidget):
         layout.addWidget(sub_lbl)
         layout.addStretch(1)
 
-        # 2×2 prompt chips — taller and larger text
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
-        for idx, (text, icon) in enumerate(_DISHY_CHIPS):
+        # 2 prompt chips side by side
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(8)
+        for text, icon in _DISHY_CHIPS:
             chip = QPushButton(f"  {text}")
             chip.setIcon(qta.icon(icon, color="#34d399"))
             chip.setIconSize(QSize(14, 14))
             chip.setFixedHeight(42)
+            chip.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.setStyleSheet(
                 f"QPushButton {{"
@@ -503,8 +500,8 @@ class MyKitchenView(QWidget):
                 f"QPushButton:pressed {{ background: {_tm.c('#252525', '#dddddd')}; }}"
             )
             chip.clicked.connect(lambda _, t=text: self._on_dishy_chip(t))
-            grid.addWidget(chip, idx // 2, idx % 2)
-        layout.addLayout(grid)
+            chips_row.addWidget(chip)
+        layout.addLayout(chips_row)
 
         # Inline input — larger
         input_container = QWidget()
@@ -550,7 +547,7 @@ class MyKitchenView(QWidget):
         return card
 
     def _on_dishy_chip(self, text: str):
-        self._navigate_to(5)
+        self._navigate_to(6)
         self._trigger_dishy(text)
 
     # ── Quick Actions strip ─────────────────────────────────────────────────
@@ -565,8 +562,8 @@ class MyKitchenView(QWidget):
             ("fa5s.search",        "Recipes",      "#7c6af7", lambda: self._navigate_to(1)),
             ("fa5s.calendar-plus", "Meal Planner", "#4caf8a", lambda: self._navigate_to(2)),
             ("fa5s.heartbeat",     "Nutrition",    "#e05c7a", lambda: self._navigate_to(3)),
-            ("fa5s.shopping-cart", "Shopping",     "#f0a500", lambda: self._navigate_to(4)),
-            ("fa5s.robot",         "Dishy",        "#34d399", lambda: self._navigate_to(5)),
+            ("fa5s.shopping-cart", "Shopping",     "#f0a500", lambda: self._navigate_to(5)),
+            ("fa5s.robot",         "Dishy",        "#34d399", lambda: self._navigate_to(6)),
         ]:
             btn = QPushButton()
             btn.setObjectName("quick-action-btn")
@@ -690,7 +687,7 @@ class MyKitchenView(QWidget):
         view_btn = QPushButton("View →")
         view_btn.setObjectName("ghost-btn")
         view_btn.setFixedHeight(24)
-        view_btn.clicked.connect(lambda: self._navigate_to(4))
+        view_btn.clicked.connect(lambda: self._navigate_to(5))
         hdr.addWidget(basket_ic)
         hdr.addSpacing(8)
         hdr.addWidget(title_lbl)

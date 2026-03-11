@@ -25,11 +25,13 @@ a = Analysis(
         ('assets/styles', 'assets/styles'),
         ('assets/icons',  'assets/icons'),
         # mf2py (dependency of extruct → recipe_scrapers) has a non-Python data dir
-        # IMPORTANT: dishboard.db, config.json, and .env must NEVER appear here.
+        # IMPORTANT: dishboard.db and config.json must NEVER appear here.
         # User data lives in ~/Library/Application Support/DishBoard/ (written at runtime).
         (_mf2py_backcompat, 'mf2py/backcompat-rules'),
     ],
     hiddenimports=[
+        # SSL certificates for the requests library (needed in frozen .app)
+        'certifi',
         # recipe-scrapers dynamically imports site-specific scrapers
         'recipe_scrapers',
         # qt_material needs its XML theme files found at runtime
@@ -67,7 +69,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['dotenv', 'python-dotenv'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

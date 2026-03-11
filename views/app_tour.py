@@ -73,20 +73,20 @@ _STEPS: list[dict] = [
         ),
         "fallback": (
             "The sidebar is your navigation hub — everything's one click away.\n"
-            "• My Kitchen, Recipes, Meal Planner, Nutrition, Shopping List\n"
+            "• Home, Recipes, Meal Planner, Nutrition, My Kitchen, Shopping List\n"
             "• The Dishy button (that's me!) opens our full chat\n"
             "• Settings and Help live at the bottom"
         ),
     },
     {
-        "id": "my_kitchen",
+        "id": "home",
         "view_index": 0,
         "target_key": "content_area",
         "arrow_side": None,
         "bubble_anchor": "content_top",
-        "title": "My Kitchen",
+        "title": "Home",
         "prompt": (
-            "Explain what the My Kitchen dashboard actually shows. It contains: "
+            "Explain what the Home dashboard actually shows. It contains: "
             "a greeting header with today's date; stat cards; a Today's Plan card showing "
             "today's breakfast, lunch and dinner (pulled live from the Meal Planner); "
             "a Recent Recipes card; a quick-action strip with buttons for every section; "

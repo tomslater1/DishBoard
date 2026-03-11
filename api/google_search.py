@@ -2,7 +2,7 @@ from ddgs import DDGS
 
 
 class GoogleSearchAPI:
-    def search_recipes(self, query: str, num: int = 20) -> list[dict]:
+    def search_recipes(self, query: str, num: int = 50) -> list[dict]:
         """Search for recipes via DuckDuckGo. Returns list of {title, url, snippet} dicts.
         BBC Good Food results are fetched first and prioritised at the top."""
         ddgs = DDGS()
@@ -22,7 +22,7 @@ class GoogleSearchAPI:
         try:
             bbc_raw = list(ddgs.text(
                 f"site:bbcgoodfood.com {query} recipe",
-                max_results=6,
+                max_results=10,
             ))
             bbc_results = _parse(bbc_raw)
         except Exception:

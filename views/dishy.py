@@ -503,7 +503,11 @@ class DishyView(QWidget):
         self._worker      = None
         self._first_show  = True
         self._resume_bar  = None
+        self._sync_fn     = None
         self._build_ui()
+
+    def set_sync_fn(self, fn):
+        self._sync_fn = fn
 
     def setup_actions(self, actions, refresh_callback):
         self._actions    = actions
@@ -940,6 +944,8 @@ class DishyView(QWidget):
         # Persist user message
         if self._db:
             self._db.save_dishy_message(self._session_id, "user", text)
+            if self._sync_fn:
+                self._sync_fn()
 
         # Typing indicator
         self._typing_indicator = _TypingIndicator()
@@ -1018,6 +1024,8 @@ class DishyView(QWidget):
                         self._session_id, "assistant", cleaned,
                         ",".join(tool_names),
                     )
+                    if self._sync_fn:
+                        self._sync_fn()
             self._send_btn.setEnabled(True)
             self._send_btn.setIcon(qta.icon("fa5s.arrow-up", color="white"))
             QTimer.singleShot(60, lambda: self._scroll.verticalScrollBar().setValue(

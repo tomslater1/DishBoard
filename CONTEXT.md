@@ -340,6 +340,7 @@ color = theme_manager.c('#c8c8c8', '#333333')  # dark, light
 | v0.34 | Dishy chat overhaul: modern glassy UI, green user bubbles with Dishy avatar, wide bubbles, horizontal chip row, persistent SQLite chat history, history browser dialog, resume-last-session banner |
 | v0.33 | Shopping list overhaul: collapsible category sections, stats strip (total/to-get/in-basket/categories), amber progress bar, meal-plan source badges, full dark/light mode support |
 
+| v0.45.3 | Dishy fully operational: Supabase Edge Function deployed + ANTHROPIC_API_KEY set as secret; supabase/config.toml added |
 | v0.45.2 | Proxy-only Dishy: removed anthropic_api_key from local DB key-loading; all ClaudeAI instantiations use proxy path; app_tour uses proxy client; no local Anthropic key ever loaded |
 | v0.45.1 | Bug fixes: Dishy proxy now works correctly without a personal API key (supabase-py v2 session fix); recipe scraper SSL cert passed explicitly so clicking search results works on packaged app |
 | v0.45 | Smart macro recalc via Dishy AI on calorie change; Home/My Kitchen sidebar split; recipe search 60 results as instant modern cards; SSL + Dishy proxy fixes for packaged app; instant cloud sync for Settings + Dishy chats; theme colour fixes across all Settings pages and Dishy panel |
@@ -347,7 +348,7 @@ color = theme_manager.c('#c8c8c8', '#333333')  # dark, light
 | v0.42 | Server-side AI proxy (Supabase Edge Function); Supabase Storage for recipe images; Realtime WebSocket sync; "Live" sync indicator state; polling reduced to 5 min |
 | v0.41 | Full light mode: Dishy chat, Settings header/nav, login logo all theme-adaptive at runtime; new icon set |
 
-**Current version: v0.45.2**
+**Current version: v0.45.3**
 
 > IMPORTANT: Always increment version on every session that makes changes. Do NOT reach v1.0 without explicit user approval.
 > When bumping version: (1) update `APP_VERSION` in `utils/version.py`, (2) prepend a new entry to `VERSION_HISTORY` in the same file, (3) update CONTEXT.md and MEMORY.md version tables.

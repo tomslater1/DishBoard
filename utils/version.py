@@ -1,9 +1,17 @@
-APP_VERSION = "v0.45.2"
+APP_VERSION = "v0.45.3"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.45.3",
+        "title": "Dishy is fully working",
+        "changes": [
+            "Dishy AI is now working on all devices — the server-side proxy has been deployed and connected",
+            "No API key is needed on your device — all AI requests are handled securely server-side",
+        ],
+    },
     {
         "version": "v0.45.2",
         "title": "Dishy proxy fix — works on all installs",

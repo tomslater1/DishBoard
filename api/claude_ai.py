@@ -194,18 +194,11 @@ class ClaudeAI:
     MODEL       = "claude-sonnet-4-6"   # all requests use Sonnet
     TOOLS_MODEL = "claude-sonnet-4-6"   # tool-use loop
 
-    def __init__(self, api_key: str = ""):
-        self._api_key_override = api_key  # explicit override; env var read lazily at first call
+    def __init__(self):
         self._client: anthropic.Anthropic | None = None
 
     def _get_client(self) -> anthropic.Anthropic:
-        key = self._api_key_override or os.environ.get("ANTHROPIC_API_KEY", "")
-        if key:
-            # Direct mode — cache client (key is stable)
-            if self._client is None:
-                self._client = anthropic.Anthropic(api_key=key)
-            return self._client
-
+        # Always use the Supabase server-side proxy — no local API key ever used.
         # Proxy mode — build fresh each call so JWT is always current
         access_token: str | None = None
 

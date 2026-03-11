@@ -1,9 +1,17 @@
-APP_VERSION = "v0.45.3"
+APP_VERSION = "v0.45.4"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.45.4",
+        "title": "Dishy connection reliability fix",
+        "changes": [
+            "Fixed Dishy failing with 'check API key in Settings' on other devices — the app now recovers the session from macOS Keychain if the in-memory session is lost",
+            "Improved error messages: Dishy now tells you to sign out and sign in again instead of mentioning API keys",
+        ],
+    },
     {
         "version": "v0.45.3",
         "title": "Dishy is fully working",

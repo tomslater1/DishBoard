@@ -674,8 +674,10 @@ class DishyBubble(QWidget):
         err_lower = err.lower()
         if "credit balance" in err_lower or "too low" in err_lower:
             msg = "Anthropic credits are out. Top up at console.anthropic.com/settings/billing."
+        elif "dishy_not_signed_in" in err_lower:
+            msg = "Dishy couldn't connect — please sign out and sign in again."
         elif "authentication" in err_lower or "api_key" in err_lower or "401" in err_lower:
-            msg = "Authentication failed — check your Anthropic API key in Settings."
+            msg = "Dishy couldn't authenticate — please sign out and sign in again."
         else:
             # Show the actual error so we can diagnose tool-related failures
             short = err.strip().splitlines()[-1] if err.strip() else err

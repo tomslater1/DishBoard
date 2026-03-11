@@ -207,27 +207,54 @@ class ClaudeAI:
             return self._client
 
         # Proxy mode — build fresh each call so JWT is always current
+        access_token: str | None = None
+
+        # 1. Try gotrue in-memory session (handles auto-refresh)
         try:
             from auth.supabase_client import get_client as _get_sb
             sb = _get_sb()
             if sb:
                 session = sb.auth.get_session()
-                # supabase-py v2 returns a Session directly (not AuthResponse)
-                access_token = getattr(session, "access_token", None)
-                if access_token:
-                    supabase_url = (os.environ.get("SUPABASE_URL", "") or "https://ixddtfprarxsgscwytro.supabase.co").rstrip("/")
-                    return anthropic.Anthropic(
-                        api_key="proxy",
-                        base_url=f"{supabase_url}/functions/v1/claude-proxy/",
-                        default_headers={"Authorization": f"Bearer {access_token}"},
-                    )
+                access_token = getattr(session, "access_token", None) or None
         except Exception:
             pass
 
-        # Fallback — unconfigured client (will raise on use with clear error)
-        if self._client is None:
-            self._client = anthropic.Anthropic(api_key="")
-        return self._client
+        # 2. Keychain fallback — gotrue may lose its in-memory state between
+        #    app restarts or after a session refresh failure.  The keychain
+        #    always holds the last-known tokens; we pass them to set_session()
+        #    so gotrue can refresh if needed, then read back the (possibly new)
+        #    access token.
+        if not access_token:
+            try:
+                from auth.session_manager import load_session
+                from auth.supabase_client import get_client as _get_sb2
+                stored = load_session()
+                if stored:
+                    sb2 = _get_sb2()
+                    if sb2:
+                        resp = sb2.auth.set_session(
+                            stored.get("access_token", ""),
+                            stored.get("refresh_token", ""),
+                        )
+                        if resp and resp.session:
+                            access_token = resp.session.access_token
+                        elif stored.get("access_token"):
+                            access_token = stored["access_token"]
+            except Exception:
+                pass
+
+        if access_token:
+            supabase_url = (os.environ.get("SUPABASE_URL", "") or "https://ixddtfprarxsgscwytro.supabase.co").rstrip("/")
+            return anthropic.Anthropic(
+                api_key="proxy",
+                base_url=f"{supabase_url}/functions/v1/claude-proxy/",
+                default_headers={"Authorization": f"Bearer {access_token}"},
+            )
+
+        # No session available — raise a clear, user-friendly error
+        raise RuntimeError(
+            "dishy_not_signed_in: Dishy couldn't connect. Please sign out and sign in again."
+        )
 
     def _ask(self, user_message: str, history: list[dict] | None = None) -> str:
         messages = list(history or [])

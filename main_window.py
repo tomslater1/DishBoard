@@ -346,7 +346,7 @@ class MainWindow(QMainWindow):
         if "credit balance" in err.lower() or "too low" in err.lower():
             self._tip_lbl.setText("Add Anthropic credits to get daily tips.")
         else:
-            self._tip_lbl.setText("Tip unavailable — check API key.")
+            self._tip_lbl.setText("Tip unavailable.")
 
     def _on_tip_result(self, tip: str):
         today = datetime.now().strftime("%Y-%m-%d")

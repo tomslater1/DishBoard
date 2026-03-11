@@ -1,0 +1,10 @@
+.env
+dishboard.db
+config.json
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+dist/
+build/
+.DS_Store

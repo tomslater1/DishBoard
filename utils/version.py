@@ -1,9 +1,17 @@
-APP_VERSION = "v0.45"
+APP_VERSION = "v0.45.1"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.45.1",
+        "title": "Bug fixes for packaged app",
+        "changes": [
+            "Fixed Dishy not working on Macs without a personal Anthropic API key — the Supabase proxy now connects correctly",
+            "Fixed clicking a recipe search result doing nothing — SSL certificates are now passed explicitly to the recipe scraper",
+        ],
+    },
     {
         "version": "v0.45",
         "title": "Smart macros, My Kitchen tab, recipe search overhaul & bug fixes",

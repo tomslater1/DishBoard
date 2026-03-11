@@ -1,4 +1,5 @@
 import requests
+import certifi
 from recipe_scrapers import scrape_html
 
 _HEADERS = {
@@ -13,7 +14,7 @@ _HEADERS = {
 def check_scrapeable(url: str) -> bool:
     """Quick check: fetch the URL and return True if recipe content can be extracted."""
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=10)
+        resp = requests.get(url, headers=_HEADERS, timeout=10, verify=certifi.where())
         resp.raise_for_status()
         scraper = scrape_html(resp.text, org_url=url)
 
@@ -36,7 +37,7 @@ def check_scrapeable(url: str) -> bool:
 
 def scrape_recipe(url: str) -> dict:
     """Scrape a recipe from a URL using recipe-scrapers. Returns a structured dict."""
-    resp = requests.get(url, headers=_HEADERS, timeout=15)
+    resp = requests.get(url, headers=_HEADERS, timeout=15, verify=certifi.where())
     resp.raise_for_status()
     scraper = scrape_html(resp.text, org_url=url)
 

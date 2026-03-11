@@ -212,14 +212,15 @@ class ClaudeAI:
             sb = _get_sb()
             if sb:
                 session = sb.auth.get_session()
-                if session and session.session and session.session.access_token:
-                    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-                    if supabase_url:
-                        return anthropic.Anthropic(
-                            api_key="proxy",
-                            base_url=f"{supabase_url}/functions/v1/claude-proxy",
-                            default_headers={"Authorization": f"Bearer {session.session.access_token}"},
-                        )
+                # supabase-py v2 returns a Session directly (not AuthResponse)
+                access_token = getattr(session, "access_token", None)
+                if access_token:
+                    supabase_url = (os.environ.get("SUPABASE_URL", "") or "https://ixddtfprarxsgscwytro.supabase.co").rstrip("/")
+                    return anthropic.Anthropic(
+                        api_key="proxy",
+                        base_url=f"{supabase_url}/functions/v1/claude-proxy/",
+                        default_headers={"Authorization": f"Bearer {access_token}"},
+                    )
         except Exception:
             pass
 

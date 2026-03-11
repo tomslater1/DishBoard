@@ -27,7 +27,11 @@ ICON_DOCK_PATH = get_resource_path("assets/icons/DishBoard-darkicon.png")
 
 
 def _load_api_keys_from_db(db: Database):
-    """Read API keys saved via the Settings view and push them into os.environ.
+    """Load non-AI API keys from DB into os.environ.
+
+    Anthropic API key is intentionally excluded — Dishy always routes through
+    the Supabase server-side proxy authenticated by the user's session.
+    Loading a local Anthropic key would bypass the proxy entirely.
 
     Also loads SUPABASE_URL and SUPABASE_ANON_KEY so the auth client is ready.
     Keys stored in the DB always take priority over os.environ defaults.
@@ -35,7 +39,6 @@ def _load_api_keys_from_db(db: Database):
     survive across launches without any configuration file.
     """
     key_map = {
-        "anthropic_api_key": "ANTHROPIC_API_KEY",
         "google_api_key":    "GOOGLE_API_KEY",
         "google_cx":         "GOOGLE_CX",
         "supabase_url":      "SUPABASE_URL",

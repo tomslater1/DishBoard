@@ -1,9 +1,18 @@
-APP_VERSION = "v0.45.1"
+APP_VERSION = "v0.45.2"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.45.2",
+        "title": "Dishy proxy fix — works on all installs",
+        "changes": [
+            "Fixed Dishy not working on packaged app installs — the app no longer tries to load an Anthropic API key from local storage, so the Supabase proxy is always used correctly",
+            "Fixed the app tour narrator failing on DMG builds — it now uses the same proxy connection as the rest of Dishy",
+            "Removed all code paths that expected an Anthropic API key to be stored on the device",
+        ],
+    },
     {
         "version": "v0.45.1",
         "title": "Bug fixes for packaged app",

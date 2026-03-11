@@ -555,7 +555,7 @@ def _maybe_analyze_and_log(db, recipe_id: int, meal_name: str, date_str: str) ->
             return False
         servings = int(d.get("servings") or 2)
         from api.claude_ai import ClaudeAI as _AI
-        _ai = _AI(os.environ.get("ANTHROPIC_API_KEY", ""))
+        _ai = _AI()
         nutr = _ai.analyze_recipe_nutrition(ingredients, servings)
         d["nutrition_ingredients"] = nutr.get("ingredients", [])
         d["nutrition_total"]       = nutr.get("total", {})
@@ -904,7 +904,7 @@ class DishyActions:
             # Fallback: call analyze_recipe_nutrition (slower but guaranteed)
             try:
                 from api.claude_ai import ClaudeAI as _ClaudeAI
-                _ai = _ClaudeAI(os.environ.get("ANTHROPIC_API_KEY", ""))
+                _ai = _ClaudeAI()
                 nutr = _ai.analyze_recipe_nutrition(ingredients, servings)
                 recipe_data["nutrition_ingredients"] = nutr.get("ingredients", [])
                 recipe_data["nutrition_total"]       = nutr.get("total", {})
@@ -1024,7 +1024,7 @@ class DishyActions:
         if not plan:
             # Fallback: generate plan with Haiku (old path, only hit if Claude omits 'plan')
             from api.claude_ai import ClaudeAI
-            ai    = ClaudeAI(os.environ.get("ANTHROPIC_API_KEY", ""))
+            ai    = ClaudeAI()
             saved = [r["title"] for r in db.get_saved_recipes()]
             prefs = (inp.get("preferences") or "").strip() or db.get_setting("dietary_prefs", "")
             plan  = ai.plan_week_structured(saved, prefs, label)

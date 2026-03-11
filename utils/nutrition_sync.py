@@ -111,7 +111,7 @@ class NutritionSyncService(QObject):
                     return False
                 servings = int(d.get("servings") or 2)
                 from api.claude_ai import ClaudeAI as _AI
-                _ai  = _AI(os.environ.get("ANTHROPIC_API_KEY", ""))
+                _ai  = _AI()
                 nutr = _ai.analyze_recipe_nutrition(ingredients, servings)
                 d["nutrition_ingredients"] = nutr.get("ingredients", [])
                 d["nutrition_total"]       = nutr.get("total", {})

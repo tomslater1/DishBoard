@@ -801,11 +801,8 @@ class AppTourOverlay(QWidget):
         sys_prompt = _build_tour_system_prompt(self._user_name, self._skill, self._dietary)
 
         def _fetch():
-            key = os.environ.get("ANTHROPIC_API_KEY", "")
-            if not key:
-                raise RuntimeError("no_api_key")
-            import anthropic as _anthropic
-            client = _anthropic.Anthropic(api_key=key)
+            from api.claude_ai import ClaudeAI as _ClaudeAI
+            client = _ClaudeAI()._get_client()
             messages = list(history_snapshot)
             messages.append({"role": "user", "content": prompt_text})
             resp = client.messages.create(

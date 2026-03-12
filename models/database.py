@@ -117,8 +117,20 @@ class Database:
         (1, "ALTER TABLE nutrition_logs      ADD COLUMN updated_at    DATETIME DEFAULT NULL"),
         (1, "ALTER TABLE dishy_chat_history  ADD COLUMN cloud_id      TEXT"),
         (1, "ALTER TABLE dishy_chat_history  ADD COLUMN updated_at    DATETIME DEFAULT NULL"),
+        # v2: pantry/fridge/freezer storage tracker
+        (2, """CREATE TABLE IF NOT EXISTS pantry_items (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    name         TEXT    NOT NULL,
+    quantity     REAL    DEFAULT NULL,
+    unit         TEXT    DEFAULT '',
+    storage      TEXT    DEFAULT 'Pantry',
+    expiry_date  TEXT    DEFAULT NULL,
+    added_at     TEXT    DEFAULT (datetime('now')),
+    cloud_id     TEXT,
+    updated_at   DATETIME DEFAULT NULL
+)"""),
     ]
-    _LATEST_SCHEMA_VERSION = 1
+    _LATEST_SCHEMA_VERSION = 2
 
     def _run_migrations(self) -> None:
         """Apply pending schema migrations, tracked via PRAGMA user_version.
@@ -329,6 +341,31 @@ class Database:
             self.add_tombstone("meal_plans", row["cloud_id"])
         self.conn.execute("DELETE FROM meal_plans")
         self.conn.commit()
+
+    def cleanup_orphan_meal_plans(self) -> int:
+        """Remove meal plan rows that have no valid recipe attached.
+
+        This covers two cases:
+        - recipe_id IS NULL (recipe was deleted, FK set null)
+        - recipe_id points to a recipe row that no longer exists locally
+
+        Tombstones are written for any cloud-synced rows so the deletion
+        propagates to Supabase on the next sync.
+
+        Returns the number of rows removed.
+        """
+        orphans = self.conn.execute(
+            "SELECT mp.id, mp.cloud_id FROM meal_plans mp"
+            " WHERE mp.recipe_id IS NULL"
+            "    OR mp.recipe_id NOT IN (SELECT id FROM recipes)"
+        ).fetchall()
+        for row in orphans:
+            if row["cloud_id"]:
+                self.add_tombstone("meal_plans", row["cloud_id"])
+            self.conn.execute("DELETE FROM meal_plans WHERE id=?", (row["id"],))
+        if orphans:
+            self.conn.commit()
+        return len(orphans)
 
     def clear_meal_day_slots(self, week_start: str, day: str):
         """Delete all meal slots (breakfast, lunch, dinner) for a specific day in a week."""
@@ -553,6 +590,136 @@ class Database:
 
     def clear_dishy_history(self):
         self.conn.execute("DELETE FROM dishy_chat_history")
+        self.conn.commit()
+
+    # Settings keys that belong to the device, not the user account.
+    # These survive an account switch so the app stays usable immediately.
+    _DEVICE_SETTING_KEYS = frozenset({
+        "theme",
+        "supabase_url",
+        "supabase_anon_key",
+        "active_user_id",   # needed so account-switch detection survives the wipe
+    })
+
+    def clear_user_data(self) -> None:
+        """Wipe all user-data tables AND user-specific settings on account switch.
+
+        Device-level settings (theme, Supabase credentials) are preserved so
+        the app stays usable immediately after the switch.
+        """
+        self.conn.executescript("""
+            DELETE FROM recipes;
+            DELETE FROM meal_plans;
+            DELETE FROM shopping_items;
+            DELETE FROM nutrition_logs;
+            DELETE FROM dishy_chat_history;
+            DELETE FROM sync_tombstones;
+            DELETE FROM pantry_items;
+        """)
+        # Delete all user-specific settings (onboarding, sync timestamps,
+        # macro goals, preferences, etc.) — keep only device-level keys.
+        placeholders = ",".join("?" * len(self._DEVICE_SETTING_KEYS))
+        self.conn.execute(
+            f"DELETE FROM settings WHERE key NOT IN ({placeholders})",
+            tuple(self._DEVICE_SETTING_KEYS),
+        )
+        self.conn.commit()
+
+    # -- Pantry / fridge / freezer helpers --------------------------------
+
+    def add_pantry_item(self, name: str, quantity=None, unit: str = "",
+                        storage: str = "Pantry", expiry_date: str = None) -> int:
+        cursor = self.conn.execute(
+            "INSERT INTO pantry_items (name, quantity, unit, storage, expiry_date, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (name, quantity, unit or "", storage or "Pantry", expiry_date),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_pantry_items(self, storage: str = None) -> list:
+        if storage:
+            rows = self.conn.execute(
+                "SELECT * FROM pantry_items WHERE storage=? ORDER BY name ASC", (storage,)
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM pantry_items ORDER BY storage ASC, name ASC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_pantry_item(self, item_id: int, quantity=None, unit: str = "",
+                           expiry_date: str = None):
+        self.conn.execute(
+            "UPDATE pantry_items SET quantity=?, unit=?, expiry_date=?, updated_at=CURRENT_TIMESTAMP"
+            " WHERE id=?",
+            (quantity, unit or "", expiry_date, item_id),
+        )
+        self.conn.commit()
+
+    def delete_pantry_item(self, item_id: int):
+        row = self.conn.execute(
+            "SELECT cloud_id FROM pantry_items WHERE id=?", (item_id,)
+        ).fetchone()
+        if row and row["cloud_id"]:
+            self.add_tombstone("pantry_items", row["cloud_id"])
+        self.conn.execute("DELETE FROM pantry_items WHERE id=?", (item_id,))
+        self.conn.commit()
+
+    def clear_pantry(self, storage: str = None):
+        if storage:
+            rows = self.conn.execute(
+                "SELECT cloud_id FROM pantry_items WHERE storage=? AND cloud_id IS NOT NULL",
+                (storage,)
+            ).fetchall()
+            for row in rows:
+                self.add_tombstone("pantry_items", row["cloud_id"])
+            self.conn.execute("DELETE FROM pantry_items WHERE storage=?", (storage,))
+        else:
+            rows = self.conn.execute(
+                "SELECT cloud_id FROM pantry_items WHERE cloud_id IS NOT NULL"
+            ).fetchall()
+            for row in rows:
+                self.add_tombstone("pantry_items", row["cloud_id"])
+            self.conn.execute("DELETE FROM pantry_items")
+        self.conn.commit()
+
+    def deduct_pantry_ingredients(self, ingredients: list) -> None:
+        """Parse ingredient strings and subtract quantities from matching pantry items."""
+        import re
+        pattern = re.compile(r'^(\d+\.?\d*)\s*([a-zA-Z]*)\s+(.+)$')
+        for ingredient in ingredients:
+            if not ingredient:
+                continue
+            m = pattern.match(ingredient.strip())
+            if not m:
+                continue
+            qty_str, unit, name = m.group(1), m.group(2), m.group(3).strip()
+            try:
+                qty = float(qty_str)
+            except ValueError:
+                continue
+            # Fuzzy match: ingredient name in pantry name or vice versa
+            name_lower = name.lower()
+            rows = self.conn.execute(
+                "SELECT id, name, quantity, cloud_id FROM pantry_items"
+            ).fetchall()
+            for row in rows:
+                row_name = row["name"] or ""
+                if row_name.lower() in name_lower or name_lower in row_name.lower():
+                    existing_qty = float(row["quantity"] or 0)
+                    new_qty = existing_qty - qty
+                    if new_qty <= 0:
+                        if row["cloud_id"]:
+                            self.add_tombstone("pantry_items", row["cloud_id"])
+                        self.conn.execute("DELETE FROM pantry_items WHERE id=?", (row["id"],))
+                    else:
+                        self.conn.execute(
+                            "UPDATE pantry_items SET quantity=?, updated_at=CURRENT_TIMESTAMP"
+                            " WHERE id=?",
+                            (new_qty, row["id"]),
+                        )
+                    break
         self.conn.commit()
 
     # -- Cloud sync helpers ------------------------------------------------

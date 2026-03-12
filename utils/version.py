@@ -1,9 +1,56 @@
-APP_VERSION = "v0.50"
+APP_VERSION = "v0.55"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.55",
+        "title": "Account isolation fixes & meal planner integrity",
+        "changes": [
+            "Fixed Dishy chat history leaking between accounts — switching accounts now fully resets the in-memory conversation so no cross-account actions or history bleed through",
+            "Meal planner auto-cleanup on login: any meal slot with no valid recipe attached is removed automatically after sync, keeping the planner consistent",
+            "Fixed sign-out dialog crashing when opening — theme detection bug resolved",
+        ],
+    },
+    {
+        "version": "v0.54",
+        "title": "Account security, Google Sign-In & sync fixes",
+        "changes": [
+            "Google Sign-In is now fully working — sign in or create an account with your Google account",
+            "Fixed critical sync bug: pulled rows were being silently discarded because local_id (a cloud-only column) was not stripped before writing to local SQLite",
+            "Fixed critical settings bug: signing in after an account switch was overwriting cloud settings with a partial local copy, erasing onboarding_complete and user preferences",
+            "Onboarding and app tour completion are now pushed to the cloud immediately so they are never repeated on the same account",
+            "Switching accounts now correctly clears local data and shows the new account's data after sync",
+        ],
+    },
+    {
+        "version": "v0.53",
+        "title": "My Kitchen, Live Shop & smart ingredient tracking",
+        "changes": [
+            "My Kitchen: full pantry, fridge and freezer tracker with three storage sections",
+            "Live Shop mode in Shopping List: tick items as you buy them — they flow automatically into My Kitchen",
+            "Automatic ingredient deduction: when meal time arrives, used ingredients leave My Kitchen",
+            "Dishy fully integrated: reads all My Kitchen contents and can add/remove items by voice",
+            "Cloud sync: all pantry data syncs to your account instantly on every change",
+        ],
+    },
+    {
+        "version": "v0.52",
+        "title": "DMG build: recipe scraper & Dishy tip fixes",
+        "changes": [
+            "Recipe scraper on packaged app: all 200+ site-specific recipe_scrapers submodules are now explicitly bundled — fixes 'Couldn't load that recipe' on most sites in the DMG build",
+            "Dishy sidebar tip on fresh install: tip loading now fires after login (when the session JWT is available) instead of at app startup — fixes 'Tip unavailable' on first launch of a new DMG install",
+        ],
+    },
+    {
+        "version": "v0.51",
+        "title": "Account isolation: no cross-user data leakage",
+        "changes": [
+            "Fixed critical security issue: local data from a previously-logged-in account is now wiped before a different account's session is restored, preventing recipes, meal plans, nutrition logs, and shopping items from being visible to another user on the same machine",
+            "All user data is now sourced exclusively from the authenticated user's cloud data — no stale local cache can leak between accounts",
+        ],
+    },
     {
         "version": "v0.50",
         "title": "Help page & Dishy awareness update",

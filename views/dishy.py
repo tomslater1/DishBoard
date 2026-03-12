@@ -1095,6 +1095,10 @@ class DishyView(QWidget):
 
     # ── External entry points ─────────────────────────────────────────────────
 
+    def reset_session(self):
+        """Clear in-memory history and start a fresh session (called on account switch)."""
+        self._clear_chat()
+
     def trigger_prompt(self, text: str):
         """Navigate here and auto-send a prompt (called from Dashboard chips)."""
         self._send_text(text)

@@ -21,7 +21,7 @@ _BASE_DIR  = os.path.dirname(__file__)
 _ICON_PATH = os.path.join(_BASE_DIR, "assets", "icons", "DishBoard-darkicon.png")
 
 from views.my_kitchen import MyKitchenView
-from views.my_kitchen_coming_soon import MyKitchenComingSoonView
+from views.my_kitchen_storage import MyKitchenStorageView
 from views.recipes import RecipesView
 from views.meal_planner import MealPlannerView
 from views.nutrition import NutritionView
@@ -85,6 +85,7 @@ class NavButton(QPushButton):
 
 class MainWindow(QMainWindow):
     sign_in_requested = Signal()
+    sign_out_requested = Signal()
     session_expired   = Signal(str)   # emits user email when Dishy session expires
 
     def __init__(self):
@@ -95,12 +96,13 @@ class MainWindow(QMainWindow):
         self._sidebar_expanded = True
         self._nav_history: list[int] = []
         self._cloud_sync_service = None   # set by set_sync_service() after login
+        self._meal_deduction_service = None
         self._db = Database()
         self._db.connect()
         self._claude = ClaudeAI()
         self._centre_on_screen()
         self._build_ui()
-        self._load_sidebar_extras()
+        # Daily tip is loaded in set_account_user() after login so the JWT is available
 
     def _centre_on_screen(self):
         screen = QGuiApplication.primaryScreen().availableGeometry()
@@ -316,7 +318,7 @@ class MainWindow(QMainWindow):
         tip_hdr.addStretch()
         tip_layout.addLayout(tip_hdr)
 
-        self._tip_lbl = QLabel("Loading tip…")
+        self._tip_lbl = QLabel("")
         self._tip_lbl.setWordWrap(True)
         self._tip_lbl.setStyleSheet(
             f"background: transparent; border: none;"
@@ -326,9 +328,6 @@ class MainWindow(QMainWindow):
         vl.addWidget(tip_card)
 
         return container
-
-    def _load_sidebar_extras(self):
-        self._refresh_daily_tip()
 
     def _refresh_daily_tip(self):
         today = datetime.now().strftime("%Y-%m-%d")
@@ -402,13 +401,19 @@ class MainWindow(QMainWindow):
         )
         self._dishy_view     = DishyView(db=self._db)
         self._nutrition_view = NutritionView(navigate_to=self._on_nav_clicked)
+        self._my_kitchen_storage_view = MyKitchenStorageView(
+            db=self._db,
+            trigger_sync=self._trigger_cloud_sync,
+            ask_dishy_fn=None,  # wired after bubble is created
+            navigate_to=self._on_nav_clicked,
+        )
         views = [
             MyKitchenView(navigate_to=self._on_nav_clicked,
                           trigger_dishy=self._trigger_dishy_prompt),  # 0
             self._recipes_view,                                  # 1
             self._meal_planner_view,                             # 2
             self._nutrition_view,                                # 3
-            MyKitchenComingSoonView(),                           # 4
+            self._my_kitchen_storage_view,                       # 4
             self._shopping_view,                                 # 5
             self._dishy_view,                                    # 6
             HelpView(navigate_to=self._on_nav_clicked),          # 7
@@ -428,6 +433,11 @@ class MainWindow(QMainWindow):
         self._dishy_view.set_sync_fn(self._trigger_cloud_sync)
         self._settings_view.set_sync_fn(self._trigger_cloud_sync)
 
+        # Wire Shopping List Live Shop → My Kitchen refresh + navigation
+        self._shopping_view.set_notify_my_kitchen_fn(
+            lambda: self._my_kitchen_storage_view.refresh()
+        )
+        self._shopping_view.set_navigate_to_fn(self._on_nav_clicked)
 
         # Wire Settings data management buttons so clearing a section also refreshes the view
         self._settings_view.set_data_management_callbacks(
@@ -458,6 +468,8 @@ class MainWindow(QMainWindow):
         self._recipes_view.set_ask_dishy(self._dishy_bubble.trigger_action)
         self._meal_planner_view.set_ask_dishy(self._dishy_bubble.trigger_action)
         self._shopping_view.set_ask_dishy(self._dishy_bubble.trigger_action)
+        # Wire My Kitchen's Ask Dishy button (bubble not available at view creation time)
+        self._my_kitchen_storage_view._ask_dishy_fn = self._dishy_bubble.trigger_action
 
         # Wire theme changes so every view can update itself
         theme_manager.theme_changed.connect(self._on_theme_changed)
@@ -600,6 +612,11 @@ class MainWindow(QMainWindow):
                 self._nutrition_view.refresh()
         except Exception:
             pass
+        try:
+            if "my_kitchen" in view_names:
+                self._my_kitchen_storage_view.refresh()
+        except Exception:
+            pass
         # Always refresh Home so stats/cards reflect any Dishy changes
         try:
             home_view = self._stack.widget(0)
@@ -696,6 +713,31 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def go_home(self) -> None:
+        """Navigate to the Home view and deselect settings/guide buttons."""
+        self._on_nav_clicked(0)
+
+    def refresh_all_views(self) -> None:
+        """Force every content view to reload from the local DB.
+
+        Called after an account switch so the UI doesn't show stale data from
+        the previous user while the cloud sync is pulling the new user's data.
+        """
+        for refresh_fn in (
+            lambda: self._recipes_view.refresh(),
+            lambda: self._meal_planner_view.refresh(),
+            lambda: self._shopping_view.refresh(),
+            lambda: self._nutrition_view.refresh(),
+            lambda: self._my_kitchen_storage_view.refresh(),
+            lambda: self._stack.widget(0).refresh() if hasattr(self._stack.widget(0), "refresh") else None,
+            lambda: self._dishy_view.reset_session(),
+            lambda: self._dishy_bubble.reset_session(),
+        ):
+            try:
+                refresh_fn()
+            except Exception:
+                pass
+
     def set_offline_mode(self) -> None:
         """Legacy alias — calls set_sync_unavailable."""
         self.set_sync_unavailable()
@@ -706,8 +748,20 @@ class MainWindow(QMainWindow):
         self._sync_indicator.set_state("offline")
 
     def set_account_user(self, user: dict | None, sync_service) -> None:
-        """Pass account info to the Settings > Account page."""
+        """Pass account info to the Settings > Account page. Also loads the daily tip
+        now that a valid session (JWT) is available for the Dishy proxy."""
+        self._refresh_daily_tip()
         self._settings_view.set_account_info(user, sync_service)
+        # Start meal deduction service after login
+        if not hasattr(self, "_meal_deduction_service") or self._meal_deduction_service is None:
+            try:
+                from utils.meal_deduction import MealDeductionService
+                self._meal_deduction_service = MealDeductionService(self._db, parent=self)
+                self._meal_deduction_service.ingredients_deducted.connect(
+                    self._my_kitchen_storage_view.refresh
+                )
+            except Exception:
+                self._meal_deduction_service = None
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             try:
@@ -715,6 +769,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._settings_view.sign_in_requested.connect(self.sign_in_requested.emit)
+        self._settings_view.sign_out_requested.connect(self.sign_out_requested.emit)
 
     # ── Tour target widgets ────────────────────────────────────────────────────
 

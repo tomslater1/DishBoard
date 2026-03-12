@@ -17,6 +17,7 @@ from utils.version import APP_VERSION, VERSION_HISTORY
 
 class _AccountPage(QWidget):
     sign_in_requested = Signal()
+    sign_out_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -271,19 +272,89 @@ class _AccountPage(QWidget):
             self._sync_service.sync_now()
 
     def _on_sign_out(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Sign out?")
-        msg.setText(
-            "You will be signed out of DishBoard.\n"
-            "Your local data stays on this device."
-        )
-        msg.setIcon(QMessageBox.Icon.Question)
-        msg.setStandardButtons(
-            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok
-        )
-        msg.button(QMessageBox.StandardButton.Ok).setText("Sign out")
-        msg.button(QMessageBox.StandardButton.Cancel).setText("Cancel")
-        if msg.exec() != QMessageBox.StandardButton.Ok:
+        from PySide6.QtWidgets import QDialog
+        from PySide6.QtCore import Qt
+
+        dlg = QDialog(self, Qt.WindowType.FramelessWindowHint)
+        dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        dlg.setModal(True)
+
+        is_dark = manager.mode == "dark"
+        bg     = "#1a1a1a" if is_dark else "#ffffff"
+        border = "#333333" if is_dark else "#dddddd"
+        text   = "#e0e0e0" if is_dark else "#1a1a1a"
+        sub    = "#888888" if is_dark else "#666666"
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        card = QWidget(dlg)
+        card.setObjectName("signout-card")
+        card.setStyleSheet(f"""
+            QWidget#signout-card {{
+                background: {bg};
+                border: 1px solid {border};
+                border-radius: 12px;
+            }}
+        """)
+        card.setFixedWidth(320)
+
+        vl = QVBoxLayout(card)
+        vl.setContentsMargins(24, 24, 24, 20)
+        vl.setSpacing(8)
+
+        title = QLabel("Sign out?", card)
+        title.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {text}; background: transparent;")
+        vl.addWidget(title)
+
+        body = QLabel("You'll be taken back to the login screen.", card)
+        body.setWordWrap(True)
+        body.setStyleSheet(f"font-size: 13px; color: {sub}; background: transparent;")
+        vl.addWidget(body)
+
+        vl.addSpacing(8)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        cancel_btn = QPushButton("Cancel", card)
+        cancel_btn.setFixedHeight(36)
+        cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: 1px solid {border};
+                border-radius: 8px;
+                color: {text};
+                font-size: 13px;
+                padding: 0 16px;
+            }}
+            QPushButton:hover {{ background: {'#2a2a2a' if is_dark else '#f0f0f0'}; }}
+        """)
+        cancel_btn.clicked.connect(dlg.reject)
+
+        signout_btn = QPushButton("Sign out", card)
+        signout_btn.setFixedHeight(36)
+        signout_btn.setStyleSheet("""
+            QPushButton {
+                background: #e53935;
+                border: none;
+                border-radius: 8px;
+                color: white;
+                font-size: 13px;
+                font-weight: 600;
+                padding: 0 16px;
+            }
+            QPushButton:hover { background: #c62828; }
+        """)
+        signout_btn.clicked.connect(dlg.accept)
+
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(signout_btn)
+        vl.addLayout(btn_row)
+
+        outer.addWidget(card)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
         try:
@@ -300,11 +371,7 @@ class _AccountPage(QWidget):
         except Exception:
             pass
 
-        import sys
-        from PySide6.QtWidgets import QApplication
-        from PySide6.QtCore import QProcess
-        QProcess.startDetached(sys.executable, sys.argv)
-        QApplication.quit()
+        self.sign_out_requested.emit()
 
     def apply_theme(self, _mode):
         self._email_lbl.setStyleSheet(
@@ -1864,6 +1931,7 @@ _NAV_ITEMS = [
 
 class SettingsView(QWidget):
     sign_in_requested = Signal()
+    sign_out_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2024,6 +2092,7 @@ class SettingsView(QWidget):
             except Exception:
                 pass
         account_page.sign_in_requested.connect(self.sign_in_requested.emit)
+        account_page.sign_out_requested.connect(self.sign_out_requested.emit)
 
     def apply_theme(self, mode: str):
         self._hdr.setStyleSheet(

@@ -497,6 +497,11 @@ class DishyBubble(QWidget):
 
     # ──────────────────────────────────────────── page context
 
+    def reset_session(self):
+        """Clear in-memory history (called on account switch)."""
+        self._history.clear()
+        self._close_panel()
+
     def set_page(self, page_name: str):
         self._page = page_name
         if hasattr(self, "_page_badge"):

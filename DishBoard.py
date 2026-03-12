@@ -68,6 +68,27 @@ def _start_cloud_sync(user: dict) -> None:
     from utils.cloud_sync_service import CloudSyncBackgroundService
     _sync_service = CloudSyncBackgroundService(user["id"], parent=_main_window)
     _main_window.set_sync_service(_sync_service)
+
+    def _on_initial_sync_done(_pushed: int, _pulled: int) -> None:
+        # Disconnect so this only fires once (not on every subsequent sync)
+        try:
+            _sync_service.sync_finished.disconnect(_on_initial_sync_done)
+        except Exception:
+            pass
+        # Refresh all views with whatever was pulled from the cloud
+        _main_window.refresh_all_views()
+        # Remove any meal plan entries that have no valid recipe attached.
+        # Runs after sync so locally-cached recipes are up to date before we check.
+        removed = _db.cleanup_orphan_meal_plans()
+        if removed:
+            print(f"[MealPlan] Removed {removed} orphan slot(s) with no recipe")
+            _main_window.refresh_all_views()
+        # Check onboarding now that user_settings have been pulled from cloud.
+        # onboarding_complete will be "1" for returning users (pulled from Supabase),
+        # so this is a no-op for them. New users will be directed to onboarding.
+        _maybe_show_onboarding()
+
+    _sync_service.sync_finished.connect(_on_initial_sync_done)
     _sync_service.sync_now()
     _sync_service.start_realtime()
 
@@ -91,28 +112,48 @@ def _on_tour_finished() -> None:
         _app_tour.deleteLater()
         _app_tour = None
     _db.set_setting("app_tour_complete", "1")
+    # Push onboarding/tour completion flags to cloud immediately so they
+    # survive a sign-out and aren't lost if the sync timer hasn't fired yet.
+    if _sync_service is not None:
+        try:
+            _sync_service.sync_now()
+        except Exception:
+            pass
 
 
 def _on_login_success(user: dict) -> None:
     """Called (on main thread) after a successful sign-in."""
     global _main_window, _root_stack, _db
 
+    # Only wipe local data when a DIFFERENT user is logging in.
+    # Same user → their cached data is still valid; sync will update anything stale.
+    # Different user → clear everything so their data is never visible to someone else.
+    stored_user_id = _db.get_setting("active_user_id", "")
+    if stored_user_id != user["id"]:
+        _db.clear_user_data()
+        _main_window.refresh_all_views()
+    _db.set_setting("active_user_id", user["id"])
+
     _root_stack.setCurrentIndex(1)
-
-    # Offer migration of local data to the new account
-    try:
-        recipe_count = len(_db.get_saved_recipes())
-        if recipe_count > 0:
-            from auth.migration_dialog import MigrationDialog
-            dlg = MigrationDialog(recipe_count, user_id=user["id"],
-                                  parent=_main_window)
-            dlg.exec()
-    except Exception:
-        pass
-
-    _start_cloud_sync(user)
+    _main_window.go_home()     # always land on Home, not wherever the user last was
+    _start_cloud_sync(user)   # pulls data; refreshes views + checks onboarding when done
     _main_window.set_account_user(user, _sync_service)
-    _maybe_show_onboarding()
+
+
+def _on_sign_out() -> None:
+    """Navigate back to login screen without restarting the app."""
+    global _root_stack, _login_view, _sync_service
+    # Stop sync service so it doesn't keep firing with a dead session
+    if _sync_service is not None:
+        try:
+            _sync_service.stop()
+        except Exception:
+            pass
+        _sync_service = None
+    # Reset login view to a clean state (clear fields, go to sign-in tab)
+    if _login_view is not None:
+        _login_view.reset()
+    _root_stack.setCurrentIndex(0)
 
 
 def _maybe_show_onboarding() -> None:
@@ -141,6 +182,12 @@ def _on_reauth_success() -> None:
 def _on_onboarding_finished() -> None:
     """Called when the user completes or skips onboarding — go to main app."""
     _root_stack.setCurrentIndex(1)
+    # Push onboarding_complete to cloud immediately (don't wait for sync timer)
+    if _sync_service is not None:
+        try:
+            _sync_service.sync_now()
+        except Exception:
+            pass
     if _db.get_setting("app_tour_complete", "") != "1":
         QTimer.singleShot(400, _show_app_tour)
 
@@ -215,6 +262,7 @@ def main():
     _main_window.sign_in_requested.connect(
         lambda: _root_stack.setCurrentIndex(0)
     )
+    _main_window.sign_out_requested.connect(_on_sign_out)
     _main_window.session_expired.connect(_on_session_expired)
 
     # Build onboarding wizard
@@ -231,12 +279,16 @@ def main():
     user = get_current_user()
 
     if user:
-        # Valid session (or session valid but temporarily offline) — skip login
+        # Valid session restored from keychain — go straight to the app.
+        # The local SQLite cache may already have this user's data from the
+        # previous session, so we show it immediately without wiping.
+        # Sync runs in the background and refreshes any stale views.
         _root_stack.setCurrentIndex(1)
         if not user.get("_network_unavailable"):
             _start_cloud_sync(user)
         else:
             _main_window.set_sync_unavailable()
+            _maybe_show_onboarding()
         _main_window.set_account_user(user, _sync_service)
     else:
         # No valid session — require login

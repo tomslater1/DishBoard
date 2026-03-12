@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QScrollArea, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QSize, QTimer, QEvent, QRectF
+from PySide6.QtCore import Qt, QSize, QTimer, QEvent, QRectF, Signal
 from PySide6.QtGui import QPainter, QColor, QBrush, QPen, QPainterPath
 
 from api.claude_ai import ClaudeAI
@@ -304,6 +304,8 @@ class DishyBubble(QWidget):
     Floating chat bubble overlay.  Parent should be the content wrapper.
     Call set_page(name) whenever the active view changes.
     """
+
+    session_expired = Signal(str)   # emits last-known user email
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
@@ -672,18 +674,29 @@ class DishyBubble(QWidget):
     def _on_error(self, err: str):
         self._remove_typing_indicator()
         err_lower = err.lower()
+        _is_auth = False
         if "credit balance" in err_lower or "too low" in err_lower:
             msg = "Anthropic credits are out. Top up at console.anthropic.com/settings/billing."
         elif "dishy_not_signed_in" in err_lower:
-            msg = "Dishy couldn't connect — please sign out and sign in again."
+            msg = "Dishy couldn't connect — tap 'Sign Out Instead' to sign back in."
+            _is_auth = True
         elif "authentication" in err_lower or "api_key" in err_lower or "401" in err_lower:
-            msg = "Dishy couldn't authenticate — please sign out and sign in again."
+            msg = "Dishy couldn't authenticate — tap 'Sign Out Instead' to sign back in."
+            _is_auth = True
         else:
             # Show the actual error so we can diagnose tool-related failures
             short = err.strip().splitlines()[-1] if err.strip() else err
             msg = f"Error: {short[:200]}"
         self._add_bubble(msg, is_user=False)
         self._send_btn.setEnabled(True)
+        if _is_auth:
+            try:
+                from auth.session_manager import load_session
+                stored = load_session() or {}
+                email = stored.get("user", {}).get("email", "")
+            except Exception:
+                email = ""
+            self.session_expired.emit(email)
 
     # ──────────────────────────────────────────── positioning
 

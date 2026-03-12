@@ -316,6 +316,49 @@ def _rounded_top_pixmap(source_path: str, w: int, h: int, radius: int = 11) -> Q
     return result
 
 
+def _resolve_photo_path(recipe: dict, data: dict) -> tuple[str, bool]:
+    """Return (path_or_url, is_http) for the best available image source.
+
+    Priority:
+      1. image_url column — if it's an HTTP URL (e.g. Supabase Storage CDN)
+      2. data_json.photo_path — if it's a local file that exists
+      3. Empty string (caller shows placeholder icon)
+    """
+    import os as _os
+    image_url = (recipe.get("image_url") or "").strip()
+    if image_url.startswith(("http://", "https://")):
+        return image_url, True
+    photo_path = (data.get("photo_path") or "").strip()
+    if photo_path and _os.path.exists(photo_path):
+        return photo_path, False
+    return "", False
+
+
+def _cached_image_path(url: str) -> str | None:
+    """Return a local cache path for *url*, downloading if needed (blocking).
+
+    Returns None on failure.  Called from a run_async worker — never on the
+    main thread.
+    """
+    import hashlib, os, tempfile
+    cache_dir = os.path.join(tempfile.gettempdir(), "dishboard_img_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(
+        cache_dir, hashlib.md5(url.encode()).hexdigest() + ".jpg"
+    )
+    if os.path.exists(cache_file):
+        return cache_file
+    try:
+        import requests
+        r = requests.get(url, timeout=8)
+        r.raise_for_status()
+        with open(cache_file, "wb") as fh:
+            fh.write(r.content)
+        return cache_file
+    except Exception:
+        return None
+
+
 # ── Recipe card (grid view) ───────────────────────────────────────────────────
 
 class RecipeCard(QWidget):
@@ -329,7 +372,6 @@ class RecipeCard(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(248)
 
-        import os as _os
         data = {}
         try:
             data = json.loads(recipe.get("data_json") or "{}")
@@ -339,7 +381,6 @@ class RecipeCard(QWidget):
         icon_name   = data.get("icon",        "fa5s.utensils")
         colour      = data.get("colour",      "#ff6b35")
         is_fav      = bool(recipe.get("is_favourite", 0))
-        photo_path  = data.get("photo_path",  "")
         description = data.get("description", "").strip()
         tags        = data.get("tags",        [])
         cook_time   = int(
@@ -369,17 +410,27 @@ class RecipeCard(QWidget):
         banner = QLabel()
         banner.setFixedHeight(BANNER_H)
         banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        has_photo = bool(photo_path and _os.path.exists(photo_path))
-        if has_photo:
+
+        banner_bg = theme_manager.c("#0d0d0d", "#f0f0f0")
+        _placeholder_style = (
+            f"background-color: {banner_bg};"
+            " border-top-left-radius: 11px; border-top-right-radius: 11px;"
+        )
+
+        img_source, is_http = _resolve_photo_path(recipe, data)
+        if img_source and not is_http:
+            # Local file — load synchronously (fast, already on disk)
             banner.setStyleSheet("background: transparent;")
-            px = _rounded_top_pixmap(photo_path, 600, BANNER_H, radius=11)
+            px = _rounded_top_pixmap(img_source, 600, BANNER_H, radius=11)
             banner.setPixmap(px)
+        elif img_source and is_http:
+            # Remote URL — show placeholder first, then load asynchronously
+            banner.setStyleSheet(_placeholder_style)
+            banner.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(48, 48)))
+            self._banner_lbl = banner
+            self._load_banner_async(img_source, 600, BANNER_H)
         else:
-            banner_bg = theme_manager.c("#0d0d0d", "#f0f0f0")
-            banner.setStyleSheet(
-                f"background-color: {banner_bg};"
-                " border-top-left-radius: 11px; border-top-right-radius: 11px;"
-            )
+            banner.setStyleSheet(_placeholder_style)
             banner.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(48, 48)))
         outer.addWidget(banner)
 
@@ -528,6 +579,27 @@ class RecipeCard(QWidget):
 
         self.mousePressEvent = lambda e: on_select()
 
+    def _load_banner_async(self, url: str, w: int, h: int) -> None:
+        """Download *url* in a background thread and update the banner pixmap."""
+        from utils.workers import run_async
+
+        def _work():
+            return _cached_image_path(url)
+
+        def _done(cached: str | None):
+            if not cached:
+                return
+            try:
+                if not self._banner_lbl or not self._banner_lbl.isVisible():
+                    return
+                px = _rounded_top_pixmap(cached, w, h, radius=11)
+                self._banner_lbl.setStyleSheet("background: transparent;")
+                self._banner_lbl.setPixmap(px)
+            except Exception:
+                pass
+
+        run_async(_work, on_result=_done, on_error=lambda _: None)
+
 
 # ── Saved-recipe row (legacy — kept for search result detail) ─────────────────
 
@@ -548,7 +620,6 @@ class SavedRecipeRow(QWidget):
         icon_name  = data.get("icon", "fa5s.utensils")
         colour     = data.get("colour", "#ff6b35")
         is_fav     = bool(recipe.get("is_favourite", 0))
-        photo_path = data.get("photo_path", "")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 0, 14, 0)
@@ -560,9 +631,9 @@ class SavedRecipeRow(QWidget):
             f"background-color: {theme_manager.c('#141414', '#f0f0f0')};"
             " border-radius: 8px; background: transparent;"
         )
-        import os as _os
-        if photo_path and _os.path.exists(photo_path):
-            px = QPixmap(photo_path).scaled(
+        img_source, is_http = _resolve_photo_path(recipe, data)
+        if img_source and not is_http:
+            px = QPixmap(img_source).scaled(
                 48, 48,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
@@ -570,6 +641,11 @@ class SavedRecipeRow(QWidget):
             if px.width() > 48 or px.height() > 48:
                 px = px.copy((px.width() - 48) // 2, (px.height() - 48) // 2, 48, 48)
             ic.setPixmap(px)
+        elif img_source and is_http:
+            ic.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(22, 22)))
+            ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._ic_lbl = ic
+            self._load_thumb_async(img_source)
         else:
             ic.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(22, 22)))
             ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -617,6 +693,37 @@ class SavedRecipeRow(QWidget):
         layout.addWidget(del_btn)
 
         self.mousePressEvent = lambda e: on_select()
+
+    def _load_thumb_async(self, url: str) -> None:
+        """Download *url* and update the 48×48 thumbnail icon asynchronously."""
+        from utils.workers import run_async
+
+        def _work():
+            return _cached_image_path(url)
+
+        def _done(cached: str | None):
+            if not cached:
+                return
+            try:
+                if not self._ic_lbl or not self._ic_lbl.isVisible():
+                    return
+                px = QPixmap(cached).scaled(
+                    48, 48,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                if px.width() > 48 or px.height() > 48:
+                    px = px.copy(
+                        (px.width() - 48) // 2,
+                        (px.height() - 48) // 2,
+                        48, 48,
+                    )
+                self._ic_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._ic_lbl.setPixmap(px)
+            except Exception:
+                pass
+
+        run_async(_work, on_result=_done, on_error=lambda _: None)
 
 
 # ── Search result card ────────────────────────────────────────────────────────

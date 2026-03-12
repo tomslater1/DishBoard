@@ -135,11 +135,23 @@ class CloudSyncService:
             data = self._row_to_cloud(dict(row), table)
             if data is None:
                 continue
+            # Strip client-side updated_at so the server timestamps the insert
+            # using its own clock — eliminates clock-skew conflicts.
+            data.pop("updated_at", None)
             try:
                 res = client.table(table).insert(data).execute()
                 if res.data:
                     cloud_id = res.data[0]["id"]
                     db.set_cloud_id(table, row["id"], cloud_id)
+                    # Write the server-assigned timestamp back to local so both
+                    # sides use the same reference for future conflict resolution.
+                    server_ts = res.data[0].get("updated_at")
+                    if server_ts:
+                        db.conn.execute(
+                            f"UPDATE {table} SET updated_at=? WHERE id=?",
+                            (server_ts, row["id"]),
+                        )
+                        db.conn.commit()
                     result.pushed += 1
             except Exception as e:
                 result.errors.append(f"{table} insert: {e}")
@@ -150,7 +162,17 @@ class CloudSyncService:
             if data is None:
                 continue
             try:
-                client.table(table).update(data).eq("id", row["cloud_id"]).execute()
+                res = client.table(table).update(data).eq("id", row["cloud_id"]).execute()
+                # Sync the server-returned timestamp back so both devices share
+                # the same reference point on the next conflict comparison.
+                if res.data:
+                    server_ts = res.data[0].get("updated_at")
+                    if server_ts:
+                        db.conn.execute(
+                            f"UPDATE {table} SET updated_at=? WHERE id=?",
+                            (server_ts, row["id"]),
+                        )
+                        db.conn.commit()
                 result.pushed += 1
             except Exception as e:
                 result.errors.append(f"{table} update: {e}")
@@ -173,6 +195,13 @@ class CloudSyncService:
             data.pop("recipe_id", None)   # cloud uses recipe_cloud_id instead
         if table == "dishy_chat_history":
             pass  # all columns the same
+
+        # Don't push local filesystem paths — they're meaningless on other devices.
+        # Supabase Storage URLs and HTTP URLs are fine to push.
+        if table == "recipes":
+            image_url = data.get("image_url") or ""
+            if image_url and not image_url.startswith(("http://", "https://")):
+                data["image_url"] = ""
 
         return data
 
@@ -218,6 +247,7 @@ class CloudSyncService:
             res = (
                 client.table(table)
                 .select("*")
+                .eq("user_id", self.user_id)
                 .gt("updated_at", last_pull)
                 .execute()
             )

@@ -8,7 +8,7 @@ Supports expanded (icon + text) and collapsed (icon only) sidebar modes.
 from __future__ import annotations
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel
 
 from utils.theme import manager as theme_manager
@@ -25,6 +25,8 @@ _STATES = {
 
 
 class SyncIndicator(QWidget):
+    retry_requested = Signal()   # emitted when user clicks in error state
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._expanded = True
@@ -65,3 +67,18 @@ class SyncIndicator(QWidget):
     def set_expanded(self, expanded: bool) -> None:
         self._expanded = expanded
         self._text_lbl.setVisible(expanded)
+
+    def set_error(self, detail: str = "") -> None:
+        """Show the error state with an optional tooltip describing the failure."""
+        self.set_state("error")
+        tip = "Sync failed — click to retry"
+        if detail:
+            tip = f"Sync failed: {detail[:120]}\nClick to retry"
+        self.setToolTip(tip)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:
+        if self._current_state == "error":
+            self.setToolTip("")
+            self.retry_requested.emit()
+        super().mousePressEvent(event)

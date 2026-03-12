@@ -1,9 +1,46 @@
-APP_VERSION = "v0.46"
+APP_VERSION = "v0.50"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.50",
+        "title": "Help page & Dishy awareness update",
+        "changes": [
+            "How to Use page updated to reflect all current features: recipe online search, shopping list categories and stats, editable nutrition goals, Dishy chat history, and Settings improvements",
+            "Dishy now knows about the My Kitchen (coming soon) section, the updated recipe search, editable macro goals, and persistent chat history",
+            "Dishy references your actual macro goals from the live context rather than assuming default values",
+        ],
+    },
+    {
+        "version": "v0.49",
+        "title": "Reliability & under-the-hood quality",
+        "changes": [
+            "Sync conflict resolution: pushes now strip client-side updated_at so the server timestamps inserts with its own clock; server timestamp is written back locally after each push to eliminate clock-skew conflicts",
+            "Sync retry: sync indicator turns red on failure with a tooltip showing the error — click it to immediately retry",
+            "Recipe image reliability: local file paths are never pushed to cloud (meaningless on other devices); recipe cards now display Supabase CDN images from any device, downloading asynchronously with a local disk cache",
+            "DB schema migrations: replaced ad-hoc ALTER TABLE loop with a proper PRAGMA user_version migration runner — future schema changes are tracked and applied exactly once",
+        ],
+    },
+    {
+        "version": "v0.48",
+        "title": "Password reset, email confirmation & session handling",
+        "changes": [
+            "Added 'Forgot password?' flow — sends a reset link to your email from the sign-in screen",
+            "Email confirmation page now shows a proper success screen after sign-up with a resend button",
+            "Session expiry mid-session now shows an inline sign-in dialog instead of requiring a full sign-out",
+        ],
+    },
+    {
+        "version": "v0.47",
+        "title": "Dishy fixed",
+        "changes": [
+            "Fixed Dishy AI — was broken due to two Supabase Edge Function bugs: gateway JWT verification rejected ES256 tokens (new Supabase JWT format), and getUser() was not passed the JWT explicitly",
+            "Edge Function now uses verify_jwt=false + getUser(jwt) for correct ES256 token validation",
+            "Hardcoded Anthropic endpoint in proxy — eliminates path-stripping bug that caused 404 errors",
+        ],
+    },
     {
         "version": "v0.46",
         "title": "Cloud-first, login required",

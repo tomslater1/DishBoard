@@ -98,25 +98,50 @@ class Database:
             );
         """)
         self.conn.commit()
-        # Migrations — add columns that may not exist in older DBs
-        for migration in [
-            "ALTER TABLE recipes        ADD COLUMN is_favourite  INTEGER DEFAULT 0",
-            "ALTER TABLE recipes        ADD COLUMN cloud_id      TEXT",
-            "ALTER TABLE recipes        ADD COLUMN updated_at    DATETIME DEFAULT NULL",
-            "ALTER TABLE meal_plans     ADD COLUMN cloud_id      TEXT",
-            "ALTER TABLE meal_plans     ADD COLUMN updated_at    DATETIME DEFAULT NULL",
-            "ALTER TABLE shopping_items ADD COLUMN cloud_id      TEXT",
-            "ALTER TABLE shopping_items ADD COLUMN updated_at    DATETIME DEFAULT NULL",
-            "ALTER TABLE nutrition_logs ADD COLUMN cloud_id      TEXT",
-            "ALTER TABLE nutrition_logs ADD COLUMN updated_at    DATETIME DEFAULT NULL",
-            "ALTER TABLE dishy_chat_history ADD COLUMN cloud_id  TEXT",
-            "ALTER TABLE dishy_chat_history ADD COLUMN updated_at DATETIME DEFAULT NULL",
-        ]:
-            try:
-                self.conn.execute(migration)
-                self.conn.commit()
-            except Exception:
-                pass  # column already exists
+        self._run_migrations()
+
+    # ── Schema migrations ─────────────────────────────────────────────────────
+    # Each tuple: (target_schema_version, sql_statement)
+    # Add new migrations at the END with an incremented version number.
+    # Never modify or remove existing entries — they are idempotent on re-run.
+    _MIGRATIONS: list[tuple[int, str]] = [
+        # v1: cloud sync columns for all tables
+        (1, "ALTER TABLE recipes             ADD COLUMN is_favourite  INTEGER DEFAULT 0"),
+        (1, "ALTER TABLE recipes             ADD COLUMN cloud_id      TEXT"),
+        (1, "ALTER TABLE recipes             ADD COLUMN updated_at    DATETIME DEFAULT NULL"),
+        (1, "ALTER TABLE meal_plans          ADD COLUMN cloud_id      TEXT"),
+        (1, "ALTER TABLE meal_plans          ADD COLUMN updated_at    DATETIME DEFAULT NULL"),
+        (1, "ALTER TABLE shopping_items      ADD COLUMN cloud_id      TEXT"),
+        (1, "ALTER TABLE shopping_items      ADD COLUMN updated_at    DATETIME DEFAULT NULL"),
+        (1, "ALTER TABLE nutrition_logs      ADD COLUMN cloud_id      TEXT"),
+        (1, "ALTER TABLE nutrition_logs      ADD COLUMN updated_at    DATETIME DEFAULT NULL"),
+        (1, "ALTER TABLE dishy_chat_history  ADD COLUMN cloud_id      TEXT"),
+        (1, "ALTER TABLE dishy_chat_history  ADD COLUMN updated_at    DATETIME DEFAULT NULL"),
+    ]
+    _LATEST_SCHEMA_VERSION = 1
+
+    def _run_migrations(self) -> None:
+        """Apply pending schema migrations, tracked via PRAGMA user_version.
+
+        Each migration SQL is idempotent: errors (duplicate column, etc.) are
+        silently swallowed so re-applying an already-applied migration is safe.
+        PRAGMA user_version is updated to _LATEST_SCHEMA_VERSION once all
+        pending migrations have been attempted.
+        """
+        current = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if current >= self._LATEST_SCHEMA_VERSION:
+            return
+
+        for (target_ver, sql) in self._MIGRATIONS:
+            if target_ver > current:
+                try:
+                    self.conn.execute(sql)
+                except Exception:
+                    pass  # column/index already exists — safe to ignore
+
+        self.conn.commit()
+        self.conn.execute(f"PRAGMA user_version = {self._LATEST_SCHEMA_VERSION}")
+        self.conn.commit()
 
     # -- convenience helpers -----------------------------------------------
 

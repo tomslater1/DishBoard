@@ -4,6 +4,11 @@ LoginView — pre-app authentication screen.
 Shown when no valid Supabase session is found at startup.
 Offers email/password sign-in and account creation.
 Google and Apple OAuth are placeholders (coming soon).
+
+The login card uses an inner QStackedWidget with 3 pages:
+  Page 0 — Main login form (sign in / create account)
+  Page 1 — Forgot password
+  Page 2 — Email confirmation sent (after sign-up)
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ from PySide6.QtCore import Qt, QSize, QTimer, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QLineEdit, QFrame,
+    QPushButton, QLineEdit, QFrame, QStackedWidget,
 )
 
 from utils.theme import manager as theme_manager
@@ -100,8 +105,32 @@ class LoginView(QWidget):
 
         card_layout.addSpacing(28)
 
-        # ── Mode header ────────────────────────────────────────────────────────
-        # A coloured pill that clearly shows whether user is signing in or signing up
+        # ── Inner page stack ───────────────────────────────────────────────────
+        self._page_stack = QStackedWidget()
+        self._page_stack.setStyleSheet("background: transparent;")
+        self._page_stack.addWidget(self._build_main_page())    # 0
+        self._page_stack.addWidget(self._build_forgot_pw_page())  # 1
+        self._page_stack.addWidget(self._build_confirmation_page())  # 2
+        card_layout.addWidget(self._page_stack)
+
+        centre_row.addWidget(card)
+        centre_row.addStretch()
+        root.addLayout(centre_row)
+        root.addStretch(3)
+
+        self._is_signup_mode = False
+        self._update_tab_style()
+
+    # ── Page 0: main login form ────────────────────────────────────────────────
+
+    def _build_main_page(self) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Mode tabs
         self._mode_pill = QWidget()
         self._mode_pill.setFixedHeight(36)
         pill_layout = QHBoxLayout(self._mode_pill)
@@ -128,11 +157,11 @@ class LoginView(QWidget):
 
         pill_layout.addWidget(self._signin_tab)
         pill_layout.addWidget(self._signup_tab)
-        card_layout.addWidget(self._mode_pill)
+        layout.addWidget(self._mode_pill)
 
-        card_layout.addSpacing(16)
+        layout.addSpacing(16)
 
-        # ── Email / Password fields ────────────────────────────────────────────
+        # Fields
         field_style = (
             f"QLineEdit {{"
             f"  background: {theme_manager.c('#1a1a1a', '#f7f7f7')};"
@@ -150,9 +179,9 @@ class LoginView(QWidget):
         self._email_input.setFixedHeight(44)
         self._email_input.setStyleSheet(field_style)
         self._email_input.returnPressed.connect(self._on_sign_in)
-        card_layout.addWidget(self._email_input)
+        layout.addWidget(self._email_input)
 
-        card_layout.addSpacing(8)
+        layout.addSpacing(8)
 
         self._pw_input = QLineEdit()
         self._pw_input.setPlaceholderText("Password")
@@ -160,21 +189,38 @@ class LoginView(QWidget):
         self._pw_input.setFixedHeight(44)
         self._pw_input.setStyleSheet(field_style)
         self._pw_input.returnPressed.connect(self._on_sign_in)
-        card_layout.addWidget(self._pw_input)
+        layout.addWidget(self._pw_input)
 
-        card_layout.addSpacing(4)
+        layout.addSpacing(4)
 
-        # Password hint shown only in signup mode
+        # Password hint (signup only) + forgot password link (signin only)
+        hints_row = QHBoxLayout()
+        hints_row.setContentsMargins(0, 0, 0, 0)
+
         self._pw_hint = QLabel("Minimum 6 characters")
         self._pw_hint.setStyleSheet(
             f"color: {theme_manager.c('#555', '#999')}; font-size: 11px; background: transparent;"
         )
         self._pw_hint.setVisible(False)
-        card_layout.addWidget(self._pw_hint)
+        hints_row.addWidget(self._pw_hint)
 
-        card_layout.addSpacing(8)
+        hints_row.addStretch()
 
-        # ── Error label ────────────────────────────────────────────────────────
+        self._forgot_pw_link = QPushButton("Forgot password?")
+        self._forgot_pw_link.setStyleSheet(
+            "QPushButton { background: transparent; border: none;"
+            f" color: {theme_manager.c('#555', '#999')}; font-size: 11px; }}"
+            "QPushButton:hover { color: #ff6b35; }"
+        )
+        self._forgot_pw_link.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._forgot_pw_link.clicked.connect(self._show_forgot_pw)
+        hints_row.addWidget(self._forgot_pw_link)
+
+        layout.addLayout(hints_row)
+
+        layout.addSpacing(8)
+
+        # Error label
         self._error_lbl = QLabel("")
         self._error_lbl.setWordWrap(True)
         self._error_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -182,11 +228,11 @@ class LoginView(QWidget):
             "color: #dc3545; font-size: 12px; background: transparent;"
         )
         self._error_lbl.setVisible(False)
-        card_layout.addWidget(self._error_lbl)
+        layout.addWidget(self._error_lbl)
 
-        card_layout.addSpacing(4)
+        layout.addSpacing(4)
 
-        # ── Primary action button ──────────────────────────────────────────────
+        # Primary action button
         self._signin_btn = QPushButton("Sign In")
         self._signin_btn.setFixedHeight(46)
         self._signin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -199,11 +245,11 @@ class LoginView(QWidget):
             "QPushButton:disabled { background: #553322; color: #888; }"
         )
         self._signin_btn.clicked.connect(self._on_sign_in)
-        card_layout.addWidget(self._signin_btn)
+        layout.addWidget(self._signin_btn)
 
-        card_layout.addSpacing(20)
+        layout.addSpacing(20)
 
-        # ── Divider ────────────────────────────────────────────────────────────
+        # Divider
         div_row = QHBoxLayout()
         div_row.setSpacing(10)
         for _ in range(2):
@@ -220,11 +266,11 @@ class LoginView(QWidget):
             f"color: {theme_manager.c('#555', '#aaa')}; font-size: 12px; background: transparent;"
         )
         div_row.insertWidget(1, or_lbl)
-        card_layout.addLayout(div_row)
+        layout.addLayout(div_row)
 
-        card_layout.addSpacing(16)
+        layout.addSpacing(16)
 
-        # ── OAuth buttons — both disabled pending setup ─────────────────────────
+        # OAuth buttons — both disabled pending setup
         oauth_disabled_style = (
             "QPushButton {"
             f"  background: {theme_manager.c('#141414', '#f3f3f3')};"
@@ -244,9 +290,9 @@ class LoginView(QWidget):
             "Google sign-in is coming soon — use email and password for now"
         )
         self._google_btn.setStyleSheet(oauth_disabled_style)
-        card_layout.addWidget(self._google_btn)
+        layout.addWidget(self._google_btn)
 
-        card_layout.addSpacing(8)
+        layout.addSpacing(8)
 
         self._apple_btn = QPushButton("  Sign in with Apple  (coming soon)")
         self._apple_btn.setIcon(qta.icon("fa5b.apple", color=theme_manager.c("#555", "#aaa")))
@@ -255,17 +301,169 @@ class LoginView(QWidget):
         self._apple_btn.setEnabled(False)
         self._apple_btn.setToolTip("Coming soon — requires Apple Developer account setup")
         self._apple_btn.setStyleSheet(oauth_disabled_style)
-        card_layout.addWidget(self._apple_btn)
+        layout.addWidget(self._apple_btn)
 
-        card_layout.addSpacing(24)
+        layout.addSpacing(24)
 
-        centre_row.addWidget(card)
-        centre_row.addStretch()
-        root.addLayout(centre_row)
-        root.addStretch(3)
+        return page
 
-        self._is_signup_mode = False
-        self._update_tab_style()
+    # ── Page 1: forgot password ────────────────────────────────────────────────
+
+    def _build_forgot_pw_page(self) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        title = QLabel("Reset your password")
+        title.setStyleSheet(
+            f"font-size: 16px; font-weight: 700;"
+            f" color: {theme_manager.c('#f0f0f0', '#1a1a1a')}; background: transparent;"
+        )
+        layout.addWidget(title)
+
+        layout.addSpacing(8)
+
+        desc = QLabel("Enter your email address and we'll send you a link to reset your password.")
+        desc.setWordWrap(True)
+        desc.setStyleSheet(
+            f"font-size: 12px; color: {theme_manager.c('#888', '#666')}; background: transparent;"
+        )
+        layout.addWidget(desc)
+
+        layout.addSpacing(20)
+
+        field_style = (
+            f"QLineEdit {{"
+            f"  background: {theme_manager.c('#1a1a1a', '#f7f7f7')};"
+            f"  color: {theme_manager.c('#f0f0f0', '#1a1a1a')};"
+            f"  border: 1px solid {theme_manager.c('#2a2a2a', '#ddd')};"
+            f"  border-radius: 8px; padding: 0 12px; font-size: 13px;"
+            f"}}"
+            f"QLineEdit:focus {{ border-color: #ff6b35; }}"
+        )
+
+        self._reset_email_input = QLineEdit()
+        self._reset_email_input.setPlaceholderText("Email address")
+        self._reset_email_input.setFixedHeight(44)
+        self._reset_email_input.setStyleSheet(field_style)
+        self._reset_email_input.returnPressed.connect(self._on_send_reset)
+        layout.addWidget(self._reset_email_input)
+
+        layout.addSpacing(8)
+
+        self._reset_feedback_lbl = QLabel("")
+        self._reset_feedback_lbl.setWordWrap(True)
+        self._reset_feedback_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._reset_feedback_lbl.setStyleSheet("font-size: 12px; background: transparent;")
+        self._reset_feedback_lbl.setVisible(False)
+        layout.addWidget(self._reset_feedback_lbl)
+
+        layout.addSpacing(4)
+
+        self._send_reset_btn = QPushButton("Send Reset Link")
+        self._send_reset_btn.setFixedHeight(46)
+        self._send_reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._send_reset_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: #ff6b35; color: #ffffff;"
+            "  border-radius: 10px; font-size: 14px; font-weight: 700; border: none;"
+            "}"
+            "QPushButton:hover { background: #e05a28; }"
+            "QPushButton:disabled { background: #553322; color: #888; }"
+        )
+        self._send_reset_btn.clicked.connect(self._on_send_reset)
+        layout.addWidget(self._send_reset_btn)
+
+        layout.addSpacing(16)
+
+        back_btn = QPushButton("← Back to Sign In")
+        back_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none;"
+            f" color: {theme_manager.c('#888', '#666')}; font-size: 12px; }}"
+            "QPushButton:hover { color: #ff6b35; }"
+        )
+        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        back_btn.clicked.connect(lambda: self._page_stack.setCurrentIndex(0))
+        layout.addWidget(back_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        layout.addSpacing(24)
+        layout.addStretch()
+
+        return page
+
+    # ── Page 2: email confirmation sent ───────────────────────────────────────
+
+    def _build_confirmation_page(self) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        layout.addSpacing(8)
+
+        check_lbl = QLabel("Account created ✓")
+        check_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        check_lbl.setStyleSheet(
+            "font-size: 18px; font-weight: 700; color: #34d399; background: transparent;"
+        )
+        layout.addWidget(check_lbl)
+
+        layout.addSpacing(12)
+
+        self._confirm_desc_lbl = QLabel(
+            "We've sent a confirmation link to your email.\n"
+            "Click it to activate your account, then sign in."
+        )
+        self._confirm_desc_lbl.setWordWrap(True)
+        self._confirm_desc_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._confirm_desc_lbl.setStyleSheet(
+            f"font-size: 12px; color: {theme_manager.c('#aaa', '#666')}; background: transparent;"
+        )
+        layout.addWidget(self._confirm_desc_lbl)
+
+        layout.addSpacing(24)
+
+        self._resend_feedback_lbl = QLabel("")
+        self._resend_feedback_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._resend_feedback_lbl.setStyleSheet("font-size: 12px; background: transparent;")
+        self._resend_feedback_lbl.setVisible(False)
+        layout.addWidget(self._resend_feedback_lbl)
+
+        self._resend_btn = QPushButton("Resend confirmation email")
+        self._resend_btn.setFixedHeight(44)
+        self._resend_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._resend_btn.setStyleSheet(
+            "QPushButton {"
+            f"  background: {theme_manager.c('#1a1a1a', '#f3f3f3')};"
+            f"  color: {theme_manager.c('#aaa', '#555')};"
+            f"  border: 1px solid {theme_manager.c('#2a2a2a', '#ddd')};"
+            "  border-radius: 10px; font-size: 13px; font-weight: 600;"
+            "}"
+            "QPushButton:hover { border-color: #ff6b35; color: #ff6b35; }"
+            "QPushButton:disabled { opacity: 0.5; }"
+        )
+        self._resend_btn.clicked.connect(self._on_resend_confirmation)
+        layout.addWidget(self._resend_btn)
+
+        layout.addSpacing(16)
+
+        back_btn2 = QPushButton("← Back to Sign In")
+        back_btn2.setStyleSheet(
+            "QPushButton { background: transparent; border: none;"
+            f" color: {theme_manager.c('#888', '#666')}; font-size: 12px; }}"
+            "QPushButton:hover { color: #ff6b35; }"
+        )
+        back_btn2.setCursor(Qt.CursorShape.PointingHandCursor)
+        back_btn2.clicked.connect(self._go_back_to_signin)
+        layout.addWidget(back_btn2, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        layout.addSpacing(24)
+        layout.addStretch()
+
+        return page
 
     # ── Mode switching ──────────────────────────────────────────────────────────
 
@@ -275,6 +473,7 @@ class LoginView(QWidget):
         self._is_signup_mode = signup
         self._signin_btn.setText("Create Account" if signup else "Sign In")
         self._pw_hint.setVisible(signup)
+        self._forgot_pw_link.setVisible(not signup)
         self._clear_error()
         self._update_tab_style()
 
@@ -292,6 +491,117 @@ class LoginView(QWidget):
         )
         self._signup_tab.setStyleSheet(active if self._is_signup_mode else inactive)
         self._signin_tab.setStyleSheet(inactive if self._is_signup_mode else active)
+        # forgot link only visible on sign-in tab
+        self._forgot_pw_link.setVisible(not self._is_signup_mode)
+
+    # ── Forgot password ────────────────────────────────────────────────────────
+
+    def _show_forgot_pw(self):
+        self._reset_email_input.setText(self._email_input.text().strip())
+        self._reset_feedback_lbl.setVisible(False)
+        self._send_reset_btn.setEnabled(True)
+        self._send_reset_btn.setText("Send Reset Link")
+        self._page_stack.setCurrentIndex(1)
+
+    def _on_send_reset(self):
+        email = self._reset_email_input.text().strip()
+        if not email or "@" not in email:
+            self._reset_feedback_lbl.setText("Please enter a valid email address.")
+            self._reset_feedback_lbl.setStyleSheet("color: #dc3545; font-size: 12px; background: transparent;")
+            self._reset_feedback_lbl.setVisible(True)
+            return
+
+        self._send_reset_btn.setEnabled(False)
+        self._send_reset_btn.setText("Sending…")
+        self._reset_feedback_lbl.setVisible(False)
+
+        from utils.workers import run_async
+        from auth.supabase_client import get_client
+
+        def _work():
+            client = get_client()
+            if client is None:
+                raise RuntimeError("no_connection")
+            client.auth.reset_password_for_email(email)
+
+        def _done(_):
+            self._send_reset_btn.setEnabled(True)
+            self._send_reset_btn.setText("Send Reset Link")
+            self._reset_feedback_lbl.setText(
+                "Check your inbox — we've sent a reset link."
+            )
+            self._reset_feedback_lbl.setStyleSheet("color: #34d399; font-size: 12px; background: transparent;")
+            self._reset_feedback_lbl.setVisible(True)
+
+        def _err(err: str):
+            self._send_reset_btn.setEnabled(True)
+            self._send_reset_btn.setText("Send Reset Link")
+            msg = err.lower()
+            if "no_connection" in msg or "supabase" in msg:
+                text = "No internet connection. Check your network and try again."
+            else:
+                text = "Could not send reset email. Please try again."
+            self._reset_feedback_lbl.setText(text)
+            self._reset_feedback_lbl.setStyleSheet("color: #dc3545; font-size: 12px; background: transparent;")
+            self._reset_feedback_lbl.setVisible(True)
+
+        run_async(_work, on_result=_done, on_error=_err)
+
+    # ── Email confirmation ─────────────────────────────────────────────────────
+
+    def _show_email_confirmation(self, email: str):
+        """Switch to page 2 after successful sign-up that requires email confirmation."""
+        self._pending_confirm_email = email
+        desc = (
+            f"We've sent a confirmation link to {email}.\n"
+            "Click it to activate your account, then sign in."
+            if email else
+            "We've sent a confirmation link to your email.\n"
+            "Click it to activate your account, then sign in."
+        )
+        self._confirm_desc_lbl.setText(desc)
+        self._resend_feedback_lbl.setVisible(False)
+        self._resend_btn.setEnabled(True)
+        self._resend_btn.setText("Resend confirmation email")
+        self._page_stack.setCurrentIndex(2)
+
+    def _on_resend_confirmation(self):
+        email = getattr(self, "_pending_confirm_email", "") or self._email_input.text().strip()
+        if not email:
+            return
+
+        self._resend_btn.setEnabled(False)
+        self._resend_btn.setText("Sending…")
+        self._resend_feedback_lbl.setVisible(False)
+
+        from utils.workers import run_async
+        from auth.supabase_client import get_client
+
+        def _work():
+            client = get_client()
+            if client is None:
+                raise RuntimeError("no_connection")
+            client.auth.resend({"type": "signup", "email": email})
+
+        def _done(_):
+            self._resend_btn.setEnabled(True)
+            self._resend_btn.setText("Resend confirmation email")
+            self._resend_feedback_lbl.setText("Sent! Check your inbox.")
+            self._resend_feedback_lbl.setStyleSheet("color: #34d399; font-size: 12px; background: transparent;")
+            self._resend_feedback_lbl.setVisible(True)
+
+        def _err(_err_str: str):
+            self._resend_btn.setEnabled(True)
+            self._resend_btn.setText("Resend confirmation email")
+            self._resend_feedback_lbl.setText("Could not resend. Please try again.")
+            self._resend_feedback_lbl.setStyleSheet("color: #dc3545; font-size: 12px; background: transparent;")
+            self._resend_feedback_lbl.setVisible(True)
+
+        run_async(_work, on_result=_done, on_error=_err)
+
+    def _go_back_to_signin(self):
+        self._set_mode(False)
+        self._page_stack.setCurrentIndex(0)
 
     # ── Email / Password auth ─────────────────────────────────────────────────
 
@@ -337,10 +647,8 @@ class LoginView(QWidget):
                 save_session(session)
                 self.login_successful.emit(session["user"])
             elif response and response.user and not response.session:
-                # Sign-up with email confirmation required
-                self._show_error(
-                    "Account created! Check your email for a confirmation link, then sign in."
-                )
+                # Sign-up succeeded but email confirmation is required
+                self._show_email_confirmation(email)
             else:
                 if is_signup:
                     self._show_error("Could not create account. Please try again.")
@@ -356,7 +664,7 @@ class LoginView(QWidget):
                 )
             elif "rate limit" in msg or "too many" in msg:
                 self._show_error(
-                    "Too many attempts. Please wait a few minutes and try again."
+                    "Too many sign-in attempts. Please wait 30 seconds and try again."
                 )
             elif "invalid" in msg and ("login" in msg or "credentials" in msg or "password" in msg):
                 self._show_error(
@@ -380,7 +688,6 @@ class LoginView(QWidget):
             elif "invalid_email" in msg or ("email" in msg and "invalid" in msg):
                 self._show_error("Please enter a valid email address.")
             else:
-                # Show the raw error for unrecognised failures so the user can report it
                 self._show_error(f"Sign-in error: {err.strip().splitlines()[-1][:140]}")
 
         run_async(_work, on_result=_done, on_error=_err)

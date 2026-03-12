@@ -29,19 +29,13 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-  });
-  const { data: { user }, error } = await supabase.auth.getUser();
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data: { user }, error } = await supabase.auth.getUser(jwt);
   if (error || !user) {
     return new Response(JSON.stringify({ error: "Invalid or expired session" }), {
       status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
   }
-
-  // Build upstream path — strip the edge function prefix
-  const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/functions\/v1\/claude-proxy/, "") || "/v1/messages";
 
   const body = await req.text();
 
@@ -54,7 +48,7 @@ Deno.serve(async (req: Request) => {
   const betaHeader = req.headers.get("anthropic-beta");
   if (betaHeader) upstreamHeaders["anthropic-beta"] = betaHeader;
 
-  const upstream = await fetch(`https://api.anthropic.com${path}`, {
+  const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: upstreamHeaders,
     body,

@@ -14,10 +14,11 @@ _SECTIONS = [
         "icon": "fa5s.home",
         "colour": "#ff6b35",
         "title": "Home",
-        "summary": "Your home screen. See today's planned meals, a weekly overview, and quick links to every part of the app.",
+        "summary": "Your home screen. See today's planned meals, weekly macro progress, and quick links to every part of the app.",
         "features": [
             "Today's meals pulled live from the Meal Planner",
-            "Quick-action tiles to jump to any section",
+            "Weekly macro rings showing how you're tracking against your goals",
+            "Recent recipes and quick-action tiles to jump to any section",
             "Dishy's daily cooking tip",
         ],
         "connects": [
@@ -30,9 +31,10 @@ _SECTIONS = [
         "icon": "fa5s.book-open",
         "colour": "#7c6af7",
         "title": "Recipes",
-        "summary": "Your recipe library. Save recipes by URL or create them from scratch — Dishy fills in the nutrition automatically.",
+        "summary": "Your recipe library. Save recipes by URL, search online, or create from scratch — Dishy fills in the nutrition automatically.",
         "features": [
             "Paste any URL to import a recipe instantly",
+            "Search online and save directly from 60 instant results",
             "Create recipes manually — Dishy looks up macros per ingredient as you type",
             "Filter by tag: Breakfast, Lunch, Dinner, High-Protein, Vegetarian, and more",
             "Star favourites — Dishy prefers them when planning your week",
@@ -47,11 +49,11 @@ _SECTIONS = [
         "icon": "fa5s.calendar-alt",
         "colour": "#4caf8a",
         "title": "Meal Planner",
-        "summary": "Plan Breakfast, Lunch, and Dinner for every day of the week. Adding a meal to today automatically logs its nutrition.",
+        "summary": "Plan Breakfast, Lunch, and Dinner for every day of the week. Adding a meal to today automatically updates your nutrition.",
         "features": [
             "Click any slot and pick from your saved recipes",
             "Ask Dishy to fill your whole week in one go",
-            "Nutrition logs itself the moment you plan today's meals",
+            "Nutrition updates live the moment you plan today's meals",
             "Export the week to Apple Calendar",
         ],
         "connects": [
@@ -67,10 +69,10 @@ _SECTIONS = [
         "title": "Nutrition",
         "summary": "A live dashboard that tracks your macros automatically. No manual logging needed — it updates as you plan meals.",
         "features": [
-            "Six macro rings vs daily goals (Calories, Protein, Carbs, Fat, Fibre, Sugar)",
+            "Six macro rings vs your daily goals (set your own targets in Settings)",
             "Weekly calorie bar chart and stat tiles",
             "Quick Add: type any food and Dishy logs the macros instantly",
-            "Ask Dishy how you're doing for specific numbers and advice",
+            "Ask Dishy how you're tracking for numbers and tailored advice",
         ],
         "connects": [
             (2, "fa5s.calendar-alt", "#4caf8a", "Meal Planner"),
@@ -95,12 +97,14 @@ _SECTIONS = [
         "icon": "fa5s.shopping-cart",
         "colour": "#f0a500",
         "title": "Shopping List",
-        "summary": "Build your grocery list manually or generate it from the week's meal plan. Check items off as you shop.",
+        "summary": "Build your grocery list manually or generate it from the week's meal plan. Items are grouped by category so you can shop aisle by aisle.",
         "features": [
             "Generate the full week's ingredients from the Meal Planner in one tap",
+            "Items grouped by category — tap any section to expand or collapse",
+            "Stats strip shows your total, items left to get, and basket progress",
             "Check off items as you shop, then clear them all at once",
             "Export to Apple Notes for easy phone access",
-            "Ask Dishy to add specific items",
+            "Ask Dishy to add specific items or build your list from scratch",
         ],
         "connects": [
             (2, "fa5s.calendar-alt", "#4caf8a", "Meal Planner"),
@@ -117,9 +121,10 @@ _SECTIONS = [
             "Create and save a recipe with full nutrition data",
             "Fill your whole week's meal plan or set individual slots",
             "Build your shopping list or add specific items",
-            "Log meals and track your nutrition automatically",
+            "Track your nutrition and get personalised macro advice",
             "Answer cooking questions, suggest substitutions, scale recipes",
             "Chat from any page using the bubble in the bottom-right corner",
+            "Full chat history saved — pick up any previous conversation where you left off",
         ],
         "connects": [
             (1, "fa5s.book-open",     "#7c6af7", "Recipes"),
@@ -133,13 +138,17 @@ _SECTIONS = [
         "icon": "fa5s.cog",
         "colour": "#888888",
         "title": "Settings",
-        "summary": "Theme, dietary preferences, and data management.",
+        "summary": "Account, theme, nutrition goals, dietary preferences, and data management.",
         "features": [
             "Toggle dark / light mode",
+            "Set your own daily calorie and macro targets in Nutrition Goals",
             "Set dietary preferences — Dishy uses these when planning meals",
+            "Manage your account and view cloud sync status",
             "Export or import a full backup of all your data",
         ],
-        "connects": [],
+        "connects": [
+            (3, "fa5s.heartbeat", "#e05c7a", "Nutrition"),
+        ],
     },
 ]
 

@@ -491,6 +491,8 @@ class ChatHistoryDialog(QDialog):
 # ── Main DishyView ────────────────────────────────────────────────────────────
 
 class DishyView(QWidget):
+    session_expired = Signal(str)   # emits last-known user email
+
     def __init__(self, db=None, parent=None):
         super().__init__(parent)
         self.setObjectName("view-container")
@@ -1048,18 +1050,29 @@ class DishyView(QWidget):
         try:
             self._remove_typing_indicator()
             err_lower = err.lower()
+            _is_auth = False
             if "credit balance" in err_lower or "too low" in err_lower:
                 msg = "Anthropic credits are out. Top up at console.anthropic.com/settings/billing."
             elif "dishy_not_signed_in" in err_lower:
-                msg = "Dishy couldn't connect — please sign out and sign in again."
+                msg = "Dishy couldn't connect — your session may have expired. Signing you back in…"
+                _is_auth = True
             elif "authentication" in err_lower or "api_key" in err_lower or "401" in err_lower:
-                msg = "Dishy couldn't authenticate — please sign out and sign in again."
+                msg = "Dishy couldn't authenticate — your session may have expired. Signing you back in…"
+                _is_auth = True
             else:
                 short = err.strip().splitlines()[-1] if err.strip() else err
                 msg = f"Error: {short[:200]}"
             self._add_bubble(msg, is_user=False)
             self._send_btn.setEnabled(True)
             self._send_btn.setIcon(qta.icon("fa5s.arrow-up", color="white"))
+            if _is_auth:
+                try:
+                    from auth.session_manager import load_session
+                    stored = load_session() or {}
+                    email = stored.get("user", {}).get("email", "")
+                except Exception:
+                    email = ""
+                self.session_expired.emit(email)
         except Exception:
             pass
 

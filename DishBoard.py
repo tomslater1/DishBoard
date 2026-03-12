@@ -121,6 +121,23 @@ def _maybe_show_onboarding() -> None:
         _root_stack.setCurrentIndex(2)
 
 
+def _on_session_expired(email: str) -> None:
+    """Show an inline re-auth dialog when Dishy detects a session expiry."""
+    from widgets.reauth_dialog import ReauthDialog
+    dlg = ReauthDialog(email=email, parent=_main_window)
+    dlg.reauth_successful.connect(_on_reauth_success)
+    dlg.sign_out_requested.connect(lambda: _root_stack.setCurrentIndex(0))
+    dlg.exec()
+
+
+def _on_reauth_success() -> None:
+    """Restart cloud sync after the user re-authenticated via ReauthDialog."""
+    from auth.session_manager import get_current_user
+    user = get_current_user()
+    if user and not user.get("_network_unavailable"):
+        _start_cloud_sync(user)
+
+
 def _on_onboarding_finished() -> None:
     """Called when the user completes or skips onboarding — go to main app."""
     _root_stack.setCurrentIndex(1)
@@ -198,6 +215,7 @@ def main():
     _main_window.sign_in_requested.connect(
         lambda: _root_stack.setCurrentIndex(0)
     )
+    _main_window.session_expired.connect(_on_session_expired)
 
     # Build onboarding wizard
     from views.onboarding import OnboardingWizard

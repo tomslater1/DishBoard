@@ -85,6 +85,7 @@ class NavButton(QPushButton):
 
 class MainWindow(QMainWindow):
     sign_in_requested = Signal()
+    session_expired   = Signal(str)   # emits user email when Dishy session expires
 
     def __init__(self):
         super().__init__()
@@ -448,6 +449,10 @@ class MainWindow(QMainWindow):
         self._dishy_bubble.setup_actions(_actions, self._on_dishy_refresh)
         self._dishy_view.setup_actions(_actions, self._on_dishy_refresh)
 
+        # Propagate session-expiry events upward so DishBoard.py can show ReauthDialog
+        self._dishy_bubble.session_expired.connect(self.session_expired)
+        self._dishy_view.session_expired.connect(self.session_expired)
+
         # Give each view a reference to the bubble's trigger_action so their
         # per-tab "Ask Dishy" buttons can open the panel with a pre-set prompt.
         self._recipes_view.set_ask_dishy(self._dishy_bubble.trigger_action)
@@ -649,9 +654,9 @@ class MainWindow(QMainWindow):
         service.sync_finished.connect(
             lambda _p, _r: self._sync_indicator.set_state("live")
         )
-        service.sync_error.connect(
-            lambda _e: self._sync_indicator.set_state("error")
-        )
+        service.sync_error.connect(self._sync_indicator.set_error)
+        # Allow the user to manually retry a failed sync by clicking the indicator
+        self._sync_indicator.retry_requested.connect(service.sync_now)
         service.realtime_connected.connect(self._on_realtime_connected)
         service.realtime_disconnected.connect(self._on_realtime_disconnected)
         service.remote_change_received.connect(self._on_remote_change_received)

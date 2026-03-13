@@ -3,6 +3,9 @@
 > This file exists so that Claude Code can read it at the start of each session to understand the full
 > picture of what DishBoard is, how it's built, and where it's going.
 > **Update this file whenever a significant feature, structural change, or design decision is made.**
+>
+> After reading this file, also read `HANDOVER.md` for the latest implementation-level refactors,
+> platform notes, runtime architecture, and verification history.
 
 ---
 
@@ -15,6 +18,13 @@ Tom Slater is the sole developer. It is currently a dev-only Python app run via 
 - Package as a proper macOS `.app` via PyInstaller and share with friends
 - Eventually a companion iOS app (React Native consuming a thin local or cloud API layer)
 - Update distribution via GitHub Releases + in-app version checker
+
+## Non-Negotiable Guardrail
+
+- DishBoard must continue to run correctly on macOS at all times.
+- No code change should be made for Windows that breaks, weakens, or complicates the macOS app.
+- Future iOS portability is also a priority, so platform-specific changes should be isolated and should not push the architecture toward Windows-only assumptions.
+- When making cross-platform changes, prefer additive or isolated platform handling over altering shared behaviour in a way that could regress macOS or future iOS work.
 
 ---
 
@@ -39,19 +49,22 @@ Tom Slater is the sole developer. It is currently a dev-only Python app run via 
 
 ```
 DishBoard/
-├── DishBoard.py                 # Entry point — loads .env, initialises DB, launches QApplication
+├── DishBoard.py                 # Thin bootstrap — sets cert env vars, resolves assets, launches ApplicationController
 ├── main_window.py               # QMainWindow: sidebar nav + QStackedWidget content area
 ├── CONTEXT.md                   # ← this file
+├── HANDOVER.md                  # detailed implementation handover for future humans / AI assistants
 │
 ├── views/
 │   ├── my_kitchen.py            # Home (index 0): stat cards, quick actions, recent recipes, macro rings
 │   ├── my_kitchen_storage.py    # My Kitchen (index 4): full pantry/fridge/freezer tracker
 │   ├── recipes.py               # Recipe browser + create/edit form + detail view (QStackedWidget)
+│   ├── recipes_shared.py        # Shared dialogs/helpers extracted from recipes.py
 │   ├── meal_planner.py          # Weekly meal planner grid (Mon–Sun × Breakfast/Lunch/Dinner)
 │   ├── nutrition.py             # Daily nutrition log + macro rings (custom QPainter widget)
 │   ├── shopping_list.py         # Shopping list + Live Shop mode (tick items → auto adds to My Kitchen)
 │   ├── dishy.py                 # Full-page Dishy AI chat view (sidebar nav item)
 │   ├── settings.py              # API keys, theme toggle, dietary prefs, data export/import, nutrition goals
+│   ├── settings_account.py      # Account/sync/session diagnostics page extracted from settings.py
 │   └── help.py                  # How-to-use guide
 │
 ├── widgets/
@@ -66,7 +79,7 @@ DishBoard/
 │
 ├── auth/
 │   ├── supabase_client.py       # Singleton Supabase client + is_online() + is_configured()
-│   ├── session_manager.py       # macOS Keychain session persist/restore (keyring)
+│   ├── session_manager.py       # keyring-backed session persist/restore + diagnostics visibility
 │   ├── oauth_server.py          # Temporary Flask server for Google OAuth callback
 │   ├── cloud_sync.py            # CloudSyncService — bidirectional push/pull engine
 │   └── migration_dialog.py      # First sign-in dialog: upload existing local data
@@ -75,18 +88,25 @@ DishBoard/
 │   └── database.py              # Database class: all SQLite CRUD helpers + sync helpers
 │
 ├── utils/
+│   ├── app_runtime.py           # ApplicationController + AppContext runtime bootstrap/lifecycle
+│   ├── assets.py                # Helpers for loading bundled text/JSON assets
 │   ├── theme.py                 # ThemeManager singleton — Signal + c(dark, light) helper
-│   ├── version.py               # APP_VERSION + VERSION_HISTORY — update here on every release
+│   ├── version.py               # APP_VERSION + VERSION_HISTORY loaded from bundled JSON metadata
 │   ├── workers.py               # Worker (QRunnable) + run_async() + ImageLoader
 │   ├── macro_goals.py           # MACRO_SPECS, get/set macro goals (DB), goals_changed Signal broadcaster
 │   ├── cloud_sync_service.py    # CloudSyncBackgroundService — QTimer 5min polling + Realtime WebSocket
 │   ├── meal_deduction.py        # MealDeductionService — QTimer deducts pantry items when meal times pass
-│   └── image_upload.py          # upload_recipe_image() + is_supabase_url() — no Qt dep
+│   ├── image_upload.py          # upload_recipe_image() + is_supabase_url() — no Qt dep
+│   └── search_clients.py        # Lazy API client factories to avoid import-time singletons
 │
 └── assets/
+    ├── metadata/
+    │   └── version_history.json # Release/version history loaded by utils.version
     ├── icons/
     │   ├── icon.png             # App icon
     │   └── icon_dock.png        # Square macOS dock icon
+    ├── prompts/
+    │   └── dishy_system_prompt.txt  # Externalised Dishy system prompt
     └── styles/
         ├── theme.qss            # Dark mode QSS (applied over qt_material dark_amber)
         └── theme_light.qss      # Light mode QSS (standalone, replaces qt_material)

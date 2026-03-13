@@ -5,6 +5,10 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.log
 dist/
 build/
+.venv/
+.vscode/
+*.zip
 .DS_Store

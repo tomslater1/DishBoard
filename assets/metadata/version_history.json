@@ -1,0 +1,704 @@
+[
+  {
+    "version": "v0.66",
+    "title": "Windows compatibility and cross-platform release tooling",
+    "changes": [
+      "Core runtime paths are now OS-aware in packaged builds (macOS Application Support, Windows APPDATA, Linux local share)",
+      "Added shared platform helpers for font selection, opening files with the default app, and mac-only AppleScript integrations",
+      "Shopping List export now works cross-platform: Notes export on macOS, themed text-file export + auto-open on Windows/Linux",
+      "Meal Planner calendar export now opens generated .ics files with the default calendar app on all desktop platforms",
+      "Updater now selects platform-appropriate release assets (.dmg/.zip on macOS, .exe/.msi/.zip on Windows, Linux package fallbacks)",
+      "PyInstaller spec is now cross-platform with Windows keyring backend/icon support and macOS-only app bundle generation",
+      "Added Windows build scripts (PowerShell + .bat) and aligned pre-release checks for cross-platform execution",
+      "Dishy assistant prompts and help copy were updated to remove mac-only wording where behavior is now cross-platform"
+    ]
+  },
+  {
+    "version": "v0.65.2",
+    "title": "Modern texture pass and safe motion upgrades",
+    "changes": [
+      "Upgraded dark/light theme surfaces with richer gradient textures across app background, sidebar, cards, and meal slots for a cleaner modern look",
+      "Added paint-safe page slide transitions between main views (no QGraphics effects, no QPainter custom rendering)",
+      "Added animated nav icon hover/toggle motion for a more responsive feel while keeping stability",
+      "Added shared motion tokens and a reusable animation helper to make future UI animation work consistent",
+      "Removed the missing 'SF Pro Display' style reference from theme files to reduce startup font fallback overhead"
+    ]
+  },
+  {
+    "version": "v0.65.1",
+    "title": "Analytics visibility, integrity scan, and release safety checks",
+    "changes": [
+      "Monitoring now shows live Analytics Status with connection state, host, and last event timestamp so PostHog setup is easy to verify",
+      "Added one-click Integrity Scan in Monitoring to generate a clear ghost-data and schema-shape report across recipes, planner, shopping, pantry, nutrition, and chat",
+      "Added pre-release verification script (syntax, full tests, startup-health smoke) and wired build.sh to run it automatically before DMG packaging"
+    ]
+  },
+  {
+    "version": "v0.65",
+    "title": "Stability foundation, sync resilience and startup auto-repair",
+    "changes": [
+      "Added startup health checks that automatically clean invalid tombstones, repair stale meal-plan links, and recover stuck background jobs",
+      "Cloud sync service now has resilience controls with exponential retry backoff and a lightweight circuit breaker after repeated failures",
+      "Monitoring page now surfaces sync runtime health (retry state/failure count) with startup repair summary for clearer diagnostics",
+      "Cloud row validation was hardened with household scope guards and stricter sanitization to block malformed or out-of-scope rows",
+      "Backup import now sanitizes/validates recipe, meal-plan, shopping, pantry, and nutrition rows before insertion to reduce ghost-data risk",
+      "Added runtime service registry/event bus scaffolding and expanded automated tests for resilience, startup health, and validators"
+    ]
+  },
+  {
+    "version": "v0.64",
+    "title": "Household sharing, planning automation and data quality suite",
+    "changes": [
+      "Shared Household mode added with create/join/leave flows in Settings so multiple accounts can collaborate in one shared data space",
+      "Cloud/local sync now supports shared household scope with backwards-compatible fallback for non-household accounts and older cloud schema",
+      "Recipes upgraded with Source Trust scoring, Recipe Health Check validation, and bulk actions for tag/favourite/delete workflows",
+      "Shopping List now includes Smart Consolidate to merge duplicates and clean item naming automatically",
+      "Meal Planner now includes Auto-Optimize week planning for faster balanced slot population",
+      "Data controls expanded with Trash Bin recovery and profile-based export formats (full, migration, planning, nutrition)",
+      "Monitoring page now includes sync integrity checks/repair plus pantry expiry risk and waste-value insights",
+      "Pantry and deletion flows now log waste trends and route deletes through recoverable trash-safe operations"
+    ]
+  },
+  {
+    "version": "v0.63",
+    "title": "Dishy nutrition flow, recipe search UX and stability",
+    "changes": [
+      "Web recipe search now has a per-result 'Get Nutrition' action so users can evaluate multiple recipes before saving",
+      "Saving scraped recipes is now gated until Dishy nutrition data is gathered, preventing incomplete recipe entries",
+      "Added a themed blocking Dishy nutrition loading dialog and fixed modal lifecycle so the app returns to normal interaction immediately after completion",
+      "Recipe search cards received a polished UX pass: stronger hierarchy, cleaner controls, and clearer nutrition states (Get Nutrition, Gathering, Ready, Retry)",
+      "Dishy nutrition lookup reliability improved with robust JSON extraction/normalization and fallback parsing for non-perfect model responses",
+      "Nutrition lookup speed improved via cached scrape data, lightweight fast-JSON prompt path, and in-memory nutrition result caching"
+    ]
+  },
+  {
+    "version": "v0.62",
+    "title": "Visual system refresh and cleaner monitoring UI",
+    "changes": [
+      "Refined dark/light theme palettes with improved contrast hierarchy, card depth, and control states across the app",
+      "Monitoring page redesigned into a cleaner, user-facing layout with key health metrics, simpler controls, and collapsible advanced diagnostics",
+      "Added shared UI tokens for buttons, spacing, and surfaces to keep Settings styling more consistent",
+      "Added subtle page fade transitions for smoother navigation between tabs",
+      "Sidebar icons now adapt to theme mode for clearer legibility in both dark and light appearances"
+    ]
+  },
+  {
+    "version": "v0.61",
+    "title": "Feature platform, monitoring, AI limits and smarter search",
+    "changes": [
+      "New Monitoring page in Settings with a clear live view of account data totals, AI usage, notifications, background jobs, telemetry events, and feature flags",
+      "Feature flag system added with global defaults + per-account overrides, plus optional cloud refresh from a Supabase feature_flags table",
+      "In-app notification engine added: pantry expiry alerts (3-day / 1-day / today) and a daily 5pm meal-plan reminder",
+      "Background workflow engine added with recurring jobs for notifications and remote feature-flag refresh",
+      "Daily AI hard limit added at 50 requests/day with enforcement in both app and Supabase Edge Function proxy",
+      "Dishy now injects retrieved memory snippets per prompt for stronger context continuity across recipes, pantry, plans, nutrition, shopping, and prior chat history",
+      "Saved recipe local search upgraded to weighted ranking across title, ingredients, tags, and summary with typo tolerance",
+      "Observability upgraded with local telemetry event logging and optional Sentry/PostHog integration (enabled by default)",
+      "Supabase migration added for ai_usage_daily and feature_flags tables with RLS policies"
+    ]
+  },
+  {
+    "version": "v0.60",
+    "title": "Pantry intelligence, expiry alerts & meal swap",
+    "changes": [
+      "Dishy now knows about items in your pantry that are expiring soon \u2014 automatically flagged in context so Dishy can proactively suggest recipes to use them up",
+      "New 'Expiring Soon' banner on the home dashboard \u2014 shows items expiring within 3 days with an orange warning; 'Use it up \u2192' button opens a pre-loaded Dishy conversation",
+      "New Dishy quick-prompt chip: 'What can I make with what I have?' \u2014 Dishy checks your full My Kitchen inventory and suggests meals from your existing stock",
+      "New Dishy tool: swap_meal_slots \u2014 ask Dishy to swap any two meal plan slots, e.g. 'swap Monday dinner and Wednesday dinner'"
+    ]
+  },
+  {
+    "version": "v0.59",
+    "title": "My Kitchen preview on home dashboard",
+    "changes": [
+      "The Favourites card on the home dashboard has been replaced with a live My Kitchen preview",
+      "Shows all pantry, fridge, and freezer items grouped by storage section and category \u2014 identical layout to the shopping list preview",
+      "Expiry badges appear on items expiring within 3 days or already expired",
+      "'View \u2192' button navigates directly to My Kitchen",
+      "The card updates instantly whenever items are added, edited, or removed from My Kitchen \u2014 no page reload needed"
+    ]
+  },
+  {
+    "version": "v0.58",
+    "title": "Dishy bubble UI redesign",
+    "changes": [
+      "Dishy messages in the floating bubble now show the Dishy avatar \u2014 consistent with the full Dishy page",
+      "Typing indicator now includes the Dishy avatar and aligns with chat bubbles",
+      "FAB button updated to gradient green matching the Dishy avatar style",
+      "Panel background updated to card colour (#111111 dark / white light) for app-wide consistency",
+      "Input field is now fully themed \u2014 correct background, text, border, and focus ring in both modes",
+      "Close button replaced with an icon button instead of a text character",
+      "Removed the confusing 'tools on/off' badge from the header",
+      "Action confirmation pills are indented to align under Dishy's bubble text",
+      "Panel and input bar corner radius increased to 16px for a softer, modern look",
+      "Scrollbar styled to match the rest of the app in both dark and light mode"
+    ]
+  },
+  {
+    "version": "v0.57",
+    "title": "Responsive layout & windowed mode scaling",
+    "changes": [
+      "Sidebar auto-collapses when the window is narrowed below 940px and re-expands above 1060px",
+      "DishBoard logo icon stays visible at all times \u2014 shown at full size (expanded) or small (collapsed)",
+      "Removed Dishy's Tip from the sidebar \u2014 frees space for the nav buttons on smaller screens",
+      "Window minimum size reduced to 780\u00d7520 \u2014 works comfortably in a small windowed view",
+      "Meal Planner, Recipes, and Shopping List minimum size constraints lowered for narrow windows"
+    ]
+  },
+  {
+    "version": "v0.56",
+    "title": "Themed dialogs: custom dark/light popup boxes",
+    "changes": [
+      "All popup dialogs now match the app's dark/light theme \u2014 no more native OS chrome",
+      "New ThemedMessageBox component replaces all QMessageBox calls throughout the app",
+      "Update, Migration, Chat History, Add to Calendar, and Add Item dialogs are all now frameless and card-styled",
+      "Dialogs are draggable and include a close button where appropriate"
+    ]
+  },
+  {
+    "version": "v0.55",
+    "title": "Account isolation fixes & meal planner integrity",
+    "changes": [
+      "Fixed Dishy chat history leaking between accounts \u2014 switching accounts now fully resets the in-memory conversation so no cross-account actions or history bleed through",
+      "Meal planner auto-cleanup on login: any meal slot with no valid recipe attached is removed automatically after sync, keeping the planner consistent",
+      "Fixed sign-out dialog crashing when opening \u2014 theme detection bug resolved"
+    ]
+  },
+  {
+    "version": "v0.54",
+    "title": "Account security, Google Sign-In & sync fixes",
+    "changes": [
+      "Google Sign-In is now fully working \u2014 sign in or create an account with your Google account",
+      "Fixed critical sync bug: pulled rows were being silently discarded because local_id (a cloud-only column) was not stripped before writing to local SQLite",
+      "Fixed critical settings bug: signing in after an account switch was overwriting cloud settings with a partial local copy, erasing onboarding_complete and user preferences",
+      "Onboarding and app tour completion are now pushed to the cloud immediately so they are never repeated on the same account",
+      "Switching accounts now correctly clears local data and shows the new account's data after sync"
+    ]
+  },
+  {
+    "version": "v0.53",
+    "title": "My Kitchen, Live Shop & smart ingredient tracking",
+    "changes": [
+      "My Kitchen: full pantry, fridge and freezer tracker with three storage sections",
+      "Live Shop mode in Shopping List: tick items as you buy them \u2014 they flow automatically into My Kitchen",
+      "Automatic ingredient deduction: when meal time arrives, used ingredients leave My Kitchen",
+      "Dishy fully integrated: reads all My Kitchen contents and can add/remove items by voice",
+      "Cloud sync: all pantry data syncs to your account instantly on every change"
+    ]
+  },
+  {
+    "version": "v0.52",
+    "title": "DMG build: recipe scraper & Dishy tip fixes",
+    "changes": [
+      "Recipe scraper on packaged app: all 200+ site-specific recipe_scrapers submodules are now explicitly bundled \u2014 fixes 'Couldn't load that recipe' on most sites in the DMG build",
+      "Dishy sidebar tip on fresh install: tip loading now fires after login (when the session JWT is available) instead of at app startup \u2014 fixes 'Tip unavailable' on first launch of a new DMG install"
+    ]
+  },
+  {
+    "version": "v0.51",
+    "title": "Account isolation: no cross-user data leakage",
+    "changes": [
+      "Fixed critical security issue: local data from a previously-logged-in account is now wiped before a different account's session is restored, preventing recipes, meal plans, nutrition logs, and shopping items from being visible to another user on the same machine",
+      "All user data is now sourced exclusively from the authenticated user's cloud data \u2014 no stale local cache can leak between accounts"
+    ]
+  },
+  {
+    "version": "v0.50",
+    "title": "Help page & Dishy awareness update",
+    "changes": [
+      "How to Use page updated to reflect all current features: recipe online search, shopping list categories and stats, editable nutrition goals, Dishy chat history, and Settings improvements",
+      "Dishy now knows about the My Kitchen (coming soon) section, the updated recipe search, editable macro goals, and persistent chat history",
+      "Dishy references your actual macro goals from the live context rather than assuming default values"
+    ]
+  },
+  {
+    "version": "v0.49",
+    "title": "Reliability & under-the-hood quality",
+    "changes": [
+      "Sync conflict resolution: pushes now strip client-side updated_at so the server timestamps inserts with its own clock; server timestamp is written back locally after each push to eliminate clock-skew conflicts",
+      "Sync retry: sync indicator turns red on failure with a tooltip showing the error \u2014 click it to immediately retry",
+      "Recipe image reliability: local file paths are never pushed to cloud (meaningless on other devices); recipe cards now display Supabase CDN images from any device, downloading asynchronously with a local disk cache",
+      "DB schema migrations: replaced ad-hoc ALTER TABLE loop with a proper PRAGMA user_version migration runner \u2014 future schema changes are tracked and applied exactly once"
+    ]
+  },
+  {
+    "version": "v0.48",
+    "title": "Password reset, email confirmation & session handling",
+    "changes": [
+      "Added 'Forgot password?' flow \u2014 sends a reset link to your email from the sign-in screen",
+      "Email confirmation page now shows a proper success screen after sign-up with a resend button",
+      "Session expiry mid-session now shows an inline sign-in dialog instead of requiring a full sign-out"
+    ]
+  },
+  {
+    "version": "v0.47",
+    "title": "Dishy fixed",
+    "changes": [
+      "Fixed Dishy AI \u2014 was broken due to two Supabase Edge Function bugs: gateway JWT verification rejected ES256 tokens (new Supabase JWT format), and getUser() was not passed the JWT explicitly",
+      "Edge Function now uses verify_jwt=false + getUser(jwt) for correct ES256 token validation",
+      "Hardcoded Anthropic endpoint in proxy \u2014 eliminates path-stripping bug that caused 404 errors"
+    ]
+  },
+  {
+    "version": "v0.46",
+    "title": "Cloud-first, login required",
+    "changes": [
+      "DishBoard now requires an account \u2014 all data is stored securely in the cloud against your personal account",
+      "Removed offline/anonymous mode: data is always tied to your account",
+      "Redesigned login screen: clear Sign In / Create Account tabs, field validation, and much more specific error messages",
+      "Google and Apple sign-in buttons are correctly shown as coming soon instead of silently failing",
+      "No API keys are stored locally \u2014 all AI and cloud features are handled server-side",
+      "Dishy session reliability: proxy now falls back to macOS Keychain if the in-memory session is lost"
+    ]
+  },
+  {
+    "version": "v0.45.4",
+    "title": "Dishy connection reliability fix",
+    "changes": [
+      "Fixed Dishy failing with 'check API key in Settings' on other devices \u2014 the app now recovers the session from macOS Keychain if the in-memory session is lost",
+      "Improved error messages: Dishy now tells you to sign out and sign in again instead of mentioning API keys"
+    ]
+  },
+  {
+    "version": "v0.45.3",
+    "title": "Dishy is fully working",
+    "changes": [
+      "Dishy AI is now working on all devices \u2014 the server-side proxy has been deployed and connected",
+      "No API key is needed on your device \u2014 all AI requests are handled securely server-side"
+    ]
+  },
+  {
+    "version": "v0.45.2",
+    "title": "Dishy proxy fix \u2014 works on all installs",
+    "changes": [
+      "Fixed Dishy not working on packaged app installs \u2014 the app no longer tries to load an Anthropic API key from local storage, so the Supabase proxy is always used correctly",
+      "Fixed the app tour narrator failing on DMG builds \u2014 it now uses the same proxy connection as the rest of Dishy",
+      "Removed all code paths that expected an Anthropic API key to be stored on the device"
+    ]
+  },
+  {
+    "version": "v0.45.1",
+    "title": "Bug fixes for packaged app",
+    "changes": [
+      "Fixed Dishy not working on Macs without a personal Anthropic API key \u2014 the Supabase proxy now connects correctly",
+      "Fixed clicking a recipe search result doing nothing \u2014 SSL certificates are now passed explicitly to the recipe scraper"
+    ]
+  },
+  {
+    "version": "v0.45",
+    "title": "Smart macros, My Kitchen tab, recipe search overhaul & bug fixes",
+    "changes": [
+      "Changing your Calorie goal in Settings \u2192 Nutrition Goals now automatically recalculates Protein, Carbs & Fat using Dishy AI",
+      "Dishy adjusts the macro split based on your dietary preferences \u2014 high protein, keto, vegan, etc.",
+      "Home: the first sidebar tab has been renamed from 'My Kitchen' to 'Home'",
+      "My Kitchen: a new sidebar tab for the upcoming pantry & ingredient storage tracker",
+      "Up to 60 recipe results per search (was 26) \u2014 results appear instantly as modern cards with title, source, description, and a Dishy macros badge",
+      "Fixed recipe search returning no results on the packaged app \u2014 SSL certificates are now correctly bundled",
+      "Fixed Dishy not working on fresh installs \u2014 Supabase credentials are now always available at startup",
+      "Settings and Dishy chats now sync to the cloud instantly on every change",
+      "Theme fixes: all Settings pages and the Dishy panel now correctly update colours when switching between dark and light mode"
+    ]
+  },
+  {
+    "version": "v0.44",
+    "title": "First public release",
+    "changes": [
+      "App ready to run on any Mac \u2014 no Python or developer tools required",
+      "Automatic update checker: DishBoard notifies you when a new version is available on GitHub",
+      "Supabase auth works out of the box on fresh installs \u2014 no manual configuration needed",
+      "Build system improvements: version numbers auto-sync, clean DMG produced by build.sh"
+    ]
+  },
+  {
+    "version": "v0.43",
+    "title": "Set your own nutrition goals",
+    "changes": [
+      "New 'Nutrition Goals' section in Settings \u2014 set your own daily targets for calories, protein, carbs, fat, fibre, and sugar",
+      "Each goal has a plain-English guide so you know what a sensible number looks like",
+      "The progress rings on both the Nutrition page and My Kitchen update the moment you save a new goal",
+      "A 'Reset to defaults' button puts everything back if you change your mind"
+    ]
+  },
+  {
+    "version": "v0.42",
+    "title": "Dishy works out of the box, real-time sync & permanent recipe images",
+    "changes": [
+      "Dishy now works the moment you sign in \u2014 no API key needed",
+      "Recipe photos are saved permanently and show up on all your devices",
+      "Changes you make sync to other devices in seconds, not minutes",
+      "A 'Live' indicator in the sidebar shows when sync is active"
+    ]
+  },
+  {
+    "version": "v0.41",
+    "title": "Full light mode & new app icons",
+    "changes": [
+      "Dishy chat, Settings, and the login screen now all switch correctly between dark and light mode",
+      "New app icons throughout \u2014 cleaner and more polished"
+    ]
+  },
+  {
+    "version": "v0.40",
+    "title": "Guided app tour for new users",
+    "changes": [
+      "New users get a guided tour of DishBoard narrated by Dishy",
+      "Each step highlights the relevant part of the screen so you know exactly where to look",
+      "The tour is personalised using your name and cooking preferences",
+      "Works even without an internet connection"
+    ]
+  },
+  {
+    "version": "v0.39",
+    "title": "Dishy chat visual refresh",
+    "changes": [
+      "Chat bubbles are smaller and cleaner \u2014 easier to read at a glance",
+      "User and assistant bubbles have a softer, more polished glass-style look",
+      "Quick-prompt chips are more compact with a 'Try asking' label and a shuffle button",
+      "Input bar has a clear button when you've typed something"
+    ]
+  },
+  {
+    "version": "v0.38",
+    "title": "Scrollable pages & layout fixes",
+    "changes": [
+      "My Kitchen and Nutrition now scroll at smaller window sizes instead of squishing everything",
+      "Meal Planner stays readable at narrow window widths",
+      "Today's Plan shows the correct breakfast, lunch, and dinner icons with colour strips",
+      "Shopping List groups items by category with coloured headers and checkboxes"
+    ]
+  },
+  {
+    "version": "v0.37",
+    "title": "Smarter shopping lists & more Dishy meal planner controls",
+    "changes": [
+      "Shopping lists are smarter \u2014 ingredients from multiple recipes are combined, converted to shop-friendly quantities, and common staples like salt and oil are skipped",
+      "Dishy can now clear a single day's meals in one go \u2014 just ask it to 'clear Monday'",
+      "Dishy can wipe the entire meal plan across all weeks"
+    ]
+  },
+  {
+    "version": "v0.36",
+    "title": "Instant sync & nutrition straight from your meal plan",
+    "changes": [
+      "Changes save to the cloud instantly \u2014 no more waiting",
+      "Nutrition now pulls directly from your meal plan \u2014 no separate logging needed",
+      "Macro rings update the moment you change a meal",
+      "Removing a meal from Today's Log removes it from the planner too"
+    ]
+  },
+  {
+    "version": "v0.35",
+    "title": "Accounts & cloud sync",
+    "changes": [
+      "Sign in with email or Google to back up your data and access it on any device",
+      "The app works fully offline \u2014 syncing happens quietly in the background",
+      "Everything syncs: recipes, meal plans, shopping list, nutrition, and chat history",
+      "A sync status indicator in the sidebar shows Synced, Syncing, or Offline at a glance",
+      "Your API keys never leave your device \u2014 they're excluded from sync"
+    ]
+  },
+  {
+    "version": "v0.34",
+    "title": "Dishy chat redesign",
+    "changes": [
+      "Dishy chat has a fresh new look \u2014 glassy bubbles, Dishy avatar on every reply, and a cleaner input bar",
+      "Every conversation is saved so you can pick up where you left off",
+      "A banner offers to resume your last chat when you reopen the app",
+      "Browse and reopen any past conversation from the chat history panel"
+    ]
+  },
+  {
+    "version": "v0.33",
+    "title": "Shopping List redesign",
+    "changes": [
+      "Shopping list now groups items by category with collapsible sections",
+      "A progress bar at the top tracks how much of your list is done",
+      "Items from the meal plan are badged so you know where they came from",
+      "Exported lists keep the category grouping"
+    ]
+  },
+  {
+    "version": "v0.32",
+    "title": "Nutrition dashboard upgrade",
+    "changes": [
+      "Today's Plan uses the same breakfast/lunch/dinner colours as the Meal Planner",
+      "Food log entries are larger and show full macro details on every row",
+      "Weekly chart is taller, shows dates, and highlights days where you hit your goal",
+      "New 'Recently Logged' card lets you re-add recent foods in one tap"
+    ]
+  },
+  {
+    "version": "v0.31",
+    "title": "Nutrition stays in sync when you change meals",
+    "changes": [
+      "Removing or replacing a meal in the planner instantly updates your nutrition totals",
+      "No stale numbers left behind \u2014 everything updates right away"
+    ]
+  },
+  {
+    "version": "v0.30",
+    "title": "Settings clear buttons now work properly",
+    "changes": [
+      "Clearing your meal plan, shopping list, or recipes in Settings instantly refreshes the relevant page",
+      "No restart needed \u2014 the empty state shows up right away"
+    ]
+  },
+  {
+    "version": "v0.29",
+    "title": "Help page rewrite",
+    "changes": [
+      "Help page completely rewritten to cover everything in the app",
+      "Each section has a short summary plus a feature-by-feature list",
+      "New Dishy section shows all the actions Dishy can take for you",
+      "Bottom banner explains the full Recipe \u2192 Plan \u2192 Shopping \u2192 Nutrition flow"
+    ]
+  },
+  {
+    "version": "v0.28",
+    "title": "Dishy knows your app inside out",
+    "changes": [
+      "Dishy now has detailed knowledge of every section and can guide you through the whole app",
+      "Responses reference your actual recipes, favourites, and meal plan \u2014 not generic advice",
+      "Dishy can now handle the full workflow \u2014 find a recipe, plan it, build the shopping list, and track nutrition \u2014 all in one conversation"
+    ]
+  },
+  {
+    "version": "v0.27",
+    "title": "Meal planner only uses saved recipes",
+    "changes": [
+      "Meals can only be added from your saved recipe library \u2014 no more free-text names",
+      "The meal picker highlights your selection and remembers it when you reopen a slot",
+      "Dishy follows the same rule \u2014 it will save a recipe first before adding it to the plan"
+    ]
+  },
+  {
+    "version": "v0.26",
+    "title": "Nutrition updates live as you plan meals",
+    "changes": [
+      "Adding or changing a meal instantly updates your nutrition totals \u2014 no refresh needed",
+      "Recipes without nutrition data are analysed automatically in the background",
+      "Meal Planner and Nutrition are now fully linked and always in sync"
+    ]
+  },
+  {
+    "version": "v0.25",
+    "title": "Nutrition data is always complete",
+    "changes": [
+      "Every recipe is guaranteed to have macros \u2014 Dishy fills them in automatically on save",
+      "If macros are missing when a recipe is added to the plan, they're fetched on the spot",
+      "The Nutrition page always shows the latest data when you open it"
+    ]
+  },
+  {
+    "version": "v0.24",
+    "title": "Nutrition tracks itself automatically",
+    "changes": [
+      "Add a recipe to today's meal plan and its macros appear in Nutrition instantly \u2014 nothing to tap",
+      "Dishy logs meals automatically when it sets a slot or fills the week",
+      "Removed the manual import button \u2014 it all happens in the background now"
+    ]
+  },
+  {
+    "version": "v0.23",
+    "title": "Dishy tracks your daily nutrition",
+    "changes": [
+      "Ask Dishy 'log today's meals' or 'how am I doing?' and it handles everything",
+      "Dishy knows which planned meals are already logged and which still need to be \u2014 it'll offer to fill in the gaps",
+      "After planning the week, Dishy will offer to sync today's nutrition straight away"
+    ]
+  },
+  {
+    "version": "v0.22",
+    "title": "Nutrition dashboard redesign",
+    "changes": [
+      "Nutrition page rebuilt as a full-page dashboard \u2014 no scrolling",
+      "Six macro rings show today's progress at a glance (calories, protein, carbs, fat, fibre, sugar)",
+      "Today's Plan pulls meals directly from the meal planner",
+      "Weekly bar chart with daily calorie totals",
+      "Quick Add \u2014 describe any food and Dishy logs the macros for you"
+    ]
+  },
+  {
+    "version": "v0.21",
+    "title": "Nutrition on every recipe, powered by Dishy",
+    "changes": [
+      "Every recipe now shows a full nutrition breakdown \u2014 per ingredient and in total",
+      "Web-scraped recipes are automatically analysed when you import them",
+      "Macro pills (kcal, protein, fat, carbs) appear next to each ingredient in the detail view",
+      "'Log to Today' button on every recipe \u2014 one tap to add it to your daily nutrition"
+    ]
+  },
+  {
+    "version": "v0.20",
+    "title": "Dishy can delete & clear things",
+    "changes": [
+      "Dishy can now remove a specific meal, clear the whole week's plan, delete shopping items, or remove recipes",
+      "All deletions ask for confirmation before anything is removed"
+    ]
+  },
+  {
+    "version": "v0.19",
+    "title": "Jump to recipes from the meal planner",
+    "changes": [
+      "Meal slots now show a 'View Recipe' button when a recipe is linked \u2014 tap to go straight to it",
+      "A small edit button lets you update a meal without clicking the whole slot",
+      "Empty slots still open the meal picker with a single click"
+    ]
+  },
+  {
+    "version": "v0.18",
+    "title": "Meal planner calendar redesign",
+    "changes": [
+      "Clearer layout with better separation between days and meal times",
+      "Row labels show Breakfast, Lunch, Dinner with icons and a colour band",
+      "Meal names are larger and easier to read at a glance"
+    ]
+  },
+  {
+    "version": "v0.17",
+    "title": "Create Recipe overhaul",
+    "changes": [
+      "Create Recipe form completely redesigned \u2014 two-column layout with clearly labelled sections",
+      "Ingredient rows show macro pills inline so you can see nutrition as you build",
+      "Icon and colour pickers tucked into a collapsible section so they're out of the way",
+      "Favourite star at the top for quick access"
+    ]
+  },
+  {
+    "version": "v0.16",
+    "title": "Recipe card grid",
+    "changes": [
+      "Recipes now display as cards in a 3-column grid \u2014 see more at once",
+      "Each card shows a photo, title, description, tags, cook time, and servings",
+      "Cards have a hover highlight for clear selection feedback"
+    ]
+  },
+  {
+    "version": "v0.15",
+    "title": "My Kitchen & home redesign",
+    "changes": [
+      "Dashboard renamed to 'My Kitchen'",
+      "Redesigned home screen with scrollable shopping and favourites widgets",
+      "All home cards share the same consistent style and spacing"
+    ]
+  },
+  {
+    "version": "v0.14",
+    "title": "New icon & version history",
+    "changes": [
+      "Brand-new app icon \u2014 modern rounded design",
+      "Version history page added to Settings (you're looking at it!)"
+    ]
+  },
+  {
+    "version": "v0.13",
+    "title": "Recipe editing & meal planner polish",
+    "changes": [
+      "Recipes can now be edited after saving \u2014 tap the pen icon in any recipe detail view",
+      "Meal planner slots now show icons for breakfast, lunch, and dinner",
+      "Meal-type tags (Breakfast, Lunch, etc.) are now teal to stand out from other tags"
+    ]
+  },
+  {
+    "version": "v0.12",
+    "title": "Dishy actions work from the full page too",
+    "changes": [
+      "Dishy can now save recipes, plan meals, and update your shopping list from both the sidebar page and the pop-up bubble"
+    ]
+  },
+  {
+    "version": "v0.11",
+    "title": "Dishy can take actions",
+    "changes": [
+      "Dishy can now actually do things \u2014 not just chat",
+      "Supported actions: save a recipe, add meals to your plan, update the shopping list",
+      "A green confirmation pill appears after Dishy completes an action"
+    ]
+  },
+  {
+    "version": "v0.10",
+    "title": "Dishy everywhere",
+    "changes": [
+      "Dishy is now woven into every section with smarter, context-aware responses",
+      "Ingredient rows in recipe creation auto-look up nutrition via Dishy",
+      "All Dishy buttons are now green across the whole app"
+    ]
+  },
+  {
+    "version": "v0.9",
+    "title": "AI-powered nutrition lookup",
+    "changes": [
+      "Nutrition search is now powered by Dishy instead of a database",
+      "Just type naturally \u2014 '200g chicken breast' or 'a bowl of oats' both work"
+    ]
+  },
+  {
+    "version": "v0.8",
+    "title": "Macro rings & daily food log",
+    "changes": [
+      "Nutrition page shows circular macro rings for your daily progress",
+      "Log food to today and see your running totals update live",
+      "Sidebar shows a daily cooking tip from Dishy and your three most recent recipes"
+    ]
+  },
+  {
+    "version": "v0.7",
+    "title": "Section colour coding",
+    "changes": [
+      "Every section has its own colour \u2014 orange, purple, teal, pink, amber, green",
+      "Nav buttons highlight in each section's colour when active"
+    ]
+  },
+  {
+    "version": "v0.6",
+    "title": "Recipe photos, tag filters & Dishy meal plans",
+    "changes": [
+      "Add photos to recipes \u2014 shown as a banner in the detail view",
+      "Filter your saved recipes by tag using the chip bar at the top",
+      "'Fill with Dishy' in Meal Planner \u2014 Dishy plans your whole week automatically",
+      "Duplicate recipe detection stops you saving the same recipe twice"
+    ]
+  },
+  {
+    "version": "v0.5",
+    "title": "Light mode polish & expanded Settings",
+    "changes": [
+      "Light mode thoroughly polished with stronger contrast and updated colours",
+      "Settings now has a Preferences card: name, dietary filters, week start day, default servings",
+      "Export all your data to a backup file, or import a previous one"
+    ]
+  },
+  {
+    "version": "v0.4",
+    "title": "Dark & light mode",
+    "changes": [
+      "Switch between dark and light mode in Settings \u2014 changes apply instantly"
+    ]
+  },
+  {
+    "version": "v0.3",
+    "title": "Nutrition & macro tracking",
+    "changes": [
+      "Nutrition section with ingredient search and live results",
+      "Per-ingredient macro breakdown (calories, protein, carbs, fat)",
+      "Running macro total shown while building a recipe"
+    ]
+  },
+  {
+    "version": "v0.2",
+    "title": "Dishy, meal planner redesign & shopping improvements",
+    "changes": [
+      "Dishy AI assistant introduced \u2014 floating chat bubble available on every page",
+      "Meal planner redesigned with a proper weekly calendar view",
+      "Apple Calendar export for your meal plan",
+      "Shopping list now supports notes and text export"
+    ]
+  },
+  {
+    "version": "v0.1",
+    "title": "First launch",
+    "changes": [
+      "DishBoard is born \u2014 My Kitchen, Recipes, Meal Planner, Nutrition, Shopping List, and Settings all up and running"
+    ]
+  }
+]

@@ -16,7 +16,7 @@ def _run(cmd: list[str]) -> None:
 
 
 def main() -> int:
-    print("▶ Pre-release checks: lint/syntax")
+    print("[1/3] Pre-release checks: lint/syntax")
     py_files = [
         "DishBoard.py",
         "main_window.py",
@@ -30,10 +30,10 @@ def main() -> int:
     ]
     _run([sys.executable, "-m", "py_compile", *py_files])
 
-    print("▶ Pre-release checks: test suite")
+    print("[2/3] Pre-release checks: test suite")
     _run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-q"])
 
-    print("▶ Pre-release checks: startup health smoke")
+    print("[3/3] Pre-release checks: startup health smoke")
     from models.database import Database
     from utils.startup_health import run_startup_health_check
     from utils.version import APP_VERSION
@@ -55,7 +55,7 @@ def main() -> int:
     print("app_version:", APP_VERSION)
     db.close()
 
-    print("✅ Pre-release checks passed")
+    print("Pre-release checks passed")
     return 0
 
 

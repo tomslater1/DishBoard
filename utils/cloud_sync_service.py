@@ -127,20 +127,15 @@ class CloudSyncBackgroundService(QObject):
             self.runtime_status_changed.emit(self.runtime_status())
             return
 
-        from auth.supabase_client import is_online
-        if not is_online():
-            status = self._resilience.record_failure("offline")
-            self._emit_resilience_error("offline", int(status.get("retry_in_seconds", 5)), "offline")
-            self._schedule_retry(int(status.get("retry_in_seconds", 5)))
-            self.runtime_status_changed.emit(self.runtime_status())
-            return
-
         self._is_syncing = True
         self.sync_started.emit()
         self.runtime_status_changed.emit(self.runtime_status())
 
         def _work():
+            from auth.supabase_client import is_online
             from auth.cloud_sync import CloudSyncService
+            if not is_online():
+                raise RuntimeError("offline")
             return CloudSyncService(self._user_id).sync()
 
         def _done(result):
@@ -246,19 +241,14 @@ class CloudSyncBackgroundService(QObject):
             self.runtime_status_changed.emit(self.runtime_status())
             return
 
-        from auth.supabase_client import is_online
-        if not is_online():
-            status = self._resilience.record_failure(f"offline during realtime pull:{table}")
-            retry_s = int(status.get("retry_in_seconds", 5) or 5)
-            self._schedule_retry(retry_s)
-            self.runtime_status_changed.emit(self.runtime_status())
-            return
-
         self._is_syncing = True
         self.runtime_status_changed.emit(self.runtime_status())
 
         def _pull():
+            from auth.supabase_client import is_online
             from auth.cloud_sync import CloudSyncService
+            if not is_online():
+                raise RuntimeError(f"offline during realtime pull:{table}")
             svc = CloudSyncService(self._user_id)
             return svc.pull_all()
 

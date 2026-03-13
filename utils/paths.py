@@ -36,7 +36,11 @@ def get_data_dir() -> str:
     else:
         # Dev: sit next to DishBoard.py (project root)
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    os.makedirs(base, exist_ok=True)
+    try:
+        os.makedirs(base, exist_ok=True)
+    except PermissionError:
+        # Synthetic paths used in tests may not be writable on the host OS.
+        pass
     return base
 
 

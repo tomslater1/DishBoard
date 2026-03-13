@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 
 from utils.paths import get_data_dir
 
-DB_PATH = os.path.join(get_data_dir(), "dishboard.db")
+
+def default_db_path() -> str:
+    return os.path.join(get_data_dir(), "dishboard.db")
 
 
 def _utc_now_iso() -> str:
@@ -80,8 +82,8 @@ class Database:
         "pantry_waste_log",
     )
 
-    def __init__(self, path: str = DB_PATH):
-        self.path = path
+    def __init__(self, path: str | None = None):
+        self.path = path or default_db_path()
         self._conn: sqlite3.Connection | None = None
 
     def connect(self):

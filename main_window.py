@@ -133,7 +133,7 @@ class MainWindow(QMainWindow):
     sign_out_requested = Signal()
     session_expired   = Signal(str)   # emits user email when Dishy session expires
 
-    def __init__(self):
+    def __init__(self, db: Database | None = None):
         super().__init__()
         self.setWindowTitle("DishBoard")
         self.resize(1200, 800)
@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
         self._cloud_sync_service = None   # set by set_sync_service() after login
         self._meal_deduction_service = None
         self._page_anim = None
-        self._db = get_db()
+        self._db = db or get_db()
         self._centre_on_screen()
         self._build_ui()
 

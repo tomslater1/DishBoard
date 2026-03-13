@@ -184,12 +184,18 @@ class DishyActions:
         self._db_path = db.path          # path only — NOT the connection
         self.pending_refreshes: list[str] = []
         self.saved_recipe_id:   int | None = None
+        self._managed_tool_db: "Database | None" = None
+        self._tool_db_scope_active = False
 
     def _open_db(self) -> "Database":
         """Open a fresh, thread-local Database connection."""
+        if self._tool_db_scope_active and self._managed_tool_db is not None:
+            return self._managed_tool_db
         from models.database import Database as _DB
         db = _DB(self._db_path)
         db.connect()
+        if self._tool_db_scope_active:
+            self._managed_tool_db = db
         return db
 
     def clear_pending(self):
@@ -516,6 +522,8 @@ class DishyActions:
 
     def execute(self, tool_name: str, tool_input: dict) -> str:
         """Dispatch a tool. Returns a plain-text result string sent back to Claude."""
+        self._tool_db_scope_active = True
+        self._managed_tool_db = None
         try:
             handler = getattr(self, f"_tool_{tool_name}", None)
             if handler is None:
@@ -523,6 +531,14 @@ class DishyActions:
             return handler(tool_input)
         except Exception as exc:
             return f"Error running {tool_name}: {exc}"
+        finally:
+            try:
+                if self._managed_tool_db is not None:
+                    self._managed_tool_db.close()
+            except Exception:
+                pass
+            self._managed_tool_db = None
+            self._tool_db_scope_active = False
 
     # ── Individual tool handlers ──────────────────────────────────────────────
 

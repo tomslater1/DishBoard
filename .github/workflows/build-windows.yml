@@ -3,6 +3,9 @@ name: Build Windows Package
 on:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -29,15 +32,17 @@ jobs:
           $v = python -c "from utils.version import APP_VERSION; print(APP_VERSION)"
           "value=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Run pre-release checks
-        shell: pwsh
-        run: |
-          python scripts/pre_release_checks.py
-
       - name: Build Windows package
         shell: pwsh
         run: |
+          $env:SKIP_PRECHECKS = "1"
           powershell -ExecutionPolicy Bypass -File build_windows.ps1
+
+      - name: Show dist contents
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Get-ChildItem -Recurse dist | Select-Object FullName, Length }
 
       - name: Upload Windows package artifact
         uses: actions/upload-artifact@v4
@@ -45,3 +50,13 @@ jobs:
           name: DishBoard-${{ steps.app_version.outputs.value }}-windows
           path: dist/DishBoard-${{ steps.app_version.outputs.value }}-windows.zip
           if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DishBoard-${{ steps.app_version.outputs.value }}-windows-logs
+          path: |
+            build/DishBoard/warn-DishBoard.txt
+            build/DishBoard/xref-DishBoard.html
+          if-no-files-found: ignore

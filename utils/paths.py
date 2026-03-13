@@ -1,8 +1,10 @@
 """
 Path helpers for DishBoard.
 
-When running as a PyInstaller .app bundle:
-  - get_data_dir()      → ~/Library/Application Support/DishBoard  (writable)
+When running as a PyInstaller bundle:
+  - macOS:   ~/Library/Application Support/DishBoard
+  - Windows: %APPDATA%\\DishBoard
+  - Linux:   ~/.local/share/DishBoard
   - get_resource_path() → sys._MEIPASS/<relative>                   (read-only assets)
 
 When running in dev (python3 DishBoard.py):
@@ -22,7 +24,15 @@ def get_data_dir() -> str:
     ~/Library/Application Support rather than the read-only .app bundle.
     """
     if getattr(sys, "frozen", False):
-        base = os.path.expanduser("~/Library/Application Support/DishBoard")
+        if sys.platform == "darwin":
+            base = os.path.expanduser("~/Library/Application Support/DishBoard")
+        elif sys.platform.startswith("win"):
+            base = os.path.join(
+                os.environ.get("APPDATA", os.path.expanduser("~")),
+                "DishBoard",
+            )
+        else:
+            base = os.path.expanduser("~/.local/share/DishBoard")
     else:
         # Dev: sit next to DishBoard.py (project root)
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-# DishBoard PyInstaller spec — macOS .app bundle
-# Run: ./build.sh   (or: pyinstaller DishBoard.spec --clean -y)
+# DishBoard PyInstaller spec — cross-platform (macOS + Windows)
+# macOS build:   ./build.sh
+# Windows build: pyinstaller DishBoard.spec --clean -y
 
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(SPEC)))
@@ -14,6 +15,22 @@ _build = str(int(_v.split(".")[0]) * 100 + int(_v.split(".")[1]))      # "44"
 import mf2py as _mf2py
 _mf2py_backcompat = os.path.join(os.path.dirname(_mf2py.__file__), "backcompat-rules")
 
+if sys.platform == "darwin":
+    _icon_file = "assets/icons/icon.icns"
+    _keyring_backend_hidden = ["keyring.backends.macOS"]
+elif sys.platform.startswith("win"):
+    _icon_file = "assets/icons/icon.ico"
+    _keyring_backend_hidden = ["keyring.backends.Windows"]
+else:
+    _icon_file = "assets/icons/DishBoard-darkicon.png"
+    _keyring_backend_hidden = []
+
+# recipe_scrapers has 200+ site-specific scrapers loaded dynamically by hostname.
+# PyInstaller misses them with a simple hiddenimport — collect every submodule.
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+_recipe_scrapers_mods = collect_submodules('recipe_scrapers')
+_recipe_scrapers_data = collect_data_files('recipe_scrapers')
+
 block_cipher = None
 
 a = Analysis(
@@ -26,14 +43,17 @@ a = Analysis(
         ('assets/icons',  'assets/icons'),
         # mf2py (dependency of extruct → recipe_scrapers) has a non-Python data dir
         # IMPORTANT: dishboard.db and config.json must NEVER appear here.
-        # User data lives in ~/Library/Application Support/DishBoard/ (written at runtime).
+        # User data is written to OS-specific app-data folders at runtime.
         (_mf2py_backcompat, 'mf2py/backcompat-rules'),
+        # Include any data files bundled with recipe_scrapers itself
+        *_recipe_scrapers_data,
     ],
     hiddenimports=[
         # SSL certificates for the requests library (needed in frozen .app)
         'certifi',
-        # recipe-scrapers dynamically imports site-specific scrapers
+        # recipe-scrapers: top-level package + ALL site-specific scraper submodules
         'recipe_scrapers',
+        *_recipe_scrapers_mods,
         # qt_material needs its XML theme files found at runtime
         'qt_material',
         # qtawesome loads font data lazily
@@ -56,7 +76,7 @@ a = Analysis(
         # macOS Keychain session persistence
         'keyring',
         'keyring.backends',
-        'keyring.backends.macOS',
+        *_keyring_backend_hidden,
         # Auth + sync modules
         'auth',
         'auth.supabase_client',
@@ -94,7 +114,7 @@ exe = EXE(
     target_arch=None,        # None = current arch (use 'universal2' for fat binary)
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/icons/icon.icns',
+    icon=_icon_file,
 )
 
 coll = COLLECT(
@@ -108,21 +128,22 @@ coll = COLLECT(
     name='DishBoard',
 )
 
-app = BUNDLE(
-    coll,
-    name='DishBoard.app',
-    icon='assets/icons/icon.icns',
-    bundle_identifier='com.tomslater.dishboard',
-    info_plist={
-        'NSHighResolutionCapable': True,
-        'CFBundleShortVersionString': _v,
-        'CFBundleVersion': _build,
-        'CFBundleDisplayName': 'DishBoard',
-        'CFBundleName': 'DishBoard',
-        'LSApplicationCategoryType': 'public.app-category.food-and-drink',
-        'NSAppleEventsUsageDescription':
-            'DishBoard uses AppleScript to export meals to Apple Calendar.',
-        'NSCalendarsUsageDescription':
-            'DishBoard can add planned meals to your Apple Calendar.',
-    },
-)
+if sys.platform == "darwin":
+    app = BUNDLE(
+        coll,
+        name='DishBoard.app',
+        icon='assets/icons/icon.icns',
+        bundle_identifier='com.tomslater.dishboard',
+        info_plist={
+            'NSHighResolutionCapable': True,
+            'CFBundleShortVersionString': _v,
+            'CFBundleVersion': _build,
+            'CFBundleDisplayName': 'DishBoard',
+            'CFBundleName': 'DishBoard',
+            'LSApplicationCategoryType': 'public.app-category.food-and-drink',
+            'NSAppleEventsUsageDescription':
+                'DishBoard uses AppleScript to export meals to Apple Calendar.',
+            'NSCalendarsUsageDescription':
+                'DishBoard can add planned meals to your Apple Calendar.',
+        },
+    )

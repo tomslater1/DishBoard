@@ -5,10 +5,9 @@ import qtawesome as qta
 from utils.theme import manager as theme_manager
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QScrollArea, QSizePolicy, QDialog, QFrame,
+    QPlainTextEdit, QScrollArea, QSizePolicy, QDialog, QFrame,
 )
-from PySide6.QtCore import Qt, QSize, QTimer, Signal, QRectF
-from PySide6.QtGui import QPainter, QColor, QBrush, QLinearGradient, QPen, QPainterPath
+from PySide6.QtCore import Qt, QSize, QTimer, Signal
 
 from api.claude_ai import ClaudeAI
 from api.dishy_tools import TOOLS, TOOL_STATUS_MESSAGES, summarise_tool_calls
@@ -20,9 +19,11 @@ _MAX_HISTORY = 20
 _TRIM_TO     = 14
 
 _FONT = (
-    'font-family: "SF Pro Display","SF Pro Text",-apple-system,'
+    'font-family: "Segoe UI","SF Pro Text",-apple-system,'
     '".AppleSystemUIFont","Helvetica Neue",Arial,sans-serif;'
 )
+
+DISHY_GREEN = "#34d399"
 
 
 def _clean(text: str) -> str:
@@ -41,6 +42,7 @@ DISHY_INTRO = (
 )
 
 QUICK_PROMPTS_POOL = [
+    ("What can I make with what I have?",           "fa5s.box-open"),
     ("What can I make with chicken and rice?",      "fa5s.drumstick-bite"),
     ("Give me a 5-day meal plan",                   "fa5s.calendar-alt"),
     ("What's a good substitute for butter?",        "fa5s.exchange-alt"),
@@ -65,259 +67,161 @@ QUICK_PROMPTS_POOL = [
 # ── Avatar ───────────────────────────────────────────────────────────────────
 
 class _DishyAvatar(QWidget):
-    """Green circle with a white robot icon — shown left of assistant bubbles."""
+    """Simple non-painted avatar."""
+
     def __init__(self, size: int = 36, parent=None):
         super().__init__(parent)
         self._size = size
         self.setFixedSize(size, size)
-        # Use 46% of diameter so the glyph sits centred with breathing room
-        icon_px = max(int(size * 0.46), 10)
-        self._icon = qta.icon("fa5s.robot", color="white").pixmap(QSize(icon_px, icon_px))
 
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        grad = QLinearGradient(0, 0, self._size, self._size)
-        grad.setColorAt(0.0, QColor("#42e8ad"))
-        grad.setColorAt(1.0, QColor("#1eaf72"))
-        p.setBrush(QBrush(grad))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(0, 0, self._size, self._size)
-        margin = int(self._size * 0.27)
-        icon_size = self._size - 2 * margin
-        p.drawPixmap(margin, margin, icon_size, icon_size, self._icon)
-
-
-# ── Custom-painted uniform-radius pill (AA corners) ───────────────────────────
-
-class _PillLabel(QWidget):
-    """
-    Anti-aliased pill badge. Uses QPainter so corners are smooth.
-    Drop-in replacement for a styled QLabel wherever a pill shape is needed.
-    """
-    def __init__(self, text: str, bg: QColor, border: QColor, text_color: str,
-                 radius: int = 12, font_size: int = 12, bold: bool = False,
-                 parent=None):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        self._bg     = bg
-        self._border = border
-        self._r      = radius
-
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(14, 5, 14, 5)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        self._lbl = QLabel(text)
-        weight = "font-weight: 600;" if bold else ""
-        self._lbl.setStyleSheet(
-            f"background: transparent; border: none; color: {text_color};"
-            f" font-size: {font_size}px; {weight} {_FONT}"
+        icon_lbl = QLabel()
+        icon_px = max(int(size * 0.44), 10)
+        icon_lbl.setPixmap(qta.icon("fa5s.robot", color="#ffffff").pixmap(QSize(icon_px, icon_px)))
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(icon_lbl)
+
+        self._icon_lbl = icon_lbl
+        self.apply_theme(theme_manager.mode)
+
+    def apply_theme(self, _mode: str):
+        r = int(self._size / 2)
+        self.setStyleSheet(
+            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #4ef2bc,stop:1 #1ea86e);"
+            f"border: 1px solid {theme_manager.c('rgba(52,211,153,0.45)', 'rgba(52,211,153,0.40)')};"
+            f"border-radius: {r}px;"
         )
-        lay.addWidget(self._lbl)
 
-    def setText(self, text: str):
-        self._lbl.setText(text)
-        self.adjustSize()
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(self._border)
-        pen.setWidthF(2.0)
-        p.setPen(pen)
-        p.setBrush(QBrush(self._bg))
-        s = 1.0
-        p.drawRoundedRect(QRectF(s, s, self.width() - 2*s, self.height() - 2*s),
-                          self._r, self._r)
-
-
-# ── Action confirm pill ───────────────────────────────────────────────────────
 
 class ActionSummaryBubble(QWidget):
-    """One green pill per tool category — consolidated counts, indented like Dishy bubbles."""
-
     def __init__(self, labels: list[str], parent=None):
         super().__init__(parent)
         vl = QVBoxLayout(self)
-        vl.setContentsMargins(46, 4, 0, 4)  # 46px = avatar+gap indent
-        vl.setSpacing(4)
+        vl.setContentsMargins(56, 4, 0, 6)
+        vl.setSpacing(5)
         for text in labels:
             hl = QHBoxLayout()
             hl.setContentsMargins(0, 0, 0, 0)
-            pill = _PillLabel(
-                f"  ✓  {text}",
-                bg=QColor(52, 211, 153, 18),
-                border=QColor(52, 211, 153, 80),
-                text_color="#34d399",
-                radius=12, font_size=12, bold=True,
+            pill = QLabel(f"✓  {text}")
+            pill.setStyleSheet(
+                "QLabel {"
+                " color: #34d399;"
+                f" background: {theme_manager.c('rgba(52,211,153,0.16)', 'rgba(52,211,153,0.12)')};"
+                " border: 1px solid rgba(52,211,153,0.40);"
+                " border-radius: 11px;"
+                f" padding: 6px 12px; font-size: 12px; font-weight: 700; {_FONT}"
+                "}"
             )
             hl.addWidget(pill)
             hl.addStretch()
             vl.addLayout(hl)
 
 
-# ── Custom-painted bubble body (anti-aliased corners) ─────────────────────────
-
 class _BubbleWidget(QWidget):
-    """
-    Bubble background painted via QPainter so corners are truly anti-aliased.
-    QSS border-radius uses pixel clipping and is always jagged — this is the fix.
-    """
+    """Style-sheet based bubble to avoid custom painting."""
+
     def __init__(self, text: str, is_user: bool, parent=None):
         super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._is_user = is_user
-
-        is_dark = theme_manager.mode == "dark"
-        if is_user:
-            self._bg     = QColor(52, 211, 153, 23)    # rgba(52,211,153,0.09)
-            self._border = QColor(52, 211, 153, 95)    # ~0.37 — thicker pen needs more opacity
-            self._radii  = (18, 18, 5, 18)              # tl, tr, br, bl
-            txt_col = "#cef0df" if is_dark else "#1a1a1a"
-        else:
-            self._bg     = QColor(255, 255, 255, 10) if is_dark else QColor("#f7f7f7")
-            self._border = QColor(255, 255, 255, 45) if is_dark else QColor("#d8d8d8")
-            self._radii  = (5, 18, 18, 18)
-            txt_col = "#d8d8d8" if is_dark else "#1a1a1a"
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self.setMaximumWidth(760)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(18, 11, 18, 11)
+        lay.setContentsMargins(16, 11, 16, 11)
         lay.setSpacing(0)
 
         self._lbl = QLabel(text)
         self._lbl.setWordWrap(True)
         self._lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._lbl.setStyleSheet(
-            f"background: transparent; border: none; color: {txt_col};"
-            f" font-size: 14px; {_FONT}"
-        )
         lay.addWidget(self._lbl)
+        self.apply_theme(theme_manager.mode)
 
     def apply_theme(self, mode: str):
         is_dark = mode == "dark"
         if self._is_user:
-            txt_col = "#cef0df" if is_dark else "#1a1a1a"
+            bg = "rgba(52,211,153,0.18)" if is_dark else "#e8fbf3"
+            border = "rgba(52,211,153,0.55)" if is_dark else "#66cda5"
+            text = "#e9fff5" if is_dark else "#0f3a2c"
         else:
-            self._bg     = QColor(255, 255, 255, 10) if is_dark else QColor("#f7f7f7")
-            self._border = QColor(255, 255, 255, 45) if is_dark else QColor("#d8d8d8")
-            txt_col = "#d8d8d8" if is_dark else "#1a1a1a"
-        self._lbl.setStyleSheet(
-            f"background: transparent; border: none; color: {txt_col};"
-            f" font-size: 14px; {_FONT}"
+            bg = "#151e2a" if is_dark else "#ffffff"
+            border = "#2e3c52" if is_dark else "#d7e1ee"
+            text = "#e8edf8" if is_dark else "#1a2435"
+        self.setStyleSheet(
+            f"background: {bg}; border: 1px solid {border}; border-radius: 16px;"
         )
-        self.update()
+        self._lbl.setStyleSheet(
+            f"background: transparent; border: none; color: {text}; font-size: 15px; {_FONT}"
+        )
 
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-
-        pen = QPen(self._border)
-        pen.setWidthF(2.0)
-        p.setPen(pen)
-        p.setBrush(QBrush(self._bg))
-
-        # Inset rect by half the pen width so stroke isn't clipped at widget edge
-        s = 1.0
-        r = QRectF(s, s, self.width() - 2 * s, self.height() - 2 * s)
-        tl, tr, br, bl = self._radii
-
-        path = QPainterPath()
-        path.moveTo(r.x() + tl, r.y())
-        path.lineTo(r.x() + r.width() - tr, r.y())
-        path.quadTo(r.x() + r.width(), r.y(),
-                    r.x() + r.width(), r.y() + tr)
-        path.lineTo(r.x() + r.width(), r.y() + r.height() - br)
-        path.quadTo(r.x() + r.width(), r.y() + r.height(),
-                    r.x() + r.width() - br, r.y() + r.height())
-        path.lineTo(r.x() + bl, r.y() + r.height())
-        path.quadTo(r.x(), r.y() + r.height(),
-                    r.x(), r.y() + r.height() - bl)
-        path.lineTo(r.x(), r.y() + tl)
-        path.quadTo(r.x(), r.y(), r.x() + tl, r.y())
-        path.closeSubpath()
-        p.drawPath(path)
-
-
-# ── Chat bubbles ──────────────────────────────────────────────────────────────
 
 class MessageBubble(QWidget):
     def __init__(self, text: str, is_user: bool, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(10)
-
         self._bubble = _BubbleWidget(text, is_user)
 
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 6, 0, 6)
+        layout.setSpacing(12)
         if is_user:
-            spacer = QWidget()
-            spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            spacer.setMinimumWidth(80)
-            layout.addWidget(spacer, 1)
-            layout.addWidget(self._bubble, 3)
+            layout.addStretch(1)
+            layout.addWidget(self._bubble, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         else:
-            avatar = _DishyAvatar(36)
-            layout.addWidget(avatar, 0, Qt.AlignmentFlag.AlignTop)
-            layout.addWidget(self._bubble, 4)
-            spacer = QWidget()
-            spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            spacer.setMinimumWidth(80)
-            layout.addWidget(spacer, 1)
+            self._avatar = _DishyAvatar(38)
+            layout.addWidget(self._avatar, 0, Qt.AlignmentFlag.AlignTop)
+            layout.addWidget(self._bubble, 0, Qt.AlignmentFlag.AlignTop)
+            layout.addStretch(1)
 
     def apply_theme(self, mode: str):
         self._bubble.apply_theme(mode)
+        if hasattr(self, "_avatar"):
+            self._avatar.apply_theme(mode)
 
-
-# ── Typing indicator ──────────────────────────────────────────────────────────
 
 class _TypingIndicator(QWidget):
-    """Spinner + live status text, shown while Dishy is working."""
+    """Restored spinner/cube style typing indicator."""
+
     _SPIN = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(10)
-        avatar = _DishyAvatar(36)
-        self._step   = 0
+        self._step = 0
         self._status = "Thinking..."
         self._pending: list[str] = []
 
-        is_dark = theme_manager.mode == "dark"
-        self._pill = _PillLabel(
-            f"{self._SPIN[0]}  Thinking...",
-            bg=QColor(255, 255, 255, 10) if is_dark else QColor("#f7f7f7"),
-            border=QColor(255, 255, 255, 45) if is_dark else QColor("#d8d8d8"),
-            text_color="#34d399",
-            radius=18, font_size=13,
-        )
-        # Proxy for _tick() compatibility
-        self._lbl = self._pill._lbl
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 6, 0, 6)
+        layout.setSpacing(12)
+        self._avatar = _DishyAvatar(38)
+        layout.addWidget(self._avatar, 0, Qt.AlignmentFlag.AlignTop)
 
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        layout.addWidget(avatar, 0, Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self._pill)
-        layout.addWidget(spacer)
+        self._lbl = QLabel(f"{self._SPIN[0]}  {self._status}")
+        self._lbl.setStyleSheet(
+            "QLabel {"
+            f"color: {DISHY_GREEN};"
+            f"background: {theme_manager.c('#151e2a', '#ffffff')};"
+            f"border: 1px solid {theme_manager.c('#2e3c52', '#d7e1ee')};"
+            "border-radius: 14px;"
+            f"padding: 8px 12px; font-size: 12px; font-weight: 700; {_FONT}"
+            "}"
+        )
+        layout.addWidget(self._lbl)
+        layout.addStretch(1)
+
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(80)
+        self._timer.start(90)
 
     def _tick(self):
         if self._pending:
             self._status = self._pending.pop()
             self._pending.clear()
         self._step = (self._step + 1) % len(self._SPIN)
-        self._pill.setText(f"{self._SPIN[self._step]}  {self._status}")
+        self._lbl.setText(f"{self._SPIN[self._step]}  {self._status}")
 
     def update_status(self, text: str):
-        """Thread-safe: append to queue; main-thread timer picks it up."""
         self._pending.append(text)
 
     def stop(self):
@@ -336,7 +240,20 @@ class ChatHistoryDialog(QDialog):
         self.setWindowTitle("Dishy Chat History")
         self.setMinimumSize(540, 500)
         self.setModal(True)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self._drag_pos = None
         self._build_ui()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton and self._drag_pos is not None:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+
+    def mouseReleaseEvent(self, _event):
+        self._drag_pos = None
 
     def _build_ui(self):
         is_dark = theme_manager.mode == "dark"
@@ -389,6 +306,19 @@ class ChatHistoryDialog(QDialog):
         hdr.addWidget(av, 0, Qt.AlignmentFlag.AlignVCenter)
         hdr.addLayout(title_col)
         hdr.addStretch()
+
+        close_x = QPushButton()
+        close_x.setIcon(qta.icon("fa5s.times", color=muted))
+        close_x.setIconSize(QSize(13, 13))
+        close_x.setFixedSize(30, 30)
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; border-radius: 15px; }}"
+            f"QPushButton:hover {{ background: {('rgba(255,255,255,0.08)' if is_dark else 'rgba(0,0,0,0.06)')}; }}"
+        )
+        close_x.clicked.connect(self.reject)
+        hdr.addWidget(close_x, 0, Qt.AlignmentFlag.AlignVCenter)
+
         outer.addLayout(hdr)
 
         sep = QFrame()
@@ -488,6 +418,29 @@ class ChatHistoryDialog(QDialog):
         self._populate()
 
 
+# ── Auto-growing text input ───────────────────────────────────────────────────
+
+class _AutoGrowTextEdit(QPlainTextEdit):
+    """QPlainTextEdit that wraps text. Enter sends; Shift+Enter inserts newline."""
+
+    send_requested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                super().keyPressEvent(event)
+            else:
+                self.send_requested.emit()
+        else:
+            super().keyPressEvent(event)
+
+
 # ── Main DishyView ────────────────────────────────────────────────────────────
 
 class DishyView(QWidget):
@@ -521,6 +474,7 @@ class DishyView(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        self.setStyleSheet(f"background: {theme_manager.c('#0f1620', '#f3f7fb')};")
 
         outer.addWidget(self._build_header())
 
@@ -533,68 +487,50 @@ class DishyView(QWidget):
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        self._scroll.verticalScrollBar().setStyleSheet(
-            "QScrollBar:vertical { width: 5px; background: transparent; }"
-            f"QScrollBar::handle:vertical {{ background: {theme_manager.c('#2a2a2a', '#cccccc')};"
-            " border-radius: 2px; min-height: 20px; }"
-            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-        )
 
         self._chat_container = QWidget()
-        self._chat_container.setStyleSheet(
-            f"background: {theme_manager.c('#0b0b0b', '#f6f6f6')};"
-        )
+        self._chat_container.setObjectName("dishy-chat-canvas")
         self._chat_layout = QVBoxLayout(self._chat_container)
-        self._chat_layout.setContentsMargins(24, 16, 24, 16)
-        self._chat_layout.setSpacing(2)
+        self._chat_layout.setContentsMargins(28, 20, 28, 22)
+        self._chat_layout.setSpacing(4)
         self._chat_layout.addStretch()
 
         self._scroll.setWidget(self._chat_container)
         outer.addWidget(self._scroll, 1)
+        self._apply_scroll_style()
 
         # Greeting bubble
         self._add_bubble(DISHY_INTRO, is_user=False)
 
         # ── Quick-prompt chips (horizontal scroll) ────────────────────────────
         self._quick_wrapper = QWidget()
-        self._quick_wrapper.setStyleSheet(
-            f"background: {theme_manager.c('rgba(255,255,255,0.02)', 'rgba(0,0,0,0.015)')};"
-            f" border-top: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.06)')};"
-        )
+        self._quick_wrapper.setObjectName("dishy-quick-wrapper")
         qw_layout = QVBoxLayout(self._quick_wrapper)
-        qw_layout.setContentsMargins(20, 8, 20, 10)
-        qw_layout.setSpacing(6)
+        qw_layout.setContentsMargins(22, 10, 22, 12)
+        qw_layout.setSpacing(8)
 
-        # "Try asking" row with refresh chips button
+        # "Quick starts" row with refresh chips button
         hint_row = QHBoxLayout()
         hint_row.setContentsMargins(0, 0, 0, 0)
-        hint_row.setSpacing(6)
-        hint_lbl = QLabel("Try asking")
-        hint_lbl.setStyleSheet(
-            f"color: {theme_manager.c('#555555', '#999999')}; font-size: 11px; font-weight: 500;"
-            f" {_FONT} background: transparent;"
-        )
+        hint_row.setSpacing(8)
+        hint_lbl = QLabel("Quick starts")
         self._hint_lbl = hint_lbl
         hint_row.addWidget(hint_lbl)
         hint_row.addStretch()
-        refresh_chips_btn = QPushButton()
-        refresh_chips_btn.setIcon(qta.icon("fa5s.sync-alt", color=theme_manager.c("#484848", "#aaaaaa")))
-        refresh_chips_btn.setIconSize(QSize(10, 10))
-        refresh_chips_btn.setFixedSize(22, 22)
-        refresh_chips_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        refresh_chips_btn.setToolTip("Refresh suggestions")
-        refresh_chips_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; border-radius: 11px; }"
-            f"QPushButton:hover {{ background: {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.06)')}; }}"
-        )
-        refresh_chips_btn.clicked.connect(self._rebuild_quick_prompts)
-        hint_row.addWidget(refresh_chips_btn)
+        self._refresh_chips_btn = QPushButton("Refresh")
+        self._refresh_chips_btn.setIcon(qta.icon("fa5s.sync-alt", color=DISHY_GREEN))
+        self._refresh_chips_btn.setIconSize(QSize(11, 11))
+        self._refresh_chips_btn.setFixedHeight(30)
+        self._refresh_chips_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._refresh_chips_btn.setToolTip("Refresh suggestions")
+        self._refresh_chips_btn.clicked.connect(self._rebuild_quick_prompts)
+        hint_row.addWidget(self._refresh_chips_btn)
         qw_layout.addLayout(hint_row)
 
         self._quick_scroll = QScrollArea()
-        self._quick_scroll.setFixedHeight(44)
+        self._quick_scroll.setFixedHeight(48)
         self._quick_scroll.setWidgetResizable(True)
-        self._quick_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._quick_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._quick_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._quick_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
@@ -602,7 +538,7 @@ class DishyView(QWidget):
         self._chips_widget.setStyleSheet("background: transparent;")
         self._chips_layout = QHBoxLayout(self._chips_widget)
         self._chips_layout.setContentsMargins(0, 0, 0, 0)
-        self._chips_layout.setSpacing(8)
+        self._chips_layout.setSpacing(10)
         self._chips_layout.addStretch()
 
         self._quick_scroll.setWidget(self._chips_widget)
@@ -613,129 +549,86 @@ class DishyView(QWidget):
 
         # ── Input bar ─────────────────────────────────────────────────────────
         outer.addWidget(self._build_input_bar())
+        self.apply_theme(theme_manager.mode)
 
     def _build_header(self) -> QWidget:
         hdr = QWidget()
         hdr.setObjectName("dishy-header")
-        hdr.setFixedHeight(64)
-        hdr.setStyleSheet(
-            "QWidget#dishy-header {"
-            f" background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.09),stop:1 rgba(52,211,153,0.03))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.08),stop:1 rgba(52,211,153,0.02))')};"
-            f" border-bottom: 1px solid {theme_manager.c('rgba(52,211,153,0.15)', 'rgba(52,211,153,0.20)')};"
-            "}"
-        )
+        hdr.setFixedHeight(86)
         hl = QHBoxLayout(hdr)
-        hl.setContentsMargins(24, 0, 20, 0)
-        hl.setSpacing(12)
+        hl.setContentsMargins(24, 0, 24, 0)
+        hl.setSpacing(14)
 
-        avatar = _DishyAvatar(40)
+        avatar = _DishyAvatar(44)
         hl.addWidget(avatar, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Title column — wrapped in a widget so AlignVCenter applies properly
         title_widget = QWidget()
         title_widget.setStyleSheet("background: transparent;")
         title_col = QVBoxLayout(title_widget)
         title_col.setContentsMargins(0, 0, 0, 0)
-        title_col.setSpacing(2)
+        title_col.setSpacing(3)
         title_col.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         title = QLabel("Dishy")
-        title.setStyleSheet(
-            f"color: {theme_manager.c('#f0f0f0', '#1a1a1a')};"
-            f" font-size: 16px; font-weight: 700; {_FONT} background: transparent;"
-        )
-        sub = QLabel("Powered by Claude · Your cooking assistant")
-        sub.setStyleSheet(
-            f"color: {theme_manager.c('rgba(52,211,153,0.80)', 'rgba(16,140,80,0.75)')}; font-size: 11px;"
-            f" font-weight: 500; {_FONT} background: transparent;"
-        )
+        self._hdr_title = title
+        sub = QLabel("Claude powered · Meal tools live")
+        self._hdr_sub = sub
         title_col.addWidget(title)
         title_col.addWidget(sub)
         hl.addWidget(title_widget, 0, Qt.AlignmentFlag.AlignVCenter)
         hl.addStretch()
 
-        # History button — prominent green outlined style
         hist_btn = QPushButton("  History")
-        hist_btn.setIcon(qta.icon("fa5s.history", color="#34d399"))
+        hist_btn.setIcon(qta.icon("fa5s.history", color=DISHY_GREEN))
         hist_btn.setIconSize(QSize(13, 13))
-        hist_btn.setFixedHeight(36)
+        hist_btn.setFixedHeight(38)
         hist_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        hist_btn.setStyleSheet(
-            "QPushButton {"
-            " background: rgba(52,211,153,0.07); color: #34d399;"
-            " border: 1.5px solid rgba(52,211,153,0.30); border-radius: 10px;"
-            f" font-size: 12px; font-weight: 600; padding: 0 14px; {_FONT}"
-            " }"
-            "QPushButton:hover { background: rgba(52,211,153,0.14); border-color: rgba(52,211,153,0.55); }"
-        )
         hist_btn.clicked.connect(self._open_history)
         hl.addWidget(hist_btn)
+        self._hist_btn = hist_btn
 
-        # New chat button
         new_btn = QPushButton("  New chat")
-        new_btn.setIcon(qta.icon("fa5s.plus", color="#888888"))
+        new_btn.setIcon(qta.icon("fa5s.plus", color=theme_manager.c("#9fb0c9", "#6d8098")))
         new_btn.setIconSize(QSize(12, 12))
-        new_btn.setFixedHeight(36)
+        new_btn.setFixedHeight(38)
         new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        new_btn.setStyleSheet(
-            "QPushButton { background: transparent;"
-            f" border: 1.5px solid {theme_manager.c('rgba(255,255,255,0.12)', 'rgba(0,0,0,0.12)')};"
-            f" color: {theme_manager.c('#888888', '#666666')};"
-            f" border-radius: 10px; padding: 0 14px; font-size: 12px; {_FONT}"
-            " }"
-            "QPushButton:hover { background: rgba(128,128,128,0.08); }"
-        )
         new_btn.clicked.connect(self._clear_chat)
         hl.addWidget(new_btn)
+        self._new_btn = new_btn
 
         self._hdr = hdr
         return hdr
 
     def _build_resume_bar(self) -> QWidget:
         bar = QWidget()
-        bar.setStyleSheet(
-            "background: rgba(52,211,153,0.08);"
-            " border-bottom: 1px solid rgba(52,211,153,0.2);"
-        )
+        bar.setObjectName("dishy-resume-bar")
         hl = QHBoxLayout(bar)
-        hl.setContentsMargins(28, 8, 20, 8)
+        hl.setContentsMargins(28, 10, 20, 10)
         hl.setSpacing(12)
 
-        av = _DishyAvatar(22)
+        av = _DishyAvatar(24)
         hl.addWidget(av, 0, Qt.AlignmentFlag.AlignVCenter)
 
         lbl = QLabel("Continue where you left off?")
-        lbl.setStyleSheet(
-            f"color: {theme_manager.c('#c8c8c8', '#444444')};"
-            f" font-size: 12px; {_FONT} background: transparent;"
-        )
+        self._resume_lbl = lbl
         hl.addWidget(lbl)
         hl.addStretch()
 
         resume_btn = QPushButton("Resume")
         resume_btn.setObjectName("resume-btn")
-        resume_btn.setFixedHeight(28)
+        resume_btn.setFixedHeight(30)
         resume_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        resume_btn.setStyleSheet(
-            "QPushButton#resume-btn {"
-            " background: rgba(52,211,153,0.15); color: #34d399;"
-            " border: 1px solid rgba(52,211,153,0.35); border-radius: 7px;"
-            f" font-size: 12px; font-weight: 600; padding: 0 14px; {_FONT} }}"
-            "QPushButton#resume-btn:hover { background: rgba(52,211,153,0.25); }"
-        )
         resume_btn.clicked.connect(self._do_resume)
         hl.addWidget(resume_btn)
+        self._resume_btn = resume_btn
 
         dismiss_btn = QPushButton("Dismiss")
-        dismiss_btn.setFixedHeight(28)
+        dismiss_btn.setFixedHeight(30)
         dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        dismiss_btn.setStyleSheet(
-            f"background: transparent; color: {theme_manager.c('#666666', '#999999')};"
-            f" border: none; font-size: 12px; padding: 0 10px; {_FONT}"
-        )
         dismiss_btn.clicked.connect(lambda: bar.setVisible(False))
         hl.addWidget(dismiss_btn)
+        self._dismiss_resume_btn = dismiss_btn
 
-        bar.setFixedHeight(44)
+        bar.setFixedHeight(50)
         # Store the session_id this bar points to — set when populated
         bar._session_id = None
         bar._session_rows = None
@@ -743,66 +636,52 @@ class DishyView(QWidget):
 
     def _build_input_bar(self) -> QWidget:
         container = QWidget()
-        container.setStyleSheet(
-            f"background: {theme_manager.c('#0b0b0b', '#f6f6f6')};"
-            f" border-top: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.06)')};"
-        )
+        container.setObjectName("dishy-input-wrap")
         cl = QVBoxLayout(container)
-        cl.setContentsMargins(20, 12, 20, 14)
-        cl.setSpacing(0)
+        cl.setContentsMargins(22, 12, 22, 14)
+        cl.setSpacing(8)
 
         # The pill input row
         pill = QWidget()
         pill.setObjectName("input-pill")
-        pill.setStyleSheet(
-            "QWidget#input-pill {"
-            f" background: {theme_manager.c('rgba(255,255,255,0.04)', '#ffffff')};"
-            " border: 2.5px solid rgba(52,211,153,0.42);"
-            " border-radius: 999px;"
-            "}"
-        )
         pill_layout = QHBoxLayout(pill)
-        pill_layout.setContentsMargins(20, 7, 7, 7)
-        pill_layout.setSpacing(8)
+        pill_layout.setContentsMargins(18, 10, 10, 10)
+        pill_layout.setSpacing(10)
 
-        self._input = QLineEdit()
+        self._input = _AutoGrowTextEdit()
         self._input.setPlaceholderText("Ask Dishy anything about food, recipes, or cooking…")
-        self._input.setFrame(False)
-        self._input.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        self._input.setStyleSheet(
-            "QLineEdit {"
-            " background: transparent; border: none;"
-            f" color: {theme_manager.c('#f0f0f0', '#1a1a1a')};"
-            f" font-size: 14px; {_FONT}"
-            " padding: 0;"
-            "}"
-            "QLineEdit::placeholder {"
-            f" color: {theme_manager.c('#4e4e4e', '#aaaaaa')};"
-            "}"
-        )
-        self._input.setMinimumHeight(40)
-        self._input.setClearButtonEnabled(True)
-        self._input.returnPressed.connect(self._send)
+        self._input.send_requested.connect(self._send)
         pill_layout.addWidget(self._input, 1)
 
         self._send_btn = QPushButton()
         self._send_btn.setObjectName("send-btn")
-        self._send_btn.setFixedSize(42, 42)
+        self._send_btn.setFixedSize(44, 44)
         self._send_btn.setIcon(qta.icon("fa5s.arrow-up", color="white"))
-        self._send_btn.setIconSize(QSize(15, 15))
+        self._send_btn.setIconSize(QSize(16, 16))
         self._send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._send_btn.setStyleSheet(
-            "QPushButton#send-btn {"
-            " background: #34d399; border-radius: 21px; border: none;"
-            "}"
-            "QPushButton#send-btn:hover { background: #2ec48d; }"
-            "QPushButton#send-btn:disabled { background: #2a4a3e; }"
-        )
         self._send_btn.clicked.connect(self._send)
         pill_layout.addWidget(self._send_btn)
 
-        pill.setFixedHeight(58)
+        # Auto-grow: resize both input and pill on every content change
+        _INPUT_MIN = 38
+        _INPUT_MAX = 200
+
+        def _resize_input():
+            doc = self._input.document()
+            doc.setTextWidth(self._input.viewport().width() or 300)
+            h = max(_INPUT_MIN, min(int(doc.size().height()) + 10, _INPUT_MAX))
+            self._input.setFixedHeight(h)
+            pill.setFixedHeight(h + 24)
+
+        self._input.document().contentsChanged.connect(_resize_input)
+        _resize_input()  # set initial size
+
         cl.addWidget(pill)
+
+        tip = QLabel("Enter to send · Shift+Enter for a new line")
+        tip.setObjectName("dishy-input-tip")
+        self._input_tip = tip
+        cl.addWidget(tip)
         self._input_container = container
         self._input_pill = pill
         return container
@@ -819,24 +698,24 @@ class DishyView(QWidget):
         sampled = random.sample(QUICK_PROMPTS_POOL, min(6, len(QUICK_PROMPTS_POOL)))
         for text, icon_name in sampled:
             chip = QPushButton(f" {text} ")
-            chip.setIcon(qta.icon(icon_name, color="#34d399"))
-            chip.setIconSize(QSize(13, 13))
-            chip.setFixedHeight(34)
+            chip.setIcon(qta.icon(icon_name, color=DISHY_GREEN))
+            chip.setIconSize(QSize(14, 14))
+            chip.setFixedHeight(36)
             chip.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.setStyleSheet(
                 "QPushButton {"
-                f" background: {theme_manager.c('rgba(52,211,153,0.06)', 'rgba(52,211,153,0.08)')};"
-                " border: 2px solid rgba(52,211,153,0.38);"
+                f" background: {theme_manager.c('rgba(52,211,153,0.10)', 'rgba(52,211,153,0.09)')};"
+                " border: 1px solid rgba(52,211,153,0.42);"
                 " border-radius: 999px;"
-                " color: #34d399;"
-                f" font-size: 12px; font-weight: 500; {_FONT} padding: 0 14px;"
+                " color: #1fbf86;"
+                f" font-size: 12px; font-weight: 600; {_FONT} padding: 0 14px;"
                 "}"
                 "QPushButton:hover {"
-                f" background: {theme_manager.c('rgba(52,211,153,0.12)', 'rgba(52,211,153,0.14)')};"
-                " border-color: rgba(52,211,153,0.60);"
+                f" background: {theme_manager.c('rgba(52,211,153,0.18)', 'rgba(52,211,153,0.15)')};"
+                " border-color: rgba(52,211,153,0.68);"
+                " color: #109b68;"
                 "}"
-                "QPushButton:focus { outline: none; }"
             )
             chip.clicked.connect(lambda _, t=text: self._send_text(t))
             self._chips_layout.insertWidget(self._chips_layout.count() - 1, chip)
@@ -923,12 +802,15 @@ class DishyView(QWidget):
     def _add_bubble(self, text: str, is_user: bool):
         bubble = MessageBubble(text, is_user)
         self._chat_layout.insertWidget(self._chat_layout.count() - 1, bubble)
+        self._chat_container.updateGeometry()
+        self._chat_container.update()
+        self._scroll.viewport().update()
         QTimer.singleShot(50, lambda: self._scroll.verticalScrollBar().setValue(
             self._scroll.verticalScrollBar().maximum()
         ))
 
     def _send(self):
-        self._send_text(self._input.text().strip())
+        self._send_text(self._input.toPlainText().strip())
 
     def _send_text(self, text: str):
         if not text:
@@ -941,7 +823,7 @@ class DishyView(QWidget):
 
         # Disable send during generation
         self._send_btn.setEnabled(False)
-        self._send_btn.setIcon(qta.icon("fa5s.ellipsis-h", color="white"))
+        self._send_btn.setIcon(qta.icon("fa5s.circle-notch", color="white"))
 
         # Persist user message
         if self._db:
@@ -969,7 +851,14 @@ class DishyView(QWidget):
         pending_tool_names: list[str] = []
 
         app_ctx  = actions.get_context_string() if actions is not None else ""
-        full_msg = f"{app_ctx}\n\n{text}" if app_ctx else text
+        memory_ctx = actions.get_memory_context(text) if actions is not None else ""
+
+        ctx_parts: list[str] = []
+        if app_ctx:
+            ctx_parts.append(app_ctx)
+        if memory_ctx:
+            ctx_parts.append(memory_ctx)
+        full_msg = "\n\n".join(ctx_parts + [text]) if ctx_parts else text
 
         if actions is not None:
             actions.clear_pending()
@@ -1053,6 +942,12 @@ class DishyView(QWidget):
             _is_auth = False
             if "credit balance" in err_lower or "too low" in err_lower:
                 msg = "Anthropic credits are out. Top up at console.anthropic.com/settings/billing."
+            elif "overloaded" in err_lower or "529" in err_lower:
+                msg = "Dishy's AI is a little busy right now — please try again in a moment."
+            elif "dishy_rate_limited" in err_lower or "daily ai request limit" in err_lower:
+                msg = "Daily AI limit reached (50/day). Try again tomorrow."
+            elif "ai usage metering unavailable" in err_lower:
+                msg = "Dishy is temporarily unavailable due to AI usage metering. Try again in a moment."
             elif "dishy_not_signed_in" in err_lower:
                 msg = "Dishy couldn't connect — your session may have expired. Signing you back in…"
                 _is_auth = True
@@ -1103,52 +998,143 @@ class DishyView(QWidget):
         """Navigate here and auto-send a prompt (called from Dashboard chips)."""
         self._send_text(text)
 
-    def apply_theme(self, mode: str):
-        self._hdr.setStyleSheet(
-            "QWidget#dishy-header {"
-            f" background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.09),stop:1 rgba(52,211,153,0.03))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.08),stop:1 rgba(52,211,153,0.02))')};"
-            f" border-bottom: 1px solid {theme_manager.c('rgba(52,211,153,0.15)', 'rgba(52,211,153,0.20)')};"
-            "}"
-        )
+    def _apply_scroll_style(self):
         self._scroll.verticalScrollBar().setStyleSheet(
-            "QScrollBar:vertical { width: 5px; background: transparent; }"
-            f"QScrollBar::handle:vertical {{ background: {theme_manager.c('#2a2a2a', '#cccccc')};"
-            " border-radius: 2px; min-height: 20px; }"
+            "QScrollBar:vertical { width: 6px; background: transparent; margin: 4px 0; }"
+            f"QScrollBar::handle:vertical {{ background: {theme_manager.c('#33445d', '#b9c7d9')};"
+            " border-radius: 3px; min-height: 24px; }"
+            f"QScrollBar::handle:vertical:hover {{ background: {theme_manager.c('#48607f', '#9fb0c6')}; }}"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         )
-        self._chat_container.setStyleSheet(
-            f"background: {theme_manager.c('#0b0b0b', '#f6f6f6')};"
+
+    def _style_header(self):
+        self._hdr.setStyleSheet(
+            "QWidget#dishy-header {"
+            f" background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.16),stop:1 rgba(52,211,153,0.05))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.11),stop:1 rgba(52,211,153,0.03))')};"
+            f" border-bottom: 1px solid {theme_manager.c('rgba(52,211,153,0.28)', 'rgba(52,211,153,0.24)')};"
+            "}"
         )
-        self._quick_wrapper.setStyleSheet(
-            f"background: {theme_manager.c('rgba(255,255,255,0.02)', 'rgba(0,0,0,0.015)')};"
-            f" border-top: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.06)')};"
+        self._hdr_title.setStyleSheet(
+            f"color: {theme_manager.c('#f4f8ff', '#122033')};"
+            f" font-size: 24px; font-weight: 800; letter-spacing: -0.2px; {_FONT}"
         )
-        self._hint_lbl.setStyleSheet(
-            f"color: {theme_manager.c('#555555', '#999999')}; font-size: 11px; font-weight: 500;"
-            f" {_FONT} background: transparent;"
+        self._hdr_sub.setStyleSheet(
+            f"color: {theme_manager.c('#82e3bf', '#1a8f63')};"
+            f" font-size: 12px; font-weight: 700; {_FONT}"
         )
+        self._hist_btn.setStyleSheet(
+            "QPushButton {"
+            f" background: {theme_manager.c('rgba(52,211,153,0.14)', 'rgba(52,211,153,0.10)')};"
+            " color: #1fbf86;"
+            " border: 1px solid rgba(52,211,153,0.42); border-radius: 11px;"
+            f" padding: 0 14px; font-size: 12px; font-weight: 700; {_FONT}"
+            "}"
+            "QPushButton:hover { background: rgba(52,211,153,0.24); border-color: rgba(52,211,153,0.68); }"
+        )
+        self._new_btn.setIcon(qta.icon("fa5s.plus", color=theme_manager.c("#9fb0c9", "#6d8098")))
+        self._new_btn.setStyleSheet(
+            "QPushButton {"
+            f" background: {theme_manager.c('rgba(255,255,255,0.06)', '#ffffff')};"
+            f" color: {theme_manager.c('#b6c2d6', '#50627a')};"
+            f" border: 1px solid {theme_manager.c('#2f3d52', '#d5deea')}; border-radius: 11px;"
+            f" padding: 0 14px; font-size: 12px; font-weight: 700; {_FONT}"
+            "}"
+            "QPushButton:hover {"
+            f" background: {theme_manager.c('rgba(255,255,255,0.10)', '#f4f8fc')};"
+            f" color: {theme_manager.c('#dbe5f2', '#24344c')};"
+            "}"
+        )
+
+    def _style_resume_bar(self):
+        self._resume_bar.setStyleSheet(
+            "QWidget#dishy-resume-bar {"
+            f" background: {theme_manager.c('rgba(52,211,153,0.12)', 'rgba(52,211,153,0.09)')};"
+            f" border-bottom: 1px solid {theme_manager.c('rgba(52,211,153,0.30)', 'rgba(52,211,153,0.26)')};"
+            "}"
+        )
+        self._resume_lbl.setStyleSheet(
+            f"color: {theme_manager.c('#d0f8e8', '#215642')};"
+            f" font-size: 12px; font-weight: 600; {_FONT}"
+        )
+        self._resume_btn.setStyleSheet(
+            "QPushButton {"
+            " background: rgba(52,211,153,0.20); color: #129768;"
+            " border: 1px solid rgba(52,211,153,0.50); border-radius: 8px;"
+            f" font-size: 12px; font-weight: 700; padding: 0 14px; {_FONT}"
+            "}"
+            "QPushButton:hover { background: rgba(52,211,153,0.30); }"
+        )
+        self._dismiss_resume_btn.setStyleSheet(
+            "QPushButton {"
+            f" background: transparent; color: {theme_manager.c('#95a3ba', '#6b7f95')};"
+            f" border: none; font-size: 12px; font-weight: 600; {_FONT}"
+            "}"
+            "QPushButton:hover { color: #129768; }"
+        )
+
+    def _style_input(self):
         self._input_container.setStyleSheet(
-            f"background: {theme_manager.c('#0b0b0b', '#f6f6f6')};"
-            f" border-top: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.06)')};"
+            "QWidget#dishy-input-wrap {"
+            f" background: {theme_manager.c('#0f1620', '#f3f7fb')};"
+            f" border-top: 1px solid {theme_manager.c('#203046', '#dbe4ef')};"
+            "}"
         )
         self._input_pill.setStyleSheet(
             "QWidget#input-pill {"
-            f" background: {theme_manager.c('rgba(255,255,255,0.04)', '#ffffff')};"
-            " border: 2.5px solid rgba(52,211,153,0.42);"
-            " border-radius: 999px;"
+            f" background: {theme_manager.c('#141e2b', '#ffffff')};"
+            f" border: 1.6px solid {theme_manager.c('rgba(52,211,153,0.52)', 'rgba(52,211,153,0.45)')};"
+            " border-radius: 24px;"
             "}"
         )
         self._input.setStyleSheet(
-            "QLineEdit {"
+            "QPlainTextEdit {"
             " background: transparent; border: none;"
-            f" color: {theme_manager.c('#f0f0f0', '#1a1a1a')};"
-            f" font-size: 14px; {_FONT}"
-            " padding: 0;"
+            f" color: {theme_manager.c('#eef4ff', '#142133')};"
+            f" font-size: 15px; {_FONT}"
+            " padding: 4px 0;"
             "}"
-            "QLineEdit::placeholder {"
-            f" color: {theme_manager.c('#4e4e4e', '#aaaaaa')};"
+            "QPlainTextEdit::placeholder {"
+            f" color: {theme_manager.c('#6f819a', '#8ea0b8')};"
             "}"
         )
+        self._send_btn.setStyleSheet(
+            "QPushButton#send-btn { background: #34d399; border-radius: 22px; border: none; }"
+            "QPushButton#send-btn:hover { background: #2ec48d; }"
+            f"QPushButton#send-btn:disabled {{ background: {theme_manager.c('#2a4a3e', '#b9c8c0')}; }}"
+        )
+        self._input_tip.setStyleSheet(
+            f"color: {theme_manager.c('#7890ad', '#7d92ab')}; font-size: 11px; font-weight: 600; {_FONT}"
+        )
+
+    def _style_quick(self):
+        self._chat_container.setStyleSheet(
+            f"QWidget#dishy-chat-canvas {{ background: {theme_manager.c('#0f1620', '#f3f7fb')}; }}"
+        )
+        self._quick_wrapper.setStyleSheet(
+            "QWidget#dishy-quick-wrapper {"
+            f" background: {theme_manager.c('rgba(20,30,43,0.92)', 'rgba(255,255,255,0.95)')};"
+            f" border-top: 1px solid {theme_manager.c('#203046', '#dbe4ef')};"
+            "}"
+        )
+        self._hint_lbl.setStyleSheet(
+            f"color: {theme_manager.c('#8ea0b8', '#7a8ea8')}; font-size: 11px; font-weight: 700; {_FONT}"
+        )
+        self._refresh_chips_btn.setStyleSheet(
+            "QPushButton {"
+            f" background: {theme_manager.c('rgba(52,211,153,0.12)', 'rgba(52,211,153,0.10)')};"
+            " color: #1fbf86; border: 1px solid rgba(52,211,153,0.42); border-radius: 9px;"
+            f" padding: 0 10px; font-size: 11px; font-weight: 700; {_FONT}"
+            "}"
+            "QPushButton:hover { background: rgba(52,211,153,0.22); border-color: rgba(52,211,153,0.62); }"
+        )
+
+    def apply_theme(self, mode: str):
+        self.setStyleSheet(f"background: {theme_manager.c('#0f1620', '#f3f7fb')};")
+        self._apply_scroll_style()
+        self._style_header()
+        self._style_resume_bar()
+        self._style_quick()
+        self._style_input()
         self._rebuild_quick_prompts()
         # Re-theme existing bubbles without clearing the conversation
         for i in range(self._chat_layout.count()):

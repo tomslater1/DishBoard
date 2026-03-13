@@ -3,11 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const SUPABASE_URL      = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const DAILY_LIMIT       = Number.parseInt(Deno.env.get("CLAUDE_DAILY_LIMIT") ?? "50", 10) || 50;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Authorization, Content-Type, anthropic-version, anthropic-beta, x-api-key",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type, anthropic-version, anthropic-beta",
 };
 
 Deno.serve(async (req: Request) => {
@@ -21,8 +22,20 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  if (!ANTHROPIC_API_KEY || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return new Response(JSON.stringify({ error: "Proxy not configured" }), {
+      status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
+
   // Validate caller's Supabase JWT
-  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!/^Bearer\s+\S+$/i.test(authHeader)) {
+    return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
+      status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
+  const jwt = authHeader.replace(/^Bearer\s+/i, "");
   if (!jwt) {
     return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
       status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
@@ -37,7 +50,78 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // User-scoped client for metering updates via RLS.
+  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+  });
+
+  const usageDate = new Date().toISOString().slice(0, 10); // UTC day
+  const usageNow = new Date().toISOString();
+  let meteringAvailable = true;
+  const usageRes = await userClient
+    .from("ai_usage_daily")
+    .select("id,request_count,blocked_count")
+    .eq("user_id", user.id)
+    .eq("usage_date", usageDate)
+    .limit(1);
+  if (usageRes.error) {
+    meteringAvailable = false;
+    console.warn("AI usage metering unavailable:", usageRes.error.message);
+  }
+
+  const current = meteringAvailable
+    ? ((usageRes.data ?? [])[0] as { request_count: number; blocked_count: number } | undefined)
+    : undefined;
+  const currentCount = Number(current?.request_count ?? 0);
+  if (meteringAvailable && currentCount >= DAILY_LIMIT) {
+    if (current) {
+      await userClient
+        .from("ai_usage_daily")
+        .update({
+          blocked_count: Number(current.blocked_count ?? 0) + 1,
+          updated_at: usageNow,
+        })
+        .eq("user_id", user.id)
+        .eq("usage_date", usageDate);
+    }
+    return new Response(JSON.stringify({ error: `Daily AI request limit reached (${DAILY_LIMIT}/day).` }), {
+      status: 429, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
+
+  if (meteringAvailable && current) {
+    const upd = await userClient
+      .from("ai_usage_daily")
+      .update({
+        request_count: currentCount + 1,
+        updated_at: usageNow,
+      })
+      .eq("user_id", user.id)
+      .eq("usage_date", usageDate);
+    if (upd.error) {
+      meteringAvailable = false;
+      console.warn("AI usage metering update failed:", upd.error.message);
+    }
+  } else if (meteringAvailable) {
+    const ins = await userClient.from("ai_usage_daily").insert({
+      user_id: user.id,
+      usage_date: usageDate,
+      request_count: 1,
+      blocked_count: 0,
+      updated_at: usageNow,
+    });
+    if (ins.error) {
+      meteringAvailable = false;
+      console.warn("AI usage metering insert failed:", ins.error.message);
+    }
+  }
+
   const body = await req.text();
+  if (body.length > 1_000_000) {
+    return new Response(JSON.stringify({ error: "Request body too large" }), {
+      status: 413, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
 
   // Forward to Anthropic with the real key
   const upstreamHeaders: Record<string, string> = {

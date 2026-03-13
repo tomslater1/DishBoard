@@ -1,9 +1,165 @@
-APP_VERSION = "v0.55"
+APP_VERSION = "v0.66"
 
 # ── Version history ───────────────────────────────────────────────────────────
 # Add a new entry here every time a version is released.
 # Each entry: {"version": str, "title": str, "changes": list[str]}
 VERSION_HISTORY = [
+    {
+        "version": "v0.66",
+        "title": "Windows compatibility and cross-platform release tooling",
+        "changes": [
+            "Core runtime paths are now OS-aware in packaged builds (macOS Application Support, Windows APPDATA, Linux local share)",
+            "Added shared platform helpers for font selection, opening files with the default app, and mac-only AppleScript integrations",
+            "Shopping List export now works cross-platform: Notes export on macOS, themed text-file export + auto-open on Windows/Linux",
+            "Meal Planner calendar export now opens generated .ics files with the default calendar app on all desktop platforms",
+            "Updater now selects platform-appropriate release assets (.dmg/.zip on macOS, .exe/.msi/.zip on Windows, Linux package fallbacks)",
+            "PyInstaller spec is now cross-platform with Windows keyring backend/icon support and macOS-only app bundle generation",
+            "Added Windows build scripts (PowerShell + .bat) and aligned pre-release checks for cross-platform execution",
+            "Dishy assistant prompts and help copy were updated to remove mac-only wording where behavior is now cross-platform",
+        ],
+    },
+    {
+        "version": "v0.65.2",
+        "title": "Modern texture pass and safe motion upgrades",
+        "changes": [
+            "Upgraded dark/light theme surfaces with richer gradient textures across app background, sidebar, cards, and meal slots for a cleaner modern look",
+            "Added paint-safe page slide transitions between main views (no QGraphics effects, no QPainter custom rendering)",
+            "Added animated nav icon hover/toggle motion for a more responsive feel while keeping stability",
+            "Added shared motion tokens and a reusable animation helper to make future UI animation work consistent",
+            "Removed the missing 'SF Pro Display' style reference from theme files to reduce startup font fallback overhead",
+        ],
+    },
+    {
+        "version": "v0.65.1",
+        "title": "Analytics visibility, integrity scan, and release safety checks",
+        "changes": [
+            "Monitoring now shows live Analytics Status with connection state, host, and last event timestamp so PostHog setup is easy to verify",
+            "Added one-click Integrity Scan in Monitoring to generate a clear ghost-data and schema-shape report across recipes, planner, shopping, pantry, nutrition, and chat",
+            "Added pre-release verification script (syntax, full tests, startup-health smoke) and wired build.sh to run it automatically before DMG packaging",
+        ],
+    },
+    {
+        "version": "v0.65",
+        "title": "Stability foundation, sync resilience and startup auto-repair",
+        "changes": [
+            "Added startup health checks that automatically clean invalid tombstones, repair stale meal-plan links, and recover stuck background jobs",
+            "Cloud sync service now has resilience controls with exponential retry backoff and a lightweight circuit breaker after repeated failures",
+            "Monitoring page now surfaces sync runtime health (retry state/failure count) with startup repair summary for clearer diagnostics",
+            "Cloud row validation was hardened with household scope guards and stricter sanitization to block malformed or out-of-scope rows",
+            "Backup import now sanitizes/validates recipe, meal-plan, shopping, pantry, and nutrition rows before insertion to reduce ghost-data risk",
+            "Added runtime service registry/event bus scaffolding and expanded automated tests for resilience, startup health, and validators",
+        ],
+    },
+    {
+        "version": "v0.64",
+        "title": "Household sharing, planning automation and data quality suite",
+        "changes": [
+            "Shared Household mode added with create/join/leave flows in Settings so multiple accounts can collaborate in one shared data space",
+            "Cloud/local sync now supports shared household scope with backwards-compatible fallback for non-household accounts and older cloud schema",
+            "Recipes upgraded with Source Trust scoring, Recipe Health Check validation, and bulk actions for tag/favourite/delete workflows",
+            "Shopping List now includes Smart Consolidate to merge duplicates and clean item naming automatically",
+            "Meal Planner now includes Auto-Optimize week planning for faster balanced slot population",
+            "Data controls expanded with Trash Bin recovery and profile-based export formats (full, migration, planning, nutrition)",
+            "Monitoring page now includes sync integrity checks/repair plus pantry expiry risk and waste-value insights",
+            "Pantry and deletion flows now log waste trends and route deletes through recoverable trash-safe operations",
+        ],
+    },
+    {
+        "version": "v0.63",
+        "title": "Dishy nutrition flow, recipe search UX and stability",
+        "changes": [
+            "Web recipe search now has a per-result 'Get Nutrition' action so users can evaluate multiple recipes before saving",
+            "Saving scraped recipes is now gated until Dishy nutrition data is gathered, preventing incomplete recipe entries",
+            "Added a themed blocking Dishy nutrition loading dialog and fixed modal lifecycle so the app returns to normal interaction immediately after completion",
+            "Recipe search cards received a polished UX pass: stronger hierarchy, cleaner controls, and clearer nutrition states (Get Nutrition, Gathering, Ready, Retry)",
+            "Dishy nutrition lookup reliability improved with robust JSON extraction/normalization and fallback parsing for non-perfect model responses",
+            "Nutrition lookup speed improved via cached scrape data, lightweight fast-JSON prompt path, and in-memory nutrition result caching",
+        ],
+    },
+    {
+        "version": "v0.62",
+        "title": "Visual system refresh and cleaner monitoring UI",
+        "changes": [
+            "Refined dark/light theme palettes with improved contrast hierarchy, card depth, and control states across the app",
+            "Monitoring page redesigned into a cleaner, user-facing layout with key health metrics, simpler controls, and collapsible advanced diagnostics",
+            "Added shared UI tokens for buttons, spacing, and surfaces to keep Settings styling more consistent",
+            "Added subtle page fade transitions for smoother navigation between tabs",
+            "Sidebar icons now adapt to theme mode for clearer legibility in both dark and light appearances",
+        ],
+    },
+    {
+        "version": "v0.61",
+        "title": "Feature platform, monitoring, AI limits and smarter search",
+        "changes": [
+            "New Monitoring page in Settings with a clear live view of account data totals, AI usage, notifications, background jobs, telemetry events, and feature flags",
+            "Feature flag system added with global defaults + per-account overrides, plus optional cloud refresh from a Supabase feature_flags table",
+            "In-app notification engine added: pantry expiry alerts (3-day / 1-day / today) and a daily 5pm meal-plan reminder",
+            "Background workflow engine added with recurring jobs for notifications and remote feature-flag refresh",
+            "Daily AI hard limit added at 50 requests/day with enforcement in both app and Supabase Edge Function proxy",
+            "Dishy now injects retrieved memory snippets per prompt for stronger context continuity across recipes, pantry, plans, nutrition, shopping, and prior chat history",
+            "Saved recipe local search upgraded to weighted ranking across title, ingredients, tags, and summary with typo tolerance",
+            "Observability upgraded with local telemetry event logging and optional Sentry/PostHog integration (enabled by default)",
+            "Supabase migration added for ai_usage_daily and feature_flags tables with RLS policies",
+        ],
+    },
+    {
+        "version": "v0.60",
+        "title": "Pantry intelligence, expiry alerts & meal swap",
+        "changes": [
+            "Dishy now knows about items in your pantry that are expiring soon — automatically flagged in context so Dishy can proactively suggest recipes to use them up",
+            "New 'Expiring Soon' banner on the home dashboard — shows items expiring within 3 days with an orange warning; 'Use it up →' button opens a pre-loaded Dishy conversation",
+            "New Dishy quick-prompt chip: 'What can I make with what I have?' — Dishy checks your full My Kitchen inventory and suggests meals from your existing stock",
+            "New Dishy tool: swap_meal_slots — ask Dishy to swap any two meal plan slots, e.g. 'swap Monday dinner and Wednesday dinner'",
+        ],
+    },
+    {
+        "version": "v0.59",
+        "title": "My Kitchen preview on home dashboard",
+        "changes": [
+            "The Favourites card on the home dashboard has been replaced with a live My Kitchen preview",
+            "Shows all pantry, fridge, and freezer items grouped by storage section and category — identical layout to the shopping list preview",
+            "Expiry badges appear on items expiring within 3 days or already expired",
+            "'View →' button navigates directly to My Kitchen",
+            "The card updates instantly whenever items are added, edited, or removed from My Kitchen — no page reload needed",
+        ],
+    },
+    {
+        "version": "v0.58",
+        "title": "Dishy bubble UI redesign",
+        "changes": [
+            "Dishy messages in the floating bubble now show the Dishy avatar — consistent with the full Dishy page",
+            "Typing indicator now includes the Dishy avatar and aligns with chat bubbles",
+            "FAB button updated to gradient green matching the Dishy avatar style",
+            "Panel background updated to card colour (#111111 dark / white light) for app-wide consistency",
+            "Input field is now fully themed — correct background, text, border, and focus ring in both modes",
+            "Close button replaced with an icon button instead of a text character",
+            "Removed the confusing 'tools on/off' badge from the header",
+            "Action confirmation pills are indented to align under Dishy's bubble text",
+            "Panel and input bar corner radius increased to 16px for a softer, modern look",
+            "Scrollbar styled to match the rest of the app in both dark and light mode",
+        ],
+    },
+    {
+        "version": "v0.57",
+        "title": "Responsive layout & windowed mode scaling",
+        "changes": [
+            "Sidebar auto-collapses when the window is narrowed below 940px and re-expands above 1060px",
+            "DishBoard logo icon stays visible at all times — shown at full size (expanded) or small (collapsed)",
+            "Removed Dishy's Tip from the sidebar — frees space for the nav buttons on smaller screens",
+            "Window minimum size reduced to 780×520 — works comfortably in a small windowed view",
+            "Meal Planner, Recipes, and Shopping List minimum size constraints lowered for narrow windows",
+        ],
+    },
+    {
+        "version": "v0.56",
+        "title": "Themed dialogs: custom dark/light popup boxes",
+        "changes": [
+            "All popup dialogs now match the app's dark/light theme — no more native OS chrome",
+            "New ThemedMessageBox component replaces all QMessageBox calls throughout the app",
+            "Update, Migration, Chat History, Add to Calendar, and Add Item dialogs are all now frameless and card-styled",
+            "Dialogs are draggable and include a close button where appropriate",
+        ],
+    },
     {
         "version": "v0.55",
         "title": "Account isolation fixes & meal planner integrity",

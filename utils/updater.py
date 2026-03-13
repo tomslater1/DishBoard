@@ -9,12 +9,21 @@ All network errors are caught silently — never blocks or crashes the app.
 from __future__ import annotations
 
 import requests
+import sys
 
 from utils.version import APP_VERSION
 
 # Update this to your actual GitHub username/repo before first release
 GITHUB_REPO = "tomslater1/dishboard"
 _API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
+
+def _preferred_asset_suffixes() -> list[str]:
+    if sys.platform.startswith("win"):
+        return [".exe", ".msi", ".zip"]
+    if sys.platform == "darwin":
+        return [".dmg", ".zip"]
+    return [".AppImage", ".deb", ".rpm", ".tar.gz", ".zip"]
 
 
 def check_for_update(current: str = APP_VERSION) -> dict | None:
@@ -40,11 +49,17 @@ def check_for_update(current: str = APP_VERSION) -> dict | None:
         if not _version_gt(tag, current.lstrip("v")):
             return None
 
-        # Find the first .dmg asset, fall back to the release HTML page
+        # Pick the best matching installer for the current OS.
         download_url = data.get("html_url", "")
-        for asset in data.get("assets", []):
-            if asset.get("name", "").lower().endswith(".dmg"):
-                download_url = asset["browser_download_url"]
+        suffixes = [s.lower() for s in _preferred_asset_suffixes()]
+        assets = data.get("assets", []) or []
+        for suffix in suffixes:
+            for asset in assets:
+                name = str(asset.get("name", "")).lower()
+                if name.endswith(suffix):
+                    download_url = asset.get("browser_download_url", download_url)
+                    break
+            if download_url != data.get("html_url", ""):
                 break
 
         return {

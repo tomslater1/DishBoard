@@ -1,19 +1,23 @@
 import json
-import subprocess
 import tempfile
 from utils.theme import manager as theme_manager
+from utils.themed_dialog import ThemedMessageBox
 from datetime import datetime, timedelta, date
 
 import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGridLayout, QScrollArea, QSizePolicy, QDialog, QLineEdit, QMessageBox,
-    QStackedWidget,
+    QGridLayout, QScrollArea, QSizePolicy, QDialog, QLineEdit,
+    QStackedWidget, QApplication,
 )
-from PySide6.QtCore import Qt, QSize, QPoint
+from PySide6.QtCore import Qt, QSize, QPoint, QMimeData
+from PySide6.QtGui import QDrag, QPixmap, QPainter, QBrush, QColor
 
 from api.claude_ai import ClaudeAI
 from models.database import Database
+from utils.data_service import get_db
+from utils.meal_optimizer import optimize_week
+from utils.platform_ops import open_path_in_default_app
 from utils.workers import run_async
 from widgets.primary_button import PrimaryButton
 
@@ -24,6 +28,7 @@ MEALS = [
     ("breakfast", "Breakfast", "fa5s.egg"),
     ("lunch",     "Lunch",     "fa5s.utensils"),
     ("dinner",    "Dinner",    "fa5s.concierge-bell"),
+    ("snack",     "Snack",     "fa5s.apple-alt"),
 ]
 
 # Colour accent per meal band
@@ -31,6 +36,7 @@ MEAL_BAND = {
     "breakfast": "#ff9a5c",
     "lunch":     "#34d399",
     "dinner":    "#60a5fa",
+    "snack":     "#f0a500",
 }
 
 # ICS event start/end times per meal
@@ -38,6 +44,7 @@ MEAL_TIMES = {
     "breakfast": ("080000", "090000"),
     "lunch":     ("120000", "130000"),
     "dinner":    ("180000", "190000"),
+    "snack":     ("153000", "160000"),
 }
 
 # Tags that surface first in the picker for each meal type
@@ -234,9 +241,20 @@ class MealPickerDialog(QDialog):
 
     def _load_recipes(self):
         try:
-            rows = self._db.get_saved_recipes()
+            all_rows = self._db.get_saved_recipes()
         except Exception:
-            rows = []
+            all_rows = []
+
+        # Filter to only recipes tagged for this meal type
+        meal_tag = self._meal_type.capitalize()  # "Breakfast", "Lunch", "Dinner", "Snack"
+        rows = []
+        for row in all_rows:
+            try:
+                tags = json.loads(row["data_json"] or "{}").get("tags", [])
+                if meal_tag in tags:
+                    rows.append(row)
+            except Exception:
+                pass
 
         priority_tags = _MEAL_PRIORITY_TAGS.get(self._meal_type, [])
 
@@ -254,9 +272,19 @@ class MealPickerDialog(QDialog):
             self._add_recipe_row(recipe_row)
 
         if not rows:
-            empty = QLabel("No saved recipes yet — head to the Recipes tab to save some!")
-            empty.setStyleSheet(f"color: {theme_manager.c('#888888', '#666666')}; font-size: 12px; background: transparent;")
+            msg = (
+                f"No {meal_tag} recipes yet.\n"
+                f"Tag a recipe with '{meal_tag}' in the Recipes tab to see it here."
+                if all_rows else
+                "No saved recipes yet — head to the Recipes tab to add some!"
+            )
+            empty = QLabel(msg)
+            empty.setStyleSheet(
+                f"color: {theme_manager.c('#888888', '#666666')}; font-size: 12px;"
+                " background: transparent;"
+            )
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty.setWordWrap(True)
             self._recipes_layout.addWidget(empty)
 
         self._recipes_layout.addStretch()
@@ -359,15 +387,7 @@ class MealRowLabel(QWidget):
         super().__init__(parent)
         band_colour = MEAL_BAND.get(meal_type, "#ff6b35")
         self.setFixedWidth(88)
-
-        r_map = {"breakfast": (255, 154, 92), "lunch": (52, 211, 153), "dinner": (96, 165, 250)}
-        r, g, b = r_map.get(meal_type, (255, 107, 53))
-        self.setStyleSheet(
-            f"background-color: {theme_manager.c(f'rgba({r},{g},{b},0.07)', f'rgba({r},{g},{b},0.09)')};"
-            " border-radius: 10px;"
-            f" border: 1px solid {theme_manager.c(f'rgba({r},{g},{b},0.18)', f'rgba({r},{g},{b},0.22)')};"
-            f" border-left: 3px solid {band_colour};"
-        )
+        self.setStyleSheet("background: transparent; border: none;")
 
         vl = QVBoxLayout(self)
         vl.setContentsMargins(0, 0, 0, 0)
@@ -448,18 +468,22 @@ class DayHeader(QWidget):
 class MealSlot(QWidget):
     """A single meal cell — colour-coded by meal type, shows name prominently."""
 
-    def __init__(self, day: str, meal_type: str, on_click, on_open_recipe=None, parent=None):
+    def __init__(self, day: str, meal_type: str, on_click, on_open_recipe=None,
+                 on_drop=None, parent=None):
         super().__init__(parent)
         self._day = day
         self._meal_type = meal_type
         self._on_click = on_click
         self._on_open_recipe = on_open_recipe
+        self._on_drop = on_drop
         self._meal_name = ""
         self._recipe_id: int | None = None
+        self._drag_start_pos: QPoint | None = None
         self.setObjectName("meal-slot")
         self.setMinimumHeight(130)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAcceptDrops(True)
         self._build()
 
     def _build(self):
@@ -538,7 +562,7 @@ class MealSlot(QWidget):
         outer.addWidget(content, 1)
 
     def _band_rgb(self) -> str:
-        r_map = {"breakfast": "255,154,92", "lunch": "52,211,153", "dinner": "96,165,250"}
+        r_map = {"breakfast": "255,154,92", "lunch": "52,211,153", "dinner": "96,165,250", "snack": "240,165,0"}
         return r_map.get(self._meal_type, "255,107,53")
 
     def _open_recipe(self):
@@ -557,6 +581,7 @@ class MealSlot(QWidget):
             strip_c = colour if colour else MEAL_BAND.get(self._meal_type, "#ff6b35")
             self._strip.setStyleSheet(f"background-color: {strip_c};")
             self._recipe_btn.setVisible(recipe_id is not None)
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             self._name_lbl.setText("Add meal")
             self._name_lbl.setStyleSheet(
@@ -567,14 +592,81 @@ class MealSlot(QWidget):
                 f"background-color: {theme_manager.c('#1a1a1a', '#d5d5d5')};"
             )
             self._recipe_btn.setVisible(False)
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def current_name(self) -> str:
         return self._meal_name
 
+    # ── Mouse / drag ──────────────────────────────────────────────────────────
+
     def mousePressEvent(self, event):
-        if not self._meal_name:
-            self._on_click(self._day, self._meal_type, self._meal_name)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+            if not self._meal_name:
+                self._on_click(self._day, self._meal_type, self._meal_name)
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.MouseButton.LeftButton) or not self._meal_name:
+            return
+        if self._drag_start_pos is None:
+            return
+        dist = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
+        if dist < QApplication.startDragDistance():
+            return
+
+        drag = QDrag(self)
+        mime = QMimeData()
+        rid = str(self._recipe_id) if self._recipe_id is not None else ""
+        mime.setText(f"{self._day}|{self._meal_type}|{self._meal_name}|{rid}")
+        drag.setMimeData(mime)
+
+        # Build a drag ghost pill
+        band_c = MEAL_BAND.get(self._meal_type, "#ff6b35")
+        pix = QPixmap(220, 38)
+        pix.fill(QColor(0, 0, 0, 0))
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        c = QColor(band_c)
+        c.setAlpha(210)
+        p.setBrush(QBrush(c))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawRoundedRect(0, 0, 220, 38, 8, 8)
+        p.setPen(QColor("#ffffff"))
+        f = p.font()
+        f.setPixelSize(13)
+        f.setBold(True)
+        p.setFont(f)
+        display = self._meal_name[:28] + ("…" if len(self._meal_name) > 28 else "")
+        p.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, display)
+        p.end()
+        drag.setPixmap(pix)
+        drag.setHotSpot(QPoint(110, 19))
+        drag.exec(Qt.DropAction.MoveAction)
+        self._drag_start_pos = None
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText() and event.source() is not self:
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasText() and event.source() is not self:
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasText() or event.source() is self:
+            return
+        parts = event.mimeData().text().split("|")
+        if len(parts) != 4:
+            return
+        src_day, src_meal_type, src_meal_name, src_rid = parts
+        src_recipe_id = int(src_rid) if src_rid else None
+        if self._on_drop:
+            self._on_drop(
+                src_day, src_meal_type, src_meal_name, src_recipe_id,
+                self._day, self._meal_type, self._meal_name, self._recipe_id,
+            )
+        event.acceptProposedAction()
 
 
 def _meta_chip(icon_name: str, text: str, colour: str = "#4caf8a") -> QWidget:
@@ -603,13 +695,12 @@ def _meta_chip(icon_name: str, text: str, colour: str = "#4caf8a") -> QWidget:
 # ── Main view ─────────────────────────────────────────────────────────────────
 
 class MealPlannerView(QWidget):
-    def __init__(self, navigate_to=None, shopping_view=None, parent=None):
+    def __init__(self, navigate_to=None, shopping_view=None, db: Database | None = None, parent=None):
         super().__init__(parent)
         self.setObjectName("view-container")
         self._navigate_to = navigate_to or (lambda i: None)
         self._shopping_view = shopping_view
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._week_start = _week_start_from(datetime.now().date())
         self._slots: dict[tuple, MealSlot] = {}
         self._ask_dishy_fn = None       # set by MainWindow via set_ask_dishy()
@@ -652,7 +743,7 @@ class MealPlannerView(QWidget):
         # ── Page 0: planner grid ─────────────────────────────────────────────
         planner_page = QWidget()
         planner_page.setObjectName("view-container")
-        planner_page.setMinimumWidth(700)  # keeps nav bar readable at small window widths
+        planner_page.setMinimumWidth(500)  # keeps nav bar readable at small window widths
 
         outer = QVBoxLayout(planner_page)
         outer.setContentsMargins(28, 28, 28, 20)
@@ -712,6 +803,14 @@ class MealPlannerView(QWidget):
         self._dishy_btn.setToolTip("Let Dishy auto-fill the whole week's meal plan")
         self._dishy_btn.clicked.connect(self._fill_with_dishy)
 
+        self._opt_btn = QPushButton("  Optimize Week")
+        self._opt_btn.setObjectName("ghost-btn")
+        self._opt_btn.setIcon(qta.icon("fa5s.chart-line", color="#34d399"))
+        self._opt_btn.setIconSize(QSize(13, 13))
+        self._opt_btn.setFixedHeight(36)
+        self._opt_btn.setToolTip("Fill empty slots with a balanced, pantry-aware plan")
+        self._opt_btn.clicked.connect(self._auto_optimize_week)
+
         ask_dishy_btn = QPushButton("  Ask Dishy")
         ask_dishy_btn.setObjectName("ghost-btn")
         ask_dishy_btn.setIcon(qta.icon("fa5s.robot", color="#34d399"))
@@ -735,6 +834,7 @@ class MealPlannerView(QWidget):
         nav.addWidget(today_btn)
         nav.addWidget(shop_btn)
         nav.addWidget(self._dishy_btn)
+        nav.addWidget(self._opt_btn)
         nav.addWidget(ask_dishy_btn)
         nav.addWidget(cal_btn)
         outer.addLayout(nav)
@@ -803,6 +903,7 @@ class MealPlannerView(QWidget):
                     day, meal_type,
                     on_click=self._on_slot_clicked,
                     on_open_recipe=self._show_recipe_detail,
+                    on_drop=self._on_slot_drop,
                 )
                 self._slots[(day, meal_type)] = slot
                 self._grid_layout.addWidget(slot, row + 1, col + 1)
@@ -1114,6 +1215,76 @@ class MealPlannerView(QWidget):
             if self._sync_fn:
                 self._sync_fn()
 
+    # ── Drag-and-drop handler ─────────────────────────────────────────────────
+
+    def _get_recipe_colour(self, recipe_id: int | None) -> str:
+        if not recipe_id:
+            return ""
+        try:
+            r = self._db.conn.execute(
+                "SELECT data_json FROM recipes WHERE id=?", (recipe_id,)
+            ).fetchone()
+            if r:
+                return json.loads(r["data_json"] or "{}").get("colour", "")
+        except Exception:
+            pass
+        return ""
+
+    def _on_slot_drop(self,
+                      src_day: str, src_meal_type: str,
+                      src_name: str, src_rid: int | None,
+                      dst_day: str, dst_meal_type: str,
+                      dst_name: str, dst_rid: int | None):
+        if src_day == dst_day and src_meal_type == dst_meal_type:
+            return
+        src_slot = self._slots.get((src_day, src_meal_type))
+        dst_slot = self._slots.get((dst_day, dst_meal_type))
+        if not src_slot:
+            return
+        week_start = self._week_start.isoformat()
+
+        do_move = False
+        do_swap = False
+
+        if dst_name:
+            result = ThemedMessageBox.show_buttons(
+                self, "Move Meal",
+                f"<b>{dst_name}</b> is already in {dst_day} {dst_meal_type.capitalize()}.<br><br>"
+                "What would you like to do?",
+                ["Cancel", "Replace", "Swap"],
+                kind="question",
+            )
+            if result == "Swap":
+                do_swap = True
+            elif result == "Replace":
+                do_move = True
+            # else Cancel — do nothing
+        else:
+            do_move = True
+
+        if do_swap:
+            self._db.set_meal_slot(week_start, src_day, src_meal_type,
+                                   custom_name=dst_name, recipe_id=dst_rid)
+            self._db.set_meal_slot(week_start, dst_day, dst_meal_type,
+                                   custom_name=src_name, recipe_id=src_rid)
+            src_slot.set_meal(dst_name, self._get_recipe_colour(dst_rid), recipe_id=dst_rid)
+            if dst_slot:
+                dst_slot.set_meal(src_name, self._get_recipe_colour(src_rid), recipe_id=src_rid)
+        elif do_move:
+            self._db.clear_meal_slot(week_start, src_day, src_meal_type)
+            self._db.set_meal_slot(week_start, dst_day, dst_meal_type,
+                                   custom_name=src_name, recipe_id=src_rid)
+            src_slot.set_meal("")
+            if dst_slot:
+                dst_slot.set_meal(src_name, self._get_recipe_colour(src_rid), recipe_id=src_rid)
+        else:
+            return  # cancelled
+
+        if self._nutrition_refresh_fn:
+            self._nutrition_refresh_fn()
+        if self._sync_fn:
+            self._sync_fn()
+
     # ── Week navigation ───────────────────────────────────────────────────────
 
     def _prev_week(self):
@@ -1153,10 +1324,7 @@ class MealPlannerView(QWidget):
                 items.append(row["custom_name"])
 
         if not items:
-            QMessageBox.information(
-                self, "Nothing to add",
-                "No meals are planned for this week yet.",
-            )
+            ThemedMessageBox.information(self, "Nothing to add", "No meals are planned for this week yet.")
             return
 
         seen: set = set()
@@ -1209,6 +1377,35 @@ class MealPlannerView(QWidget):
             on_error=self._on_dishy_error,
         )
 
+    def _auto_optimize_week(self):
+        self._opt_btn.setEnabled(False)
+        self._opt_btn.setText("  Optimizing…")
+        try:
+            result = optimize_week(self._db, self._week_start.isoformat(), refill_all=False)
+            assigned = int(result.get("assigned", 0) or 0)
+            self.refresh()
+            if self._nutrition_refresh_fn:
+                self._nutrition_refresh_fn()
+            if self._sync_fn:
+                self._sync_fn()
+            if assigned > 0:
+                ThemedMessageBox.information(
+                    self,
+                    "Week optimized",
+                    f"Updated {assigned} slot(s) using pantry-aware macro balancing.",
+                )
+            else:
+                ThemedMessageBox.information(
+                    self,
+                    "Nothing to optimize",
+                    "No updates were needed for this week.",
+                )
+        except Exception as exc:
+            ThemedMessageBox.warning(self, "Optimize Week failed", str(exc)[:320])
+        finally:
+            self._opt_btn.setEnabled(True)
+            self._opt_btn.setText("  Optimize Week")
+
     def _on_dishy_plan(self, plan: dict):
         filled = 0
         for day in DAYS:
@@ -1231,13 +1428,13 @@ class MealPlannerView(QWidget):
         self._dishy_btn.setEnabled(True)
 
         if filled:
-            QMessageBox.information(
+            ThemedMessageBox.information(
                 self, "Dishy filled your week!",
                 f"Added {filled} meal suggestion{'s' if filled != 1 else ''} "
                 f"to empty slots.\n\nExisting meals were left untouched.",
             )
         else:
-            QMessageBox.information(
+            ThemedMessageBox.information(
                 self, "Week already full",
                 "All slots are already filled — clear some meals first if you'd like Dishy to suggest new ones.",
             )
@@ -1245,7 +1442,7 @@ class MealPlannerView(QWidget):
     def _on_dishy_error(self, err: str):
         self._dishy_btn.setText("  Fill Week")
         self._dishy_btn.setEnabled(True)
-        QMessageBox.warning(
+        ThemedMessageBox.warning(
             self, "Dishy couldn't generate a plan",
             "Something went wrong — check your API key and connection.\n\n"
             + err[:300],
@@ -1303,10 +1500,7 @@ class MealPlannerView(QWidget):
             event_count += 1
 
         if event_count == 0:
-            QMessageBox.information(
-                self, "Nothing to export",
-                "No meals are planned for this week yet.",
-            )
+            ThemedMessageBox.information(self, "Nothing to export", "No meals are planned for this week yet.")
             return
 
         ics_lines.append("END:VCALENDAR")
@@ -1318,9 +1512,8 @@ class MealPlannerView(QWidget):
                 f.write("\r\n".join(ics_lines) + "\r\n")
                 tmp_path = f.name
 
-            subprocess.run(["open", tmp_path], check=True)
+            ok, err = open_path_in_default_app(tmp_path)
+            if not ok:
+                raise RuntimeError(err or "Could not open calendar file")
         except Exception as e:
-            QMessageBox.warning(
-                self, "Export failed",
-                f"Could not open Calendar:\n{e}",
-            )
+            ThemedMessageBox.warning(self, "Export failed", f"Could not open Calendar:\n{e}")

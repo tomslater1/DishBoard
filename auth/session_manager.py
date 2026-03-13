@@ -1,8 +1,8 @@
 """
-Session persistence for DishBoard using macOS Keychain (via the keyring library).
+Session persistence for DishBoard using OS credential storage (via keyring).
 
-The Supabase access + refresh tokens are stored as JSON under the DishBoard
-Keychain entry so the user stays logged in between app restarts.
+The Supabase access + refresh tokens are stored as JSON in the system keyring
+so the user stays logged in between app restarts.
 
 Thread-safe: all methods are blocking and do not touch Qt.  Call
 get_current_user() from the main thread at startup (before QApplication runs)
@@ -24,10 +24,10 @@ _SENSITIVE_SETTING_KEYS = {
 }
 
 
-# ── Keychain helpers ──────────────────────────────────────────────────────────
+# ── Credential-store helpers ──────────────────────────────────────────────────
 
 def save_session(session_dict: dict) -> None:
-    """Serialise session to JSON and store in macOS Keychain."""
+    """Serialise session to JSON and store in the OS keyring."""
     try:
         import keyring
         keyring.set_password(
@@ -52,7 +52,7 @@ def load_session() -> dict | None:
 
 
 def clear_session() -> None:
-    """Delete the session from Keychain (call on logout)."""
+    """Delete the session from the OS keyring (call on logout)."""
     try:
         import keyring
         keyring.delete_password(_KEYCHAIN_SERVICE, _KEYCHAIN_USERNAME)

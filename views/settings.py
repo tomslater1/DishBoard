@@ -4,13 +4,42 @@ import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QLineEdit, QCheckBox,
-    QFrame, QMessageBox, QFileDialog, QStackedWidget,
+    QFrame, QFileDialog, QStackedWidget,
 )
 from PySide6.QtCore import Qt, QSize, Signal
 
 from models.database import Database
+from utils.data_service import get_db
+from utils.data_validators import sanitize_import_row
 from utils.theme import manager
+from utils.themed_dialog import ThemedMessageBox
 from utils.version import APP_VERSION, VERSION_HISTORY
+from utils.recipe_health import validate_recipe
+from utils.ui_tokens import (
+    checkbox_style as _checkbox_style,
+    primary_button_style as _primary_button_style,
+    secondary_button_style as _secondary_button_style,
+    subtle_surface_style as _subtle_surface_style,
+)
+from views.settings_helpers import (
+    make_sep as _make_sep,
+    selector_style as _selector_style,
+    card_widget as _card_widget,
+)
+
+
+def _danger_button_style() -> str:
+    return (
+        "QPushButton {"
+        "  background-color: rgba(220,53,69,0.10); color: #dc3545;"
+        "  border: 1px solid rgba(220,53,69,0.35); border-radius: 10px;"
+        "  font-size: 13px; font-weight: 600; padding: 0 14px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: rgba(220,53,69,0.18); border-color: rgba(220,53,69,0.55);"
+        "}"
+        "QPushButton:disabled { color: #9a5b64; border-color: rgba(220,53,69,0.14); background-color: rgba(220,53,69,0.04); }"
+    )
 
 
 # ── Page: Account ─────────────────────────────────────────────────────────────
@@ -23,6 +52,9 @@ class _AccountPage(QWidget):
         super().__init__(parent)
         self._user: dict | None = None
         self._sync_service = None
+        self._bound_sync_service = None
+        self._household_controls_enabled = False
+        self._db = get_db()
         self._build()
 
     def _build(self):
@@ -72,13 +104,7 @@ class _AccountPage(QWidget):
         self._signin_btn = QPushButton("Sign in / Create Account")
         self._signin_btn.setFixedHeight(40)
         self._signin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._signin_btn.setStyleSheet(
-            "QPushButton {"
-            "  background: #ff6b35; color: #ffffff;"
-            "  border-radius: 8px; font-size: 13px; font-weight: 700; border: none;"
-            "}"
-            "QPushButton:hover { background: #e05a28; }"
-        )
+        self._signin_btn.setStyleSheet(_primary_button_style())
         self._signin_btn.clicked.connect(self.sign_in_requested.emit)
         id_layout.addWidget(self._signin_btn)
         self._signin_btn.setVisible(False)
@@ -132,12 +158,135 @@ class _AccountPage(QWidget):
             "}"
             "QPushButton:disabled { color: #2a6b52; border-color: rgba(52,211,153,0.15); background-color: rgba(52,211,153,0.04); }"
         )
+        self._sync_now_btn.setToolTip("Force a cloud sync now")
         self._sync_now_btn.clicked.connect(self._on_sync_now)
 
         sync_row.addLayout(sync_col, 1)
         sync_row.addWidget(self._sync_now_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         sync_layout.addLayout(sync_row)
         outer.addWidget(sync_card)
+
+        # ── Household sharing card ────────────────────────────────────────────
+        hh_card = _card_widget()
+        hh_layout = QVBoxLayout(hh_card)
+        hh_layout.setSpacing(12)
+
+        hh_title = QLabel("Shared Household")
+        hh_title.setObjectName("card-title")
+        hh_layout.addWidget(hh_title)
+        hh_layout.addWidget(_make_sep())
+
+        self._hh_status_box = QWidget()
+        st_l = QVBoxLayout(self._hh_status_box)
+        st_l.setContentsMargins(12, 10, 12, 10)
+        st_l.setSpacing(4)
+
+        self._hh_status_lbl = QLabel("Not in a shared household")
+        self._hh_status_lbl.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {manager.c('#e0e0e0', '#1a1a1a')};"
+            " background: transparent;"
+        )
+        st_l.addWidget(self._hh_status_lbl)
+
+        self._hh_sub_lbl = QLabel(
+            "Share recipes, meal plans, shopping, nutrition and kitchen data across family accounts."
+        )
+        self._hh_sub_lbl.setWordWrap(True)
+        self._hh_sub_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#666', '#888')}; background: transparent;"
+        )
+        st_l.addWidget(self._hh_sub_lbl)
+
+        self._hh_code_lbl = QLabel("")
+        self._hh_code_lbl.setStyleSheet(
+            "font-size: 12px; color: #34d399; background: transparent; border: none; font-weight: 700;"
+        )
+        self._hh_code_lbl.setVisible(False)
+        st_l.addWidget(self._hh_code_lbl)
+        hh_layout.addWidget(self._hh_status_box)
+
+        self._hh_hint_lbl = QLabel(
+            "Create a household to generate an invite code, or join one using an invite code."
+        )
+        self._hh_hint_lbl.setWordWrap(True)
+        self._hh_hint_lbl.setStyleSheet(
+            f"font-size: 11px; color: {manager.c('#6f6f6f', '#7f7f7f')}; background: transparent;"
+        )
+        hh_layout.addWidget(self._hh_hint_lbl)
+
+        self._hh_create_box = QWidget()
+        ct_l = QVBoxLayout(self._hh_create_box)
+        ct_l.setContentsMargins(12, 10, 12, 10)
+        ct_l.setSpacing(8)
+        hh_ctrl_h = 38
+        self._hh_create_lbl = QLabel("Create a new household")
+        self._hh_create_lbl.setStyleSheet(
+            f"font-size: 11px; font-weight: 600; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+        ct_l.addWidget(self._hh_create_lbl)
+        row_top = QHBoxLayout()
+        row_top.setContentsMargins(0, 0, 0, 0)
+        row_top.setSpacing(10)
+        self._hh_name_input = QLineEdit()
+        self._hh_name_input.setPlaceholderText("Household name")
+        self._hh_name_input.setFixedHeight(hh_ctrl_h)
+        self._hh_create_btn = QPushButton("Create")
+        self._hh_create_btn.setFixedHeight(hh_ctrl_h)
+        self._hh_create_btn.setFixedWidth(120)
+        self._hh_create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hh_create_btn.setToolTip("Start a new shared household")
+        self._hh_create_btn.clicked.connect(self._create_household)
+        row_top.addWidget(self._hh_name_input, 1)
+        row_top.addWidget(self._hh_create_btn)
+        ct_l.addLayout(row_top)
+        hh_layout.addWidget(self._hh_create_box)
+
+        self._hh_join_box = QWidget()
+        jn_l = QVBoxLayout(self._hh_join_box)
+        jn_l.setContentsMargins(12, 10, 12, 10)
+        jn_l.setSpacing(8)
+        self._hh_join_lbl = QLabel("Join with an invite code")
+        self._hh_join_lbl.setStyleSheet(
+            f"font-size: 11px; font-weight: 600; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+        jn_l.addWidget(self._hh_join_lbl)
+        row_join = QHBoxLayout()
+        row_join.setContentsMargins(0, 0, 0, 0)
+        row_join.setSpacing(10)
+        self._hh_join_input = QLineEdit()
+        self._hh_join_input.setPlaceholderText("Invite code")
+        self._hh_join_input.setFixedHeight(hh_ctrl_h)
+        self._hh_join_input.setMaxLength(16)
+        self._hh_join_input.textChanged.connect(self._on_household_code_changed)
+        self._hh_join_btn = QPushButton("Join")
+        self._hh_join_btn.setFixedHeight(hh_ctrl_h)
+        self._hh_join_btn.setFixedWidth(120)
+        self._hh_join_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hh_join_btn.setToolTip("Join someone else's shared household")
+        self._hh_join_btn.clicked.connect(self._join_household)
+        row_join.addWidget(self._hh_join_input, 1)
+        row_join.addWidget(self._hh_join_btn)
+        jn_l.addLayout(row_join)
+        hh_layout.addWidget(self._hh_join_box)
+
+        # Keep Create/Join visually identical at initial render.
+        _hh_action_style = _secondary_button_style()
+        self._hh_join_btn.setStyleSheet(_hh_action_style)
+        self._hh_create_btn.setStyleSheet(self._hh_join_btn.styleSheet())
+
+        row_leave = QHBoxLayout()
+        row_leave.setContentsMargins(0, 4, 0, 0)
+        row_leave.setSpacing(8)
+        self._hh_leave_btn = QPushButton("Leave Household")
+        self._hh_leave_btn.setFixedHeight(hh_ctrl_h)
+        self._hh_leave_btn.setMinimumWidth(140)
+        self._hh_leave_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hh_leave_btn.setToolTip("Leave the current shared household")
+        self._hh_leave_btn.clicked.connect(self._leave_household)
+        row_leave.addWidget(self._hh_leave_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        row_leave.addStretch()
+        hh_layout.addLayout(row_leave)
+        outer.addWidget(hh_card)
 
         # ── Sign-out card ──────────────────────────────────────────────────────
         so_card = _card_widget()
@@ -172,17 +321,7 @@ class _AccountPage(QWidget):
         self._signout_btn.setMinimumWidth(110)
         self._signout_btn.setEnabled(False)
         self._signout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._signout_btn.setStyleSheet(
-            "QPushButton {"
-            "  background-color: rgba(220,53,69,0.1); color: #dc3545;"
-            "  border: 1px solid rgba(220,53,69,0.35); border-radius: 8px;"
-            "  font-size: 13px; font-weight: 600; padding: 0 14px;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: rgba(220,53,69,0.2); border-color: rgba(220,53,69,0.6);"
-            "}"
-            "QPushButton:disabled { color: #6b2a30; border-color: rgba(220,53,69,0.15); background-color: rgba(220,53,69,0.04); }"
-        )
+        self._signout_btn.setStyleSheet(_danger_button_style())
         self._signout_btn.clicked.connect(self._on_sign_out)
 
         so_row.addLayout(so_col, 1)
@@ -228,10 +367,12 @@ class _AccountPage(QWidget):
 
         outer.addWidget(ai_card)
         outer.addStretch()
+        self._set_household_enabled(False)
 
     def set_user(self, user: dict | None, sync_service) -> None:
         self._user = user
         self._sync_service = sync_service
+        self._bind_sync_service(sync_service)
 
         if user and not user.get("_network_unavailable") and not user.get("offline"):
             self._email_lbl.setText(user.get("email", "Signed in"))
@@ -241,6 +382,7 @@ class _AccountPage(QWidget):
             self._sync_now_btn.setEnabled(sync_service is not None)
             self._signout_btn.setEnabled(True)
             self._signin_btn.setVisible(False)
+            self._set_household_enabled(True)
         elif user:
             # Signed in but network unavailable at startup
             self._email_lbl.setText(user.get("email", "Signed in"))
@@ -250,6 +392,7 @@ class _AccountPage(QWidget):
             self._sync_now_btn.setEnabled(False)
             self._signout_btn.setEnabled(True)
             self._signin_btn.setVisible(False)
+            self._set_household_enabled(False)
         else:
             self._email_lbl.setText("Not signed in")
             self._status_lbl.setText("Sign in to use DishBoard")
@@ -258,103 +401,162 @@ class _AccountPage(QWidget):
             self._sync_now_btn.setEnabled(False)
             self._signout_btn.setEnabled(False)
             self._signin_btn.setVisible(True)
+            self._set_household_enabled(False)
+
+        self._refresh_household_ui()
 
     def _on_sync_now(self):
         if self._sync_service:
             self._sync_now_btn.setEnabled(False)
             self._sync_status_lbl.setText("Syncing…")
-
-            def _done(pushed, pulled):
-                self._sync_status_lbl.setText("Syncing across devices")
-                self._sync_now_btn.setEnabled(True)
-
-            self._sync_service.sync_finished.connect(_done)
             self._sync_service.sync_now()
 
+    def _bind_sync_service(self, sync_service) -> None:
+        """Connect sync status slots once per service instance."""
+        if self._bound_sync_service is sync_service:
+            return
+        if self._bound_sync_service is not None:
+            try:
+                self._bound_sync_service.sync_finished.disconnect(self._on_sync_finished)
+            except Exception:
+                pass
+            try:
+                self._bound_sync_service.sync_error.disconnect(self._on_sync_error)
+            except Exception:
+                pass
+
+        self._bound_sync_service = sync_service
+        if sync_service is None:
+            return
+        sync_service.sync_finished.connect(self._on_sync_finished)
+        sync_service.sync_error.connect(self._on_sync_error)
+
+    def _on_sync_finished(self, _pushed: int, _pulled: int) -> None:
+        self._sync_status_lbl.setText("Syncing across devices")
+        if self._user and not self._user.get("_network_unavailable") and not self._user.get("offline"):
+            self._sync_now_btn.setEnabled(True)
+        self._refresh_household_ui()
+
+    def _on_sync_error(self, _err: str) -> None:
+        self._sync_status_lbl.setText("Sync temporarily unavailable")
+        if self._user and self._sync_service:
+            self._sync_now_btn.setEnabled(True)
+
+    def _set_household_enabled(self, enabled: bool) -> None:
+        self._household_controls_enabled = bool(enabled)
+        self._refresh_household_ui()
+
+    def _refresh_household_ui(self) -> None:
+        from utils.households import status as _hh_status
+
+        st = _hh_status(self._db)
+        if st["is_shared"]:
+            role = st.get("household_role", "member").capitalize()
+            name = st.get("household_name", "") or "Shared Household"
+            self._hh_status_lbl.setText(f"{name} ({role})")
+            code = st.get("invite_code", "")
+            self._hh_code_lbl.setText(f"Invite code: {code}" if code else "")
+            self._hh_code_lbl.setVisible(bool(code))
+            self._hh_sub_lbl.setText("Shared mode is active. Changes sync to everyone in this household.")
+            self._hh_leave_btn.setVisible(True)
+        else:
+            self._hh_status_lbl.setText("Not in a shared household")
+            self._hh_code_lbl.setText("")
+            self._hh_code_lbl.setVisible(False)
+            self._hh_sub_lbl.setText(
+                "Share recipes, meal plans, shopping, nutrition and kitchen data across family accounts."
+            )
+            self._hh_leave_btn.setVisible(False)
+
+        can_manage_private = self._household_controls_enabled and not st["is_shared"]
+        self._hh_name_input.setEnabled(can_manage_private)
+        self._hh_create_btn.setEnabled(can_manage_private)
+        self._hh_join_input.setEnabled(can_manage_private)
+        self._hh_join_btn.setEnabled(
+            can_manage_private and bool(self._hh_join_input.text().strip())
+        )
+        self._hh_leave_btn.setEnabled(self._household_controls_enabled and st["is_shared"])
+
+    def _create_household(self) -> None:
+        from utils.households import create_household
+
+        if not self._user:
+            return
+        name = self._hh_name_input.text().strip() or "My Household"
+        ok, msg, _st = create_household(self._db, name=name)
+        if ok:
+            ThemedMessageBox.information(
+                self,
+                "Household created",
+                "Shared household is active.\nUse the invite code to add family members.",
+            )
+            if self._sync_service:
+                self._sync_service.sync_now()
+        else:
+            ThemedMessageBox.warning(self, "Could not create household", msg)
+        self._refresh_household_ui()
+
+    def _join_household(self) -> None:
+        from utils.households import join_household
+
+        if not self._user:
+            return
+        code = self._hh_join_input.text().strip()
+        if not code:
+            ThemedMessageBox.information(self, "Join household", "Enter an invite code first.")
+            return
+        ok, msg, _st = join_household(self._db, invite_code=code)
+        if ok:
+            self._hh_join_input.clear()
+            ThemedMessageBox.information(
+                self,
+                "Joined household",
+                "You are now in shared mode.\nYour app data will sync with this household.",
+            )
+            if self._sync_service:
+                self._sync_service.sync_now()
+        else:
+            ThemedMessageBox.warning(self, "Could not join household", msg)
+        self._refresh_household_ui()
+
+    def _leave_household(self) -> None:
+        from utils.households import leave_household
+
+        if not self._user:
+            return
+        if not ThemedMessageBox.confirm(
+            self,
+            "Leave household?",
+            "You will return to a private account space.\nShared household data will stop syncing.",
+            confirm_text="Leave household",
+        ):
+            return
+        ok, msg, _st = leave_household(self._db)
+        if ok:
+            ThemedMessageBox.information(self, "Household updated", msg)
+            if self._sync_service:
+                self._sync_service.sync_now()
+        else:
+            ThemedMessageBox.warning(self, "Could not leave household", msg)
+        self._refresh_household_ui()
+
+    def _on_household_code_changed(self, text: str) -> None:
+        upper = (text or "").upper()
+        if upper != text:
+            self._hh_join_input.blockSignals(True)
+            self._hh_join_input.setText(upper)
+            self._hh_join_input.blockSignals(False)
+        self._hh_join_btn.setEnabled(
+            self._household_controls_enabled and bool(upper.strip())
+        )
+
     def _on_sign_out(self):
-        from PySide6.QtWidgets import QDialog
-        from PySide6.QtCore import Qt
-
-        dlg = QDialog(self, Qt.WindowType.FramelessWindowHint)
-        dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        dlg.setModal(True)
-
-        is_dark = manager.mode == "dark"
-        bg     = "#1a1a1a" if is_dark else "#ffffff"
-        border = "#333333" if is_dark else "#dddddd"
-        text   = "#e0e0e0" if is_dark else "#1a1a1a"
-        sub    = "#888888" if is_dark else "#666666"
-
-        outer = QVBoxLayout(dlg)
-        outer.setContentsMargins(0, 0, 0, 0)
-
-        card = QWidget(dlg)
-        card.setObjectName("signout-card")
-        card.setStyleSheet(f"""
-            QWidget#signout-card {{
-                background: {bg};
-                border: 1px solid {border};
-                border-radius: 12px;
-            }}
-        """)
-        card.setFixedWidth(320)
-
-        vl = QVBoxLayout(card)
-        vl.setContentsMargins(24, 24, 24, 20)
-        vl.setSpacing(8)
-
-        title = QLabel("Sign out?", card)
-        title.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {text}; background: transparent;")
-        vl.addWidget(title)
-
-        body = QLabel("You'll be taken back to the login screen.", card)
-        body.setWordWrap(True)
-        body.setStyleSheet(f"font-size: 13px; color: {sub}; background: transparent;")
-        vl.addWidget(body)
-
-        vl.addSpacing(8)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
-
-        cancel_btn = QPushButton("Cancel", card)
-        cancel_btn.setFixedHeight(36)
-        cancel_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: 1px solid {border};
-                border-radius: 8px;
-                color: {text};
-                font-size: 13px;
-                padding: 0 16px;
-            }}
-            QPushButton:hover {{ background: {'#2a2a2a' if is_dark else '#f0f0f0'}; }}
-        """)
-        cancel_btn.clicked.connect(dlg.reject)
-
-        signout_btn = QPushButton("Sign out", card)
-        signout_btn.setFixedHeight(36)
-        signout_btn.setStyleSheet("""
-            QPushButton {
-                background: #e53935;
-                border: none;
-                border-radius: 8px;
-                color: white;
-                font-size: 13px;
-                font-weight: 600;
-                padding: 0 16px;
-            }
-            QPushButton:hover { background: #c62828; }
-        """)
-        signout_btn.clicked.connect(dlg.accept)
-
-        btn_row.addWidget(cancel_btn)
-        btn_row.addWidget(signout_btn)
-        vl.addLayout(btn_row)
-
-        outer.addWidget(card)
-
-        if dlg.exec() != QDialog.DialogCode.Accepted:
+        if not ThemedMessageBox.confirm(
+            self,
+            "Sign out?",
+            "You'll be returned to the login screen.",
+            confirm_text="Sign out",
+        ):
             return
 
         try:
@@ -398,53 +600,39 @@ class _AccountPage(QWidget):
         self._ai_sub_lbl.setStyleSheet(
             f"font-size: 12px; color: {manager.c('#888888', '#555555')}; background: transparent; border: none;"
         )
-
-
-# ── Shared helpers ────────────────────────────────────────────────────────────
-
-def _make_sep() -> QFrame:
-    sep = QFrame()
-    sep.setFrameShape(QFrame.Shape.HLine)
-    sep.setStyleSheet(
-        f"color: {manager.c('#252535', '#dddddd')};"
-        f" background: {manager.c('#252535', '#dddddd')};"
-        " border: none; max-height: 1px;"
-    )
-    return sep
-
-
-def _selector_style(active: bool, size: int = 15) -> str:
-    if active:
-        return (
-            f"QPushButton {{"
-            f"  background-color: rgba(255,107,53,0.14);"
-            f"  color: #ff6b35;"
-            f"  border: 2px solid #ff6b35;"
-            f"  border-radius: 10px;"
-            f"  font-size: {size}px; font-weight: 700;"
-            f"}}"
+        self._hh_status_lbl.setStyleSheet(
+            f"font-size: 13px; font-weight: 600;"
+            f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
         )
-    bg     = manager.c("#0e0e0e", "#f7f7f7")
-    fg     = manager.c("#606060", "#555555")
-    border = manager.c("#2c2c2c", "#cecece")
-    hover  = manager.c("#161616", "#eeeeee")
-    return (
-        f"QPushButton {{"
-        f"  background-color: {bg}; color: {fg};"
-        f"  border: 1px solid {border}; border-radius: 10px;"
-        f"  font-size: {size}px; font-weight: 500;"
-        f"}}"
-        f"QPushButton:hover {{"
-        f"  background-color: {hover}; border-color: rgba(255,107,53,0.35);"
-        f"  color: {manager.c('#909090', '#333333')};"
-        f"}}"
-    )
-
-
-def _card_widget() -> QWidget:
-    w = QWidget()
-    w.setObjectName("card")
-    return w
+        self._hh_sub_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#666', '#888')}; background: transparent;"
+        )
+        self._hh_hint_lbl.setStyleSheet(
+            f"font-size: 11px; color: {manager.c('#6f6f6f', '#7f7f7f')}; background: transparent;"
+        )
+        self._hh_status_box.setStyleSheet(_subtle_surface_style())
+        self._hh_create_box.setStyleSheet(_subtle_surface_style())
+        self._hh_join_box.setStyleSheet(_subtle_surface_style())
+        self._hh_create_lbl.setStyleSheet(
+            f"font-size: 11px; font-weight: 600; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+        self._hh_join_lbl.setStyleSheet(
+            f"font-size: 11px; font-weight: 600; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+        self._hh_name_input.setStyleSheet(
+            f"QLineEdit {{ background: {manager.c('#111111', '#ffffff')};"
+            f" color: {manager.c('#e8e8e8', '#1a1a1a')};"
+            f" border: 1px solid {manager.c('#2a2a2a', '#dcdcdc')}; border-radius: 8px; padding: 0 10px; }}"
+            "QLineEdit:focus { border-color: #ff6b35; }"
+        )
+        self._hh_join_input.setStyleSheet(self._hh_name_input.styleSheet())
+        self._signin_btn.setStyleSheet(_primary_button_style())
+        self._sync_now_btn.setStyleSheet(_secondary_button_style())
+        _hh_action_style = _secondary_button_style()
+        self._hh_join_btn.setStyleSheet(_hh_action_style)
+        self._hh_create_btn.setStyleSheet(self._hh_join_btn.styleSheet())
+        self._hh_leave_btn.setStyleSheet(_danger_button_style())
+        self._signout_btn.setStyleSheet(_danger_button_style())
 
 
 # ── Page: Profile ─────────────────────────────────────────────────────────────
@@ -452,10 +640,9 @@ def _card_widget() -> QWidget:
 class _ProfilePage(QWidget):
     """Full editable profile page — mirrors the onboarding wizard fields."""
 
-    def __init__(self, parent=None):
+    def __init__(self, db: Database | None = None, parent=None):
         super().__init__(parent)
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._sync_fn = None
         self._build()
 
@@ -935,10 +1122,9 @@ class _ProfilePage(QWidget):
 # ── Page: Dishy Preferences ───────────────────────────────────────────────────
 
 class _DishyPrefsPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, db: Database | None = None, parent=None):
         super().__init__(parent)
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._build()
 
     def _build(self):
@@ -1006,14 +1192,11 @@ class _DishyPrefsPage(QWidget):
         outer.addStretch()
 
     def _clear_dishy_history(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Clear Dishy History?")
-        msg.setText("This will permanently delete all your Dishy conversations.\nThis cannot be undone.")
-        msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setStandardButtons(QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok)
-        msg.button(QMessageBox.StandardButton.Ok).setText("Yes, clear")
-        msg.button(QMessageBox.StandardButton.Cancel).setText("Cancel")
-        if msg.exec() == QMessageBox.StandardButton.Ok:
+        if ThemedMessageBox.confirm(
+            self, "Clear Dishy History?",
+            "This will permanently delete all your Dishy conversations.\nThis cannot be undone.",
+            confirm_text="Yes, clear",
+        ):
             self._db.clear_dishy_history()
 
     def apply_theme(self, _mode):
@@ -1029,10 +1212,9 @@ class _DishyPrefsPage(QWidget):
 # ── Page: App Preferences ─────────────────────────────────────────────────────
 
 class _AppPrefsPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, db: Database | None = None, parent=None):
         super().__init__(parent)
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._sync_fn = None
         self._build()
 
@@ -1181,16 +1363,17 @@ class _AppPrefsPage(QWidget):
 # ── Page: Data & Backup ───────────────────────────────────────────────────────
 
 class _DataPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, db: Database | None = None, parent=None):
         super().__init__(parent)
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._refresh_meal_plan = None
         self._refresh_shopping  = None
         self._refresh_recipes   = None
         self._row_labels: list[tuple[QLabel, QLabel]] = []
         self._port_row_labels: list[tuple[QLabel, QLabel]] = []
-        self._import_btn: "QPushButton | None" = None
+        self._primary_port_btns: list[QPushButton] = []
+        self._secondary_port_btns: list[QPushButton] = []
+        self._danger_btns: list[QPushButton] = []
         self._build()
 
     def _build(self):
@@ -1217,8 +1400,10 @@ class _DataPage(QWidget):
         port_layout.addWidget(port_desc)
 
         for row_title, row_sub, btn_label, btn_fn, is_primary in [
-            ("Export Data", "Save a full backup as a .json file", "Export →", self._export, True),
-            ("Import Data", "Merge a backup file into your current data", "Import ←", self._import, False),
+            ("Export Data", "Save a full backup as a .json file", "Export Backup", self._export, True),
+            ("Export Profiles", "Choose a focused export (migration, meal planning, or nutrition only)", "Choose Profile", self._export_profile_picker, False),
+            ("Import Data", "Merge a backup file into your current data", "Import Backup", self._import, False),
+            ("Trash Bin", "Restore recently deleted recipes, meal slots, shopping or pantry items", "Manage Trash", self._manage_trash, False),
         ]:
             port_layout.addWidget(_make_sep())
             row = QHBoxLayout()
@@ -1243,31 +1428,11 @@ class _DataPage(QWidget):
             btn.setMinimumWidth(130)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             if is_primary:
-                btn.setStyleSheet(
-                    "QPushButton {"
-                    "  background-color: rgba(255,107,53,0.1); color: #ff6b35;"
-                    "  border: 1px solid rgba(255,107,53,0.35); border-radius: 8px;"
-                    "  font-size: 13px; font-weight: 600; padding: 0 14px;"
-                    "}"
-                    "QPushButton:hover {"
-                    "  background-color: rgba(255,107,53,0.2); border-color: rgba(255,107,53,0.6);"
-                    "}"
-                )
+                btn.setStyleSheet(_primary_button_style())
+                self._primary_port_btns.append(btn)
             else:
-                btn.setStyleSheet(
-                    "QPushButton {"
-                    f"  background-color: {manager.c('rgba(255,255,255,0.04)', 'rgba(0,0,0,0.04)')};"
-                    f"  color: {manager.c('#888888', '#555555')};"
-                    f"  border: 1px solid {manager.c('#2c2c2c', '#cccccc')}; border-radius: 8px;"
-                    "  font-size: 13px; font-weight: 600; padding: 0 14px;"
-                    "}"
-                    "QPushButton:hover {"
-                    f"  background-color: {manager.c('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.08)')};"
-                    "  border-color: rgba(255,107,53,0.4);"
-                    f"  color: {manager.c('#bbbbbb', '#222222')};"
-                    "}"
-                )
-                self._import_btn = btn
+                btn.setStyleSheet(_secondary_button_style())
+                self._secondary_port_btns.append(btn)
             btn.clicked.connect(btn_fn)
             row.addLayout(col, 1)
             row.addWidget(btn, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -1332,16 +1497,8 @@ class _DataPage(QWidget):
             btn.setFixedHeight(36)
             btn.setMinimumWidth(170)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(
-                "QPushButton {"
-                "  background-color: rgba(220,53,69,0.1); color: #dc3545;"
-                "  border: 1px solid rgba(220,53,69,0.35); border-radius: 8px;"
-                "  font-size: 13px; font-weight: 600; padding: 0 14px;"
-                "}"
-                "QPushButton:hover {"
-                "  background-color: rgba(220,53,69,0.2); border-color: rgba(220,53,69,0.6);"
-                "}"
-            )
+            btn.setStyleSheet(_danger_button_style())
+            self._danger_btns.append(btn)
             btn.clicked.connect(
                 lambda _, m=confirm_msg, a=action: self._confirm_and_run(m, a)
             )
@@ -1358,62 +1515,111 @@ class _DataPage(QWidget):
         self._refresh_recipes   = recipes_fn
 
     def _confirm_and_run(self, message: str, action):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Are you sure?")
-        msg.setText(message)
-        msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setStandardButtons(QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok)
-        msg.button(QMessageBox.StandardButton.Ok).setText("Yes, delete")
-        msg.button(QMessageBox.StandardButton.Cancel).setText("Cancel")
-        if msg.exec() == QMessageBox.StandardButton.Ok:
+        if ThemedMessageBox.confirm(
+            self, "Are you sure?", message, confirm_text="Yes, delete"
+        ):
             action()
 
     def _clear_meal_plan(self):
-        self._db.conn.execute("DELETE FROM meal_plans")
-        self._db.conn.commit()
+        self._db.clear_all_meal_plans()
         if self._refresh_meal_plan:
             self._refresh_meal_plan()
 
     def _clear_shopping(self):
-        self._db.conn.execute("DELETE FROM shopping_items")
-        self._db.conn.commit()
+        self._db.clear_all_shopping_items()
         if self._refresh_shopping:
             self._refresh_shopping()
 
     def _clear_recipes(self):
-        self._db.conn.execute("DELETE FROM recipes")
-        self._db.conn.commit()
+        self._db.delete_all_recipes()
         if self._refresh_recipes:
             self._refresh_recipes()
 
-    def _export(self):
+    def _export_profile_picker(self):
+        profile = ThemedMessageBox.show_buttons(
+            self,
+            "Export Profile",
+            "Choose the type of backup you want to create.",
+            ["Cancel", "Full Backup", "Move to New Device", "Meal Planning Only", "Nutrition Only"],
+            kind="question",
+        )
+        if profile == "Full Backup":
+            self._export("full")
+        elif profile == "Move to New Device":
+            self._export("migration")
+        elif profile == "Meal Planning Only":
+            self._export("planning")
+        elif profile == "Nutrition Only":
+            self._export("nutrition")
+
+    def _export(self, profile: str = "full"):
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export DishBoard Data", "dishboard_backup.json", "JSON files (*.json)"
+            self, "Export DishBoard Data", f"dishboard_{profile}_backup.json", "JSON files (*.json)"
         )
         if not path:
             return
         try:
+            include_recipes = profile in {"full", "migration", "planning"}
+            include_meals = profile in {"full", "migration", "planning"}
+            include_shopping = profile in {"full", "migration", "planning"}
+            include_pantry = profile in {"full", "migration"}
+            include_nutrition = profile in {"full", "migration", "nutrition"}
+            include_settings = profile in {"full", "migration", "nutrition"}
+
             data = {
-                "version": 1,
-                "recipes": [dict(r) for r in self._db.conn.execute("SELECT * FROM recipes").fetchall()],
-                "meal_plans": [dict(r) for r in self._db.conn.execute("SELECT * FROM meal_plans").fetchall()],
-                "shopping_items": [dict(r) for r in self._db.conn.execute("SELECT * FROM shopping_items").fetchall()],
-                "settings": [dict(r) for r in self._db.conn.execute("SELECT * FROM settings").fetchall()],
+                "version": 2,
+                "profile": profile,
+                "recipes": [dict(r) for r in self._db.conn.execute("SELECT * FROM recipes").fetchall()] if include_recipes else [],
+                "meal_plans": [dict(r) for r in self._db.conn.execute("SELECT * FROM meal_plans").fetchall()] if include_meals else [],
+                "shopping_items": [dict(r) for r in self._db.conn.execute("SELECT * FROM shopping_items").fetchall()] if include_shopping else [],
+                "pantry_items": [dict(r) for r in self._db.conn.execute("SELECT * FROM pantry_items").fetchall()] if include_pantry else [],
+                "nutrition_logs": [dict(r) for r in self._db.conn.execute("SELECT * FROM nutrition_logs").fetchall()] if include_nutrition else [],
+                "settings": [dict(r) for r in self._db.conn.execute("SELECT * FROM settings").fetchall()] if include_settings else [],
             }
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
             counts = (
                 f"{len(data['recipes'])} recipes, "
                 f"{len(data['meal_plans'])} meal plan entries, "
-                f"{len(data['shopping_items'])} shopping items"
+                f"{len(data['shopping_items'])} shopping items, "
+                f"{len(data['nutrition_logs'])} nutrition logs"
             )
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Export complete")
-            msg.setText(f"Backup saved successfully.\n\n{counts}")
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.exec()
+            ThemedMessageBox.information(self, "Export complete", f"Backup saved successfully.\n\n{counts}")
         except Exception as e:
-            QMessageBox.critical(self, "Export failed", str(e))
+            ThemedMessageBox.critical(self, "Export failed", str(e))
+
+    def _manage_trash(self):
+        items = self._db.list_trash_items(limit=20)
+        if not items:
+            ThemedMessageBox.information(self, "Trash Bin", "Trash Bin is empty.")
+            return
+        preview_lines = []
+        for it in items[:6]:
+            payload = it.get("payload") or {}
+            label = payload.get("title") or payload.get("name") or payload.get("custom_name") or "Item"
+            preview_lines.append(f"• {it.get('entity_type', 'item')}: {str(label)[:48]}")
+        choice = ThemedMessageBox.show_buttons(
+            self,
+            "Trash Bin",
+            f"{len(items)} item(s) in Trash.\n\nRecent:\n" + "\n".join(preview_lines),
+            ["Cancel", "Restore Most Recent", "Empty Trash"],
+            kind="question",
+        )
+        if choice == "Restore Most Recent":
+            restored = self._db.restore_trash_item(int(items[0]["id"]))
+            if restored:
+                if self._refresh_meal_plan:
+                    self._refresh_meal_plan()
+                if self._refresh_shopping:
+                    self._refresh_shopping()
+                if self._refresh_recipes:
+                    self._refresh_recipes()
+                ThemedMessageBox.information(self, "Trash Bin", "Restored the most recently deleted item.")
+            else:
+                ThemedMessageBox.warning(self, "Trash Bin", "Could not restore that item.")
+        elif choice == "Empty Trash":
+            removed = self._db.clear_trash()
+            ThemedMessageBox.information(self, "Trash Bin", f"Removed {removed} item(s) from Trash.")
 
     def _import(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1425,36 +1631,45 @@ class _DataPage(QWidget):
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
-            QMessageBox.critical(self, "Import failed", f"Could not read file:\n{e}")
+            ThemedMessageBox.critical(self, "Import failed", f"Could not read file:\n{e}")
             return
 
         if "recipes" not in data and "meal_plans" not in data:
-            QMessageBox.warning(self, "Invalid file", "This doesn't look like a DishBoard backup.")
+            ThemedMessageBox.warning(self, "Invalid file", "This doesn't look like a DishBoard backup.")
             return
 
-        confirm = QMessageBox(self)
-        confirm.setWindowTitle("Import data?")
-        confirm.setText(
+        if not ThemedMessageBox.confirm(
+            self, "Import data?",
             "This will merge the backup into your current data.\n"
-            "Existing records will not be overwritten — only new items will be added.\n\nContinue?"
-        )
-        confirm.setIcon(QMessageBox.Icon.Question)
-        confirm.setStandardButtons(QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok)
-        confirm.button(QMessageBox.StandardButton.Ok).setText("Yes, import")
-        confirm.button(QMessageBox.StandardButton.Cancel).setText("Cancel")
-        if confirm.exec() != QMessageBox.StandardButton.Ok:
+            "Existing records will not be overwritten — only new items will be added.\n\nContinue?",
+            confirm_text="Yes, import",
+        ):
             return
 
         try:
-            imported = {"recipes": 0, "meal_plans": 0, "shopping_items": 0}
+            imported = {"recipes": 0, "meal_plans": 0, "shopping_items": 0, "pantry_items": 0, "nutrition_logs": 0}
 
             for r in data.get("recipes", []):
                 try:
+                    recipe_data = r
+                    try:
+                        parsed = json.loads(r.get("data_json") or "{}")
+                        report = validate_recipe(parsed)
+                        if report.get("errors"):
+                            continue
+                        recipe_data = dict(r)
+                        recipe_data["title"] = (report.get("fixed", {}) or parsed).get("title", r.get("title", ""))
+                        recipe_data["data_json"] = json.dumps(report.get("fixed", {}) or parsed)
+                    except Exception:
+                        recipe_data = r
+                    recipe_data = sanitize_import_row("recipes", recipe_data)
+                    if not recipe_data:
+                        continue
                     self._db.conn.execute(
                         "INSERT OR IGNORE INTO recipes "
                         "(source_id, source, title, image_url, summary, servings, ready_mins, data_json, saved_at, is_favourite)"
                         " VALUES (:source_id, :source, :title, :image_url, :summary, :servings, :ready_mins, :data_json, :saved_at, :is_favourite)",
-                        {k: r.get(k) for k in ("source_id","source","title","image_url","summary","servings","ready_mins","data_json","saved_at","is_favourite")}
+                        {k: recipe_data.get(k) for k in ("source_id","source","title","image_url","summary","servings","ready_mins","data_json","saved_at","is_favourite")}
                     )
                     if self._db.conn.execute("SELECT changes()").fetchone()[0]:
                         imported["recipes"] += 1
@@ -1463,6 +1678,9 @@ class _DataPage(QWidget):
 
             for m in data.get("meal_plans", []):
                 try:
+                    m = sanitize_import_row("meal_plans", m)
+                    if not m:
+                        continue
                     self._db.conn.execute(
                         "INSERT OR IGNORE INTO meal_plans "
                         "(day_of_week, meal_type, recipe_id, custom_name, week_start, notes)"
@@ -1476,12 +1694,47 @@ class _DataPage(QWidget):
 
             for s in data.get("shopping_items", []):
                 try:
+                    s = sanitize_import_row("shopping_items", s)
+                    if not s:
+                        continue
                     self._db.conn.execute(
                         "INSERT INTO shopping_items (name, quantity, unit, checked, source, added_at)"
                         " VALUES (:name, :quantity, :unit, :checked, :source, :added_at)",
                         {k: s.get(k) for k in ("name","quantity","unit","checked","source","added_at")}
                     )
                     imported["shopping_items"] += 1
+                except Exception:
+                    pass
+
+            for p in data.get("pantry_items", []):
+                try:
+                    p = sanitize_import_row("pantry_items", p)
+                    if not p:
+                        continue
+                    self._db.conn.execute(
+                        "INSERT INTO pantry_items (name, quantity, unit, storage, expiry_date, added_at)"
+                        " VALUES (:name, :quantity, :unit, :storage, :expiry_date, :added_at)",
+                        {k: p.get(k) for k in ("name", "quantity", "unit", "storage", "expiry_date", "added_at")},
+                    )
+                    imported["pantry_items"] += 1
+                except Exception:
+                    pass
+
+            for n in data.get("nutrition_logs", []):
+                try:
+                    n = sanitize_import_row("nutrition_logs", n)
+                    if not n:
+                        continue
+                    self._db.conn.execute(
+                        "INSERT INTO nutrition_logs"
+                        " (log_date, food_name, kcal, protein_g, carbs_g, fat_g, fiber_g, sugar_g, logged_at)"
+                        " VALUES (:log_date, :food_name, :kcal, :protein_g, :carbs_g, :fat_g, :fiber_g, :sugar_g, :logged_at)",
+                        {
+                            k: n.get(k)
+                            for k in ("log_date", "food_name", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g", "logged_at")
+                        },
+                    )
+                    imported["nutrition_logs"] += 1
                 except Exception:
                     pass
 
@@ -1495,18 +1748,17 @@ class _DataPage(QWidget):
                     pass
 
             self._db.conn.commit()
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Import complete")
-            msg.setText(
+            ThemedMessageBox.information(
+                self, "Import complete",
                 f"Import successful!\n\n"
                 f"Added: {imported['recipes']} recipes, "
                 f"{imported['meal_plans']} meal plan entries, "
-                f"{imported['shopping_items']} shopping items"
+                f"{imported['shopping_items']} shopping items, "
+                f"{imported['pantry_items']} pantry items, "
+                f"{imported['nutrition_logs']} nutrition logs"
             )
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.exec()
         except Exception as e:
-            QMessageBox.critical(self, "Import failed", str(e))
+            ThemedMessageBox.critical(self, "Import failed", str(e))
 
     def apply_theme(self, _mode):
         for name_lbl, sub_lbl in self._port_row_labels + self._row_labels:
@@ -1517,20 +1769,574 @@ class _DataPage(QWidget):
             sub_lbl.setStyleSheet(
                 f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
             )
-        if self._import_btn:
-            self._import_btn.setStyleSheet(
-                "QPushButton {"
-                f"  background-color: {manager.c('rgba(255,255,255,0.04)', 'rgba(0,0,0,0.04)')};"
-                f"  color: {manager.c('#888888', '#555555')};"
-                f"  border: 1px solid {manager.c('#2c2c2c', '#cccccc')}; border-radius: 8px;"
-                "  font-size: 13px; font-weight: 600; padding: 0 14px;"
-                "}"
-                "QPushButton:hover {"
-                f"  background-color: {manager.c('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.08)')};"
-                "  border-color: rgba(255,107,53,0.4);"
-                f"  color: {manager.c('#bbbbbb', '#222222')};"
-                "}"
+        for btn in self._primary_port_btns:
+            btn.setStyleSheet(_primary_button_style())
+        for btn in self._secondary_port_btns:
+            btn.setStyleSheet(_secondary_button_style())
+        for btn in self._danger_btns:
+            btn.setStyleSheet(_danger_button_style())
+
+
+# ── Page: Monitoring ──────────────────────────────────────────────────────────
+
+class _MonitoringPage(QWidget):
+    """Clean user-facing monitoring page with optional advanced diagnostics."""
+
+    def __init__(self, db: Database | None = None, parent=None):
+        super().__init__(parent)
+        self._db = db or get_db()
+        self._sync_fn = None
+        self._sync_service = None
+        self._advanced_visible = False
+        self._metric_values: dict[str, QLabel] = {}
+        self._metric_subs: dict[str, QLabel] = {}
+        self._metric_cards: list[QWidget] = []
+        self._muted_labels: list[QLabel] = []
+        self._title_labels: list[QLabel] = []
+        self._build()
+
+    def set_sync_fn(self, fn):
+        self._sync_fn = fn
+
+    def set_sync_service(self, service) -> None:
+        if self._sync_service is service:
+            return
+        if self._sync_service is not None and hasattr(self._sync_service, "runtime_status_changed"):
+            try:
+                self._sync_service.runtime_status_changed.disconnect(self._on_runtime_status_changed)
+            except Exception:
+                pass
+        self._sync_service = service
+        if service is not None and hasattr(service, "runtime_status_changed"):
+            service.runtime_status_changed.connect(
+                self._on_runtime_status_changed, Qt.ConnectionType.QueuedConnection
             )
+        self.refresh()
+
+    def _on_runtime_status_changed(self, _status: dict) -> None:
+        self.refresh()
+
+    def _active_user_id(self) -> str:
+        return self._db.get_setting("active_user_id", "").strip()
+
+    def _flags_service(self):
+        from utils.feature_flags import FeatureFlagService
+
+        uid = self._active_user_id()
+        svc = FeatureFlagService(self._db, uid)
+        svc.ensure_defaults()
+        return svc
+
+    def _build(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(16)
+
+        # Summary card
+        top_card = _card_widget()
+        top_l = QVBoxLayout(top_card)
+        top_l.setSpacing(12)
+
+        title = QLabel("Monitoring")
+        title.setObjectName("card-title")
+        top_l.addWidget(title)
+
+        desc = QLabel(
+            "A simple health view of your data and AI usage. "
+            "Advanced diagnostics are hidden by default."
+        )
+        desc.setObjectName("card-body")
+        desc.setWordWrap(True)
+        top_l.addWidget(desc)
+        top_l.addWidget(_make_sep())
+
+        self._status_lbl = QLabel("")
+        self._status_lbl.setWordWrap(True)
+        top_l.addWidget(self._status_lbl)
+
+        self._runtime_health_lbl = QLabel("")
+        self._runtime_health_lbl.setWordWrap(True)
+        self._muted_labels.append(self._runtime_health_lbl)
+        top_l.addWidget(self._runtime_health_lbl)
+
+        self._analytics_status_lbl = QLabel("")
+        self._analytics_status_lbl.setWordWrap(True)
+        self._muted_labels.append(self._analytics_status_lbl)
+        top_l.addWidget(self._analytics_status_lbl)
+
+        self._sync_integrity_lbl = QLabel("")
+        self._sync_integrity_lbl.setWordWrap(True)
+        self._muted_labels.append(self._sync_integrity_lbl)
+        top_l.addWidget(self._sync_integrity_lbl)
+
+        self._waste_lbl = QLabel("")
+        self._waste_lbl.setWordWrap(True)
+        self._muted_labels.append(self._waste_lbl)
+        top_l.addWidget(self._waste_lbl)
+
+        metric_row_1 = QHBoxLayout()
+        metric_row_1.setSpacing(10)
+        for key, name in [
+            ("recipes", "Recipes"),
+            ("meal_plans", "Planner Slots"),
+            ("pantry_items", "Kitchen Items"),
+        ]:
+            card, v, s = self._make_metric_card(name)
+            self._metric_values[key] = v
+            self._metric_subs[key] = s
+            self._metric_cards.append(card)
+            metric_row_1.addWidget(card, 1)
+        top_l.addLayout(metric_row_1)
+
+        metric_row_2 = QHBoxLayout()
+        metric_row_2.setSpacing(10)
+        for key, name in [
+            ("ai_usage", "AI Today"),
+            ("notifications", "Notifications"),
+            ("jobs", "Background Jobs"),
+        ]:
+            card, v, s = self._make_metric_card(name)
+            self._metric_values[key] = v
+            self._metric_subs[key] = s
+            self._metric_cards.append(card)
+            metric_row_2.addWidget(card, 1)
+        top_l.addLayout(metric_row_2)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.setFixedHeight(34)
+        self._refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._refresh_btn.setToolTip("Refresh all monitoring metrics")
+        self._refresh_btn.clicked.connect(self.refresh)
+        btn_row.addWidget(self._refresh_btn)
+
+        self._mark_read_btn = QPushButton("Mark Alerts Read")
+        self._mark_read_btn.setFixedHeight(34)
+        self._mark_read_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mark_read_btn.setToolTip("Mark all in-app notifications as read")
+        self._mark_read_btn.clicked.connect(self._mark_notifications_read)
+        btn_row.addWidget(self._mark_read_btn)
+
+        self._advanced_btn = QPushButton("Advanced")
+        self._advanced_btn.setFixedHeight(34)
+        self._advanced_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._advanced_btn.setToolTip("Show technical diagnostics")
+        self._advanced_btn.clicked.connect(self._toggle_advanced)
+        btn_row.addWidget(self._advanced_btn)
+
+        self._repair_btn = QPushButton("Repair Sync")
+        self._repair_btn.setFixedHeight(34)
+        self._repair_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._repair_btn.setToolTip("Fix orphan links and stale sync records")
+        self._repair_btn.clicked.connect(self._run_integrity_repair)
+        btn_row.addWidget(self._repair_btn)
+
+        self._scan_btn = QPushButton("Integrity Scan")
+        self._scan_btn.setFixedHeight(34)
+        self._scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._scan_btn.setToolTip("Run a full ghost-data and shape validation scan")
+        self._scan_btn.clicked.connect(self._run_integrity_scan)
+        btn_row.addWidget(self._scan_btn)
+
+        btn_row.addStretch()
+        top_l.addLayout(btn_row)
+        outer.addWidget(top_card)
+
+        # Controls card
+        controls_card = _card_widget()
+        controls_l = QVBoxLayout(controls_card)
+        controls_l.setSpacing(12)
+        controls_title = QLabel("Privacy & Controls")
+        controls_title.setObjectName("card-title")
+        controls_l.addWidget(controls_title)
+
+        controls_desc = QLabel(
+            "Choose what runs in the background. Changes apply immediately."
+        )
+        controls_desc.setObjectName("card-body")
+        controls_desc.setWordWrap(True)
+        controls_l.addWidget(controls_desc)
+        controls_l.addWidget(_make_sep())
+
+        self._notif_toggle = QCheckBox("In-app notifications")
+        self._notif_toggle.toggled.connect(self._on_notif_toggled)
+        controls_l.addWidget(self._control_row(
+            self._notif_toggle,
+            "Get expiry and meal reminders inside DishBoard.",
+        ))
+
+        self._analytics_toggle = QCheckBox("Usage analytics")
+        self._analytics_toggle.toggled.connect(self._on_analytics_toggled)
+        controls_l.addWidget(self._control_row(
+            self._analytics_toggle,
+            "Helps improve product quality with anonymous event stats.",
+        ))
+
+        self._crash_toggle = QCheckBox("Crash reporting")
+        self._crash_toggle.toggled.connect(self._on_crash_toggled)
+        controls_l.addWidget(self._control_row(
+            self._crash_toggle,
+            "Sends error traces when something fails.",
+        ))
+
+        self._memory_toggle = QCheckBox("Dishy memory context")
+        self._memory_toggle.toggled.connect(self._on_memory_toggled)
+        controls_l.addWidget(self._control_row(
+            self._memory_toggle,
+            "Lets Dishy use your recent app context for better answers.",
+        ))
+
+        outer.addWidget(controls_card)
+
+        # Advanced card (collapsed by default)
+        self._advanced_card = _card_widget()
+        adv_l = QVBoxLayout(self._advanced_card)
+        adv_l.setSpacing(10)
+        adv_title = QLabel("Advanced Diagnostics")
+        adv_title.setObjectName("card-title")
+        adv_l.addWidget(adv_title)
+        adv_l.addWidget(_make_sep())
+
+        self._advanced_summary = QLabel("")
+        self._advanced_summary.setWordWrap(True)
+        self._muted_labels.append(self._advanced_summary)
+        adv_l.addWidget(self._advanced_summary)
+
+        self._remote_flags_btn = QPushButton("Refresh Cloud Flags")
+        self._remote_flags_btn.setFixedHeight(34)
+        self._remote_flags_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._remote_flags_btn.clicked.connect(self._refresh_remote_flags)
+        adv_l.addWidget(self._remote_flags_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self._advanced_card.setVisible(False)
+        outer.addWidget(self._advanced_card)
+
+        outer.addStretch()
+        self.apply_theme(manager.mode)
+        self.refresh()
+
+    def _make_metric_card(self, title: str) -> tuple[QWidget, QLabel, QLabel]:
+        card = QWidget()
+        l = QVBoxLayout(card)
+        l.setContentsMargins(12, 10, 12, 10)
+        l.setSpacing(4)
+
+        t = QLabel(title)
+        t.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; letter-spacing: 0.3px;"
+            f" color: {manager.c('#8d8d8d', '#6f6f6f')}; background: transparent;"
+        )
+        self._muted_labels.append(t)
+        l.addWidget(t)
+
+        value = QLabel("0")
+        value.setStyleSheet(
+            f"font-size: 20px; font-weight: 700;"
+            f" color: {manager.c('#efefef', '#111111')}; background: transparent;"
+        )
+        self._title_labels.append(value)
+        l.addWidget(value)
+
+        sub = QLabel("")
+        sub.setStyleSheet(
+            f"font-size: 11px; color: {manager.c('#888888', '#666666')}; background: transparent;"
+        )
+        self._muted_labels.append(sub)
+        l.addWidget(sub)
+
+        return card, value, sub
+
+    def _control_row(self, checkbox: QCheckBox, description: str) -> QWidget:
+        w = QWidget()
+        l = QVBoxLayout(w)
+        l.setContentsMargins(0, 0, 0, 0)
+        l.setSpacing(3)
+        l.addWidget(checkbox)
+        sub = QLabel(description)
+        sub.setWordWrap(True)
+        sub.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#777777', '#777777')}; background: transparent;"
+        )
+        self._muted_labels.append(sub)
+        l.addWidget(sub)
+        return w
+
+    def _toggle_advanced(self):
+        self._advanced_visible = not self._advanced_visible
+        self._advanced_card.setVisible(self._advanced_visible)
+        self._advanced_btn.setText("Hide Advanced" if self._advanced_visible else "Advanced")
+
+    def _on_notif_toggled(self, checked: bool):
+        self._db.set_setting("in_app_notifications_enabled", "1" if checked else "0")
+        if self._sync_fn:
+            self._sync_fn()
+
+    def _on_analytics_toggled(self, checked: bool):
+        self._db.set_setting("telemetry_enabled", "1" if checked else "0")
+        self._db.set_setting("posthog_enabled", "1" if checked else "0")
+        if self._sync_fn:
+            self._sync_fn()
+
+    def _on_crash_toggled(self, checked: bool):
+        self._db.set_setting("sentry_enabled", "1" if checked else "0")
+        if self._sync_fn:
+            self._sync_fn()
+
+    def _on_memory_toggled(self, checked: bool):
+        svc = self._flags_service()
+        svc.set_user("dishy_memory_context", checked)
+        if self._sync_fn:
+            self._sync_fn()
+
+    def _refresh_remote_flags(self):
+        svc = self._flags_service()
+        count, reason = svc.refresh_remote_from_supabase()
+        ThemedMessageBox.information(
+            self,
+            "Cloud flags refreshed",
+            f"Cached {count} row(s).\nStatus: {reason}",
+        )
+        self.refresh()
+
+    def _mark_notifications_read(self):
+        from utils.notifications import mark_all_read
+
+        changed = mark_all_read(self._db, self._active_user_id())
+        if changed and self._sync_fn:
+            self._sync_fn()
+        self.refresh()
+
+    def _run_integrity_repair(self):
+        report = self._db.run_sync_integrity_repair()
+        ThemedMessageBox.information(
+            self,
+            "Integrity repair complete",
+            f"Re-linked meal slots: {report.get('linked_slots', 0)}\n"
+            f"Removed orphan slots: {report.get('removed_orphans', 0)}",
+        )
+        if self._sync_fn:
+            self._sync_fn()
+        self.refresh()
+
+    def _run_integrity_scan(self):
+        report = self._db.run_integrity_scan()
+        sync = report.get("sync", {}) or {}
+        issues = report.get("table_issues", {}) or {}
+        issue_count = int(report.get("issue_count", 0) or 0)
+        status = "Healthy" if report.get("healthy") else "Needs attention"
+        detail_lines = [
+            f"Status: {status}",
+            "",
+            f"Issue count: {issue_count}",
+            f"Pending tombstones: {int(sync.get('pending_tombstones', 0) or 0)}",
+            f"Orphan meal slots: {int(sync.get('orphan_meal_slots', 0) or 0)}",
+            "",
+            "Table checks:",
+            f"- Recipes with empty title: {int(issues.get('recipes_empty_title', 0) or 0)}",
+            f"- Shopping items with empty name: {int(issues.get('shopping_empty_name', 0) or 0)}",
+            f"- Pantry items with empty name: {int(issues.get('pantry_empty_name', 0) or 0)}",
+            f"- Nutrition rows missing core fields: {int(issues.get('nutrition_missing_core', 0) or 0)}",
+            f"- Dishy chat rows missing core fields: {int(issues.get('dishy_chat_missing_core', 0) or 0)}",
+            f"- Meal slots with invalid day/type/week: {int(issues.get('meal_slots_invalid_shape', 0) or 0)}",
+            f"- Meal slot duplicate keys: {int(issues.get('meal_slots_duplicate_keys', 0) or 0)}",
+        ]
+        ThemedMessageBox.information(
+            self,
+            "Integrity scan report",
+            "\n".join(detail_lines),
+        )
+        self.refresh()
+
+    def refresh(self):
+        from utils.ai_limits import get_daily_limit, get_usage, utc_day_str
+        from utils.notifications import unread_count
+        from utils.startup_health import get_last_health_report
+        from utils.telemetry import get_analytics_status
+        from urllib.parse import urlparse
+
+        uid = self._active_user_id()
+        counts = {
+            "recipes": self._db.get_table_count("recipes"),
+            "meal_plans": self._db.get_table_count("meal_plans"),
+            "pantry_items": self._db.get_table_count("pantry_items"),
+            "shopping_items": self._db.get_table_count("shopping_items"),
+        }
+
+        # AI usage + notifications
+        usage = get_usage(self._db, uid, utc_day_str()) if uid else {"request_count": 0, "blocked_count": 0}
+        limit = get_daily_limit(self._db)
+        used = int(usage.get("request_count", 0) or 0)
+        blocked = int(usage.get("blocked_count", 0) or 0)
+        unread = unread_count(self._db, uid)
+
+        # Jobs/telemetry summaries
+        jobs = self._db.list_workflow_jobs(limit=20)
+        running = sum(1 for j in jobs if str(j.get("status", "")) == "running")
+        errored = sum(1 for j in jobs if str(j.get("status", "")) == "error")
+        events = self._db.get_telemetry_events(uid, limit=100) if uid else []
+        runtime = {}
+        if self._sync_service is not None and hasattr(self._sync_service, "runtime_status"):
+            try:
+                runtime = self._sync_service.runtime_status() or {}
+            except Exception:
+                runtime = {}
+        startup_report = get_last_health_report(self._db)
+        analytics = get_analytics_status(self._db, uid)
+
+        # Headline status
+        short_uid = (uid[:8] + "…") if len(uid) > 8 else (uid or "not signed in")
+        if runtime.get("circuit_open"):
+            health = "Recovering"
+        elif errored or int(runtime.get("consecutive_failures", 0) or 0) > 0:
+            health = "Needs attention"
+        else:
+            health = "Healthy"
+        self._status_lbl.setText(
+            f"Account: {short_uid}  |  System status: {health}"
+        )
+        retry_in = int(runtime.get("retry_in_seconds", 0) or 0)
+        runtime_state = "Live"
+        if runtime.get("circuit_open"):
+            runtime_state = f"Paused ({retry_in}s)"
+        elif retry_in > 0:
+            runtime_state = f"Retrying in {retry_in}s"
+        self._runtime_health_lbl.setText(
+            f"Cloud sync runtime: {runtime_state} · "
+            f"failures={int(runtime.get('consecutive_failures', 0) or 0)} · "
+            f"startup auto-repair: "
+            f"tombstones={int(startup_report.get('invalid_tombstones_removed', 0) or 0)}, "
+            f"slots fixed={int(startup_report.get('linked_meal_slots', 0) or 0)}, "
+            f"stale slots removed="
+            f"{int(startup_report.get('removed_orphan_slots', 0) or 0) + int(startup_report.get('removed_stale_unlinked_slots', 0) or 0)}"
+        )
+        host = str(analytics.get("host") or "").strip()
+        host_label = urlparse(host).netloc or host or "n/a"
+        if analytics.get("connected"):
+            analytics_state = "Connected"
+        elif not analytics.get("enabled"):
+            analytics_state = "Disabled in settings"
+        elif not analytics.get("posthog_enabled"):
+            analytics_state = "PostHog disabled"
+        elif not analytics.get("has_api_key"):
+            analytics_state = "Missing API key"
+        else:
+            analytics_state = "Not connected"
+        self._analytics_status_lbl.setText(
+            f"Analytics: {analytics_state} · host={host_label} · "
+            f"last event={analytics.get('last_event_at') or 'none yet'}"
+        )
+
+        integrity = self._db.get_sync_integrity_report()
+        pending_unsynced = sum(int(v or 0) for v in (integrity.get("unsynced_rows") or {}).values())
+        self._sync_integrity_lbl.setText(
+            f"Sync integrity: tombstones={integrity.get('pending_tombstones', 0)} · "
+            f"unsynced rows={pending_unsynced} · "
+            f"orphan slots={integrity.get('orphan_meal_slots', 0)}"
+        )
+        risk = self._db.get_expiry_risk_summary()
+        waste_30d = self._db.get_pantry_waste_summary(days=30)
+        top_waste = self._db.get_top_wasted_items(days=30, limit=3)
+        if top_waste:
+            top_line = ", ".join(str(r.get("item_name") or "") for r in top_waste if str(r.get("item_name") or "").strip())
+            suggestion = f" · buy less of: {top_line}"
+        else:
+            suggestion = ""
+        self._waste_lbl.setText(
+            f"Pantry insights: expired={risk.get('expired', 0)} · "
+            f"expiring soon={risk.get('expiring_soon', 0)} · "
+            f"at risk value≈£{risk.get('estimated_value_at_risk', 0):.2f} · "
+            f"wasted 30d≈£{waste_30d.get('estimated_value', 0):.2f}"
+            f"{suggestion}"
+        )
+
+        self._metric_values["recipes"].setText(str(counts["recipes"]))
+        self._metric_subs["recipes"].setText("Saved")
+        self._metric_values["meal_plans"].setText(str(counts["meal_plans"]))
+        self._metric_subs["meal_plans"].setText("Active slots")
+        self._metric_values["pantry_items"].setText(str(counts["pantry_items"]))
+        self._metric_subs["pantry_items"].setText("Pantry/Fridge/Freezer")
+        self._metric_values["ai_usage"].setText(f"{used}/{limit}")
+        self._metric_subs["ai_usage"].setText("Daily requests")
+        self._metric_values["notifications"].setText(str(unread))
+        self._metric_subs["notifications"].setText("Unread")
+        self._metric_values["jobs"].setText(str(max(0, len(jobs) - errored)))
+        self._metric_subs["jobs"].setText(f"{errored} errors")
+
+        self._advanced_summary.setText(
+            f"Background jobs: total={len(jobs)}, running={running}, errors={errored}\n"
+            f"Telemetry events shown (latest): {len(events)}\n"
+            f"AI blocked today: {blocked}\n"
+            f"Sync resilience: retry_in={retry_in}s, circuit_open={bool(runtime.get('circuit_open'))}, "
+            f"last_success={runtime.get('last_success_at') or 'n/a'}, "
+            f"last_failure={runtime.get('last_failure_at') or 'n/a'}"
+        )
+
+        # Toggle states
+        svc = self._flags_service()
+        for box, key, parser in [
+            (self._notif_toggle, "in_app_notifications_enabled", lambda v: v not in {"0", "false", "off", "no"}),
+            (self._analytics_toggle, "telemetry_enabled", lambda v: v not in {"0", "false", "off", "no"}),
+            (self._crash_toggle, "sentry_enabled", lambda v: v not in {"0", "false", "off", "no"}),
+        ]:
+            raw = self._db.get_setting(key, "1").strip().lower()
+            box.blockSignals(True)
+            box.setChecked(parser(raw))
+            box.blockSignals(False)
+
+        self._memory_toggle.blockSignals(True)
+        self._memory_toggle.setChecked(svc.is_enabled("dishy_memory_context", default=True))
+        self._memory_toggle.blockSignals(False)
+
+    def apply_theme(self, _mode):
+        for card in self._metric_cards:
+            card.setStyleSheet(_subtle_surface_style())
+
+        self._status_lbl.setStyleSheet(
+            f"font-size: 13px; font-weight: 600;"
+            f" color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+        )
+        self._advanced_summary.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#777777', '#666666')}; background: transparent;"
+        )
+        self._runtime_health_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+        self._analytics_status_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+        self._sync_integrity_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+        self._waste_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
+        )
+
+        for lbl in self._title_labels:
+            lbl.setStyleSheet(
+                f"font-size: 20px; font-weight: 700;"
+                f" color: {manager.c('#efefef', '#111111')}; background: transparent;"
+            )
+        for lbl in self._muted_labels:
+            # keep per-label font sizes from initial build, only update color
+            css = lbl.styleSheet()
+            if "color:" in css:
+                # Preserve size/weight; override only color for theme
+                css = css.split("color:")[0] + f"color: {manager.c('#888888', '#666666')}; background: transparent;"
+                lbl.setStyleSheet(css)
+
+        check_style = _checkbox_style()
+        for cb in [self._notif_toggle, self._analytics_toggle, self._crash_toggle, self._memory_toggle]:
+            cb.setStyleSheet(check_style)
+
+        self._refresh_btn.setStyleSheet(_primary_button_style())
+        secondary_style = _secondary_button_style()
+        self._mark_read_btn.setStyleSheet(secondary_style)
+        self._advanced_btn.setStyleSheet(secondary_style)
+        self._repair_btn.setStyleSheet(secondary_style)
+        self._scan_btn.setStyleSheet(secondary_style)
+        self._remote_flags_btn.setStyleSheet(secondary_style)
+
+        self.refresh()
 
 
 # ── Page: Version History ─────────────────────────────────────────────────────
@@ -1661,10 +2467,9 @@ class _VersionHistoryPage(QWidget):
 # ── Page: Nutrition Goals ─────────────────────────────────────────────────────
 
 class _NutritionGoalsPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, db: Database | None = None, parent=None):
         super().__init__(parent)
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._fields: dict[str, QLineEdit] = {}
         self._macro_worker = None  # prevents Worker GC before signals fire
         self._sync_fn = None
@@ -1673,6 +2478,20 @@ class _NutritionGoalsPage(QWidget):
         self._macro_name_labels: list = []
         self._macro_guide_labels: list = []
         self._macro_unit_labels: list = []
+        self._metrics_title_lbl: "QLabel | None" = None
+        self._metrics_hint_lbl: "QLabel | None" = None
+        self._metrics_status_lbl: "QLabel | None" = None
+        self._me_name_lbl: "QLabel | None" = None
+        self._me_box: "QWidget | None" = None
+        self._pair_box: "QWidget | None" = None
+        self._pair_name_lbl: "QLabel | None" = None
+        self._body_height_input: "QLineEdit | None" = None
+        self._body_weight_input: "QLineEdit | None" = None
+        self._pair_name_input: "QLineEdit | None" = None
+        self._pair_height_input: "QLineEdit | None" = None
+        self._pair_weight_input: "QLineEdit | None" = None
+        self._recommend_btn: "QPushButton | None" = None
+        self._recommend_pair_btn: "QPushButton | None" = None
         self._build()
 
     def _build(self):
@@ -1710,8 +2529,8 @@ class _NutritionGoalsPage(QWidget):
         )
         dishy_badge.setFixedHeight(22)
         auto_note = QLabel(
-            "Updating Calories will automatically recalculate Protein, Carbs & Fat "
-            "using Dishy AI, adjusted for your dietary preferences."
+            "Editing Calories, Protein, Carbs, or Fat will intelligently rebalance the other goals "
+            "using Dishy AI and your dietary preferences."
         )
         auto_note.setWordWrap(True)
         auto_note.setStyleSheet(
@@ -1721,6 +2540,118 @@ class _NutritionGoalsPage(QWidget):
         badge_row.addWidget(dishy_badge, 0, Qt.AlignmentFlag.AlignVCenter)
         badge_row.addWidget(auto_note, 1, Qt.AlignmentFlag.AlignVCenter)
         layout.addLayout(badge_row)
+
+        layout.addWidget(_make_sep())
+
+        self._metrics_title_lbl = QLabel("Body Metrics")
+        self._metrics_title_lbl.setStyleSheet(
+            f"font-size: 13px; font-weight: 700; color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+        )
+        layout.addWidget(self._metrics_title_lbl)
+
+        self._metrics_hint_lbl = QLabel(
+            "Add height and weight so Dishy can personalise recommendations and macro targets."
+        )
+        self._metrics_hint_lbl.setWordWrap(True)
+        self._metrics_hint_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
+        )
+        layout.addWidget(self._metrics_hint_lbl)
+
+        self._me_box = QWidget()
+        self._me_box.setStyleSheet(_subtle_surface_style())
+        me_layout = QVBoxLayout(self._me_box)
+        me_layout.setContentsMargins(12, 10, 12, 10)
+        me_layout.setSpacing(8)
+
+        me_name = self._db.get_setting("user_name", "").strip() or "You"
+        self._me_name_lbl = QLabel(f"{me_name} (Profile 1)")
+        self._me_name_lbl.setStyleSheet(
+            f"font-size: 12px; font-weight: 700; color: {manager.c('#d8d8d8', '#222222')}; background: transparent;"
+        )
+        me_layout.addWidget(self._me_name_lbl)
+
+        me_row = QHBoxLayout()
+        me_row.setContentsMargins(0, 0, 0, 0)
+        me_row.setSpacing(10)
+        self._body_height_input = QLineEdit()
+        self._body_height_input.setPlaceholderText("Height (cm)")
+        self._body_height_input.setFixedHeight(36)
+        self._body_height_input.setFixedWidth(130)
+        self._body_height_input.editingFinished.connect(self._save_body_metrics)
+        self._body_weight_input = QLineEdit()
+        self._body_weight_input.setPlaceholderText("Weight (kg)")
+        self._body_weight_input.setFixedHeight(36)
+        self._body_weight_input.setFixedWidth(130)
+        self._body_weight_input.editingFinished.connect(self._save_body_metrics)
+        me_row.addWidget(self._body_height_input)
+        me_row.addWidget(self._body_weight_input)
+        me_row.addStretch()
+        me_layout.addLayout(me_row)
+        layout.addWidget(self._me_box)
+
+        self._pair_box = QWidget()
+        self._pair_box.setStyleSheet(_subtle_surface_style())
+        pair_layout = QVBoxLayout(self._pair_box)
+        pair_layout.setContentsMargins(12, 10, 12, 10)
+        pair_layout.setSpacing(8)
+
+        self._pair_name_lbl = QLabel("Linked account (Profile 2)")
+        self._pair_name_lbl.setStyleSheet(
+            f"font-size: 12px; font-weight: 700; color: {manager.c('#d8d8d8', '#222222')}; background: transparent;"
+        )
+        pair_layout.addWidget(self._pair_name_lbl)
+
+        pair_row = QHBoxLayout()
+        pair_row.setContentsMargins(0, 0, 0, 0)
+        pair_row.setSpacing(10)
+        self._pair_name_input = QLineEdit()
+        self._pair_name_input.setPlaceholderText("Name")
+        self._pair_name_input.setFixedHeight(36)
+        self._pair_name_input.setFixedWidth(150)
+        self._pair_name_input.editingFinished.connect(self._save_body_metrics)
+        self._pair_height_input = QLineEdit()
+        self._pair_height_input.setPlaceholderText("Height (cm)")
+        self._pair_height_input.setFixedHeight(36)
+        self._pair_height_input.setFixedWidth(130)
+        self._pair_height_input.editingFinished.connect(self._save_body_metrics)
+        self._pair_weight_input = QLineEdit()
+        self._pair_weight_input.setPlaceholderText("Weight (kg)")
+        self._pair_weight_input.setFixedHeight(36)
+        self._pair_weight_input.setFixedWidth(130)
+        self._pair_weight_input.editingFinished.connect(self._save_body_metrics)
+        pair_row.addWidget(self._pair_name_input)
+        pair_row.addWidget(self._pair_height_input)
+        pair_row.addWidget(self._pair_weight_input)
+        pair_row.addStretch()
+        pair_layout.addLayout(pair_row)
+        layout.addWidget(self._pair_box)
+
+        rec_row = QHBoxLayout()
+        rec_row.setContentsMargins(0, 2, 0, 2)
+        rec_row.setSpacing(10)
+        self._recommend_btn = QPushButton("Recommend My Goals")
+        self._recommend_btn.setFixedHeight(34)
+        self._recommend_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._recommend_btn.clicked.connect(lambda: self._recommend_goals_from_metrics(False))
+        self._recommend_pair_btn = QPushButton("Recommend Shared Goal")
+        self._recommend_pair_btn.setFixedHeight(34)
+        self._recommend_pair_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._recommend_pair_btn.clicked.connect(lambda: self._recommend_goals_from_metrics(True))
+        rec_row.addWidget(self._recommend_btn)
+        rec_row.addWidget(self._recommend_pair_btn)
+        rec_row.addStretch()
+        layout.addLayout(rec_row)
+
+        self._metrics_status_lbl = QLabel("")
+        self._metrics_status_lbl.setWordWrap(True)
+        self._metrics_status_lbl.setStyleSheet(
+            f"font-size: 12px; color: {manager.c('#777777', '#666666')}; background: transparent;"
+        )
+        layout.addWidget(self._metrics_status_lbl)
+
+        self._load_body_metrics()
+        self._refresh_body_metric_visibility()
 
         goals = get_macro_goals(self._db)
 
@@ -1776,8 +2707,8 @@ class _NutritionGoalsPage(QWidget):
                 except ValueError:
                     pass
 
-            if key == "kcal":
-                field.editingFinished.connect(self._on_kcal_edited)
+            if key in {"kcal", "protein_g", "carbs_g", "fat_g"}:
+                field.editingFinished.connect(lambda k=key: self._on_core_macro_edited(k))
             else:
                 field.editingFinished.connect(_save)
 
@@ -1820,58 +2751,285 @@ class _NutritionGoalsPage(QWidget):
         outer.addWidget(card)
         outer.addStretch()
 
-    def _on_kcal_edited(self):
+    def _is_household_linked(self) -> bool:
+        return bool(str(self._db.get_setting("household_id", "") or "").strip())
+
+    @staticmethod
+    def _parse_metric_value(raw: str) -> float | None:
+        try:
+            val = float((raw or "").strip())
+        except Exception:
+            return None
+        return val if val > 0 else None
+
+    def _load_body_metrics(self) -> None:
+        if self._body_height_input:
+            self._body_height_input.setText(
+                str(self._db.get_setting("body_height_cm", "") or "").strip()
+            )
+        if self._body_weight_input:
+            self._body_weight_input.setText(
+                str(self._db.get_setting("body_weight_kg", "") or "").strip()
+            )
+        if self._pair_name_input:
+            self._pair_name_input.setText(
+                str(self._db.get_setting("household_user2_name", "") or "").strip()
+            )
+        if self._pair_height_input:
+            self._pair_height_input.setText(
+                str(self._db.get_setting("household_user2_height_cm", "") or "").strip()
+            )
+        if self._pair_weight_input:
+            self._pair_weight_input.setText(
+                str(self._db.get_setting("household_user2_weight_kg", "") or "").strip()
+            )
+        if self._me_name_lbl:
+            me_name = self._db.get_setting("user_name", "").strip() or "You"
+            self._me_name_lbl.setText(f"{me_name} (Profile 1)")
+        if self._pair_name_lbl:
+            partner = self._db.get_setting("household_user2_name", "").strip() or "Linked account"
+            self._pair_name_lbl.setText(f"{partner} (Profile 2)")
+
+    def _save_body_metrics(self) -> None:
+        if self._body_height_input:
+            self._db.set_setting("body_height_cm", self._body_height_input.text().strip())
+        if self._body_weight_input:
+            self._db.set_setting("body_weight_kg", self._body_weight_input.text().strip())
+        if self._pair_name_input:
+            self._db.set_setting("household_user2_name", self._pair_name_input.text().strip())
+        if self._pair_height_input:
+            self._db.set_setting("household_user2_height_cm", self._pair_height_input.text().strip())
+        if self._pair_weight_input:
+            self._db.set_setting("household_user2_weight_kg", self._pair_weight_input.text().strip())
+        self._load_body_metrics()
+        if self._sync_fn:
+            self._sync_fn()
+
+    def _refresh_body_metric_visibility(self) -> None:
+        linked = self._is_household_linked()
+        if self._pair_box:
+            self._pair_box.setVisible(linked)
+        if self._recommend_pair_btn:
+            self._recommend_pair_btn.setVisible(linked)
+            self._recommend_pair_btn.setEnabled(linked)
+
+    def _set_recommend_busy(self, busy: bool) -> None:
+        if self._recommend_btn:
+            self._recommend_btn.setEnabled(not busy)
+            self._recommend_btn.setText("Recommending…" if busy else "Recommend My Goals")
+        if self._recommend_pair_btn:
+            self._recommend_pair_btn.setEnabled((not busy) and self._is_household_linked())
+            self._recommend_pair_btn.setText("Recommending…" if busy else "Recommend Shared Goal")
+
+    def _recommend_goals_from_metrics(self, shared: bool) -> None:
+        from utils.workers import run_async
+        from api.claude_ai import ClaudeAI
+        from utils.macro_goals import set_macro_goal
+
+        h1 = self._parse_metric_value(self._body_height_input.text() if self._body_height_input else "")
+        w1 = self._parse_metric_value(self._body_weight_input.text() if self._body_weight_input else "")
+        if not h1 or not w1:
+            ThemedMessageBox.information(
+                self,
+                "Body metrics required",
+                "Enter your height and weight first to get Dishy recommendations.",
+            )
+            return
+
+        secondary_profile = None
+        if shared:
+            h2 = self._parse_metric_value(self._pair_height_input.text() if self._pair_height_input else "")
+            w2 = self._parse_metric_value(self._pair_weight_input.text() if self._pair_weight_input else "")
+            if not h2 or not w2:
+                ThemedMessageBox.information(
+                    self,
+                    "Second profile required",
+                    "For a shared recommendation, enter height and weight for Profile 2.",
+                )
+                return
+            secondary_profile = {
+                "name": (self._pair_name_input.text() if self._pair_name_input else "").strip() or "Linked account",
+                "height_cm": h2,
+                "weight_kg": w2,
+            }
+
+        # Save entered metrics before computing recommendations.
+        self._save_body_metrics()
+        self._set_recommend_busy(True)
+        self._set_macro_fields_loading(True)
+        if self._metrics_status_lbl:
+            self._metrics_status_lbl.setText("Dishy is calculating personalised targets…")
+
+        dietary_prefs = self._db.get_setting("dietary_prefs", "")
+        ai = ClaudeAI()
+
+        def _done(result: dict):
+            self._set_recommend_busy(False)
+            self._set_macro_fields_loading(False)
+            keys = ("kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g")
+            for key in keys:
+                try:
+                    val = max(1.0, float(result.get(key, 1.0) or 1.0))
+                except Exception:
+                    val = 1.0
+                if key in self._fields:
+                    self._fields[key].setText(str(int(val)))
+                set_macro_goal(self._db, key, val)
+            note = str(result.get("note", "") or "").strip()
+            if self._metrics_status_lbl:
+                if shared:
+                    self._metrics_status_lbl.setText(
+                        "Shared daily target updated for both profiles."
+                        + (f" {note}" if note else "")
+                    )
+                else:
+                    self._metrics_status_lbl.setText(
+                        "Personal daily target updated from your body metrics."
+                        + (f" {note}" if note else "")
+                    )
+            if self._sync_fn:
+                self._sync_fn()
+
+        def _error(_err: str):
+            self._set_recommend_busy(False)
+            self._set_macro_fields_loading(False)
+            if self._metrics_status_lbl:
+                self._metrics_status_lbl.setText("")
+            ThemedMessageBox.warning(
+                self,
+                "Dishy recommendation failed",
+                "Could not calculate recommendations right now. Please try again.",
+            )
+
+        self._macro_worker = run_async(
+            ai.recommend_goals_from_body_metrics,
+            primary_height_cm=h1,
+            primary_weight_kg=w1,
+            dietary_prefs=dietary_prefs,
+            secondary_profile=secondary_profile,
+            on_result=_done,
+            on_error=_error,
+        )
+
+    def _on_core_macro_edited(self, anchor_key: str):
         from utils.macro_goals import set_macro_goal
         from utils.workers import run_async
         from api.claude_ai import ClaudeAI
-        field = self._fields["kcal"]
+        anchor_key = str(anchor_key or "").strip()
+        if anchor_key not in {"kcal", "protein_g", "carbs_g", "fat_g"}:
+            return
+        field = self._fields.get(anchor_key)
+        if not field:
+            return
         try:
-            calories = max(1.0, float(field.text().strip()))
+            anchor_val = max(1.0, float(field.text().strip()))
         except ValueError:
             return
-        field.setText(str(int(calories)))
-        set_macro_goal(self._db, "kcal", calories)
+        field.setText(str(int(anchor_val)))
+
+        core_keys = ("kcal", "protein_g", "carbs_g", "fat_g")
+        prev = {k: self._fields[k].text() for k in core_keys}
+
+        # Persist the edited anchor immediately so UI + dashboard update quickly.
+        set_macro_goal(self._db, anchor_key, anchor_val)
         if self._sync_fn:
             self._sync_fn()
-        prev = {k: self._fields[k].text() for k in ("protein_g", "carbs_g", "fat_g")}
-        self._set_macro_fields_loading(True)
-        dietary_prefs = self._db.get_setting("dietary_prefs", "")
-        self._macro_worker = run_async(
-            ClaudeAI().calculate_macros_from_calories,
-            calories, dietary_prefs,
-            on_result=lambda r: self._on_macros_calculated(r),
-            on_error=lambda e: self._on_macros_error(prev),
-        )
 
-    def _set_macro_fields_loading(self, loading: bool):
-        for key in ("protein_g", "carbs_g", "fat_g"):
+        current_goals: dict[str, float] = {}
+        for key in core_keys:
+            if key == anchor_key:
+                current_goals[key] = anchor_val
+                continue
+            try:
+                current_goals[key] = max(1.0, float(self._fields[key].text().strip()))
+            except Exception:
+                current_goals[key] = 1.0
+
+        self._set_macro_fields_loading(True, exclude_key=anchor_key)
+        dietary_prefs = self._db.get_setting("dietary_prefs", "")
+        ai = ClaudeAI()
+        if anchor_key == "kcal":
+            self._macro_worker = run_async(
+                ai.calculate_macros_from_calories,
+                anchor_val,
+                dietary_prefs,
+                on_result=lambda r, a=anchor_key, v=anchor_val: self._on_core_macros_calculated(a, v, r),
+                on_error=lambda _e, p=prev: self._on_core_macros_error(p),
+            )
+        else:
+            self._macro_worker = run_async(
+                ai.recalculate_macro_goals,
+                anchor_key,
+                anchor_val,
+                current_goals,
+                dietary_prefs,
+                on_result=lambda r, a=anchor_key, v=anchor_val: self._on_core_macros_calculated(a, v, r),
+                on_error=lambda _e, p=prev: self._on_core_macros_error(p),
+            )
+
+    def _set_macro_fields_loading(self, loading: bool, exclude_key: str | None = None):
+        for key in ("kcal", "protein_g", "carbs_g", "fat_g"):
+            if exclude_key and key == exclude_key:
+                continue
             f = self._fields[key]
             f.setReadOnly(loading)
             if loading:
-                f.setPlaceholderText("Calculating…")
+                f.setPlaceholderText("Dishy…")
                 f.setText("")
                 f.setStyleSheet("color: #888888; font-style: italic;")
             else:
                 f.setPlaceholderText("")
                 f.setStyleSheet("")
 
-    def _on_macros_calculated(self, result: dict):
+    def _on_core_macros_calculated(self, anchor_key: str, anchor_value: float, result: dict):
         from utils.macro_goals import set_macro_goal
         self._set_macro_fields_loading(False)
-        for key in ("protein_g", "carbs_g", "fat_g"):
-            val = max(1.0, float(result.get(key, 1.0)))
+        vals = {}
+        for key in ("kcal", "protein_g", "carbs_g", "fat_g"):
+            try:
+                vals[key] = max(1.0, float(result.get(key, 1.0) or 1.0))
+            except Exception:
+                vals[key] = 1.0
+
+        # Preserve exactly what the user edited.
+        vals[anchor_key] = max(1.0, float(anchor_value or 1.0))
+
+        # Keep kcal coherent with the returned macro grams when user edits grams.
+        if anchor_key != "kcal":
+            vals["kcal"] = max(
+                1.0,
+                (vals["protein_g"] * 4.0) + (vals["carbs_g"] * 4.0) + (vals["fat_g"] * 9.0),
+            )
+
+        for key in ("kcal", "protein_g", "carbs_g", "fat_g"):
+            val = max(1.0, float(vals.get(key, 1.0)))
             self._fields[key].setText(str(int(val)))
             set_macro_goal(self._db, key, val)
         if self._sync_fn:
             self._sync_fn()
 
-    def _on_macros_error(self, prev: dict):
+    def _on_core_macros_error(self, prev: dict):
+        from utils.macro_goals import set_macro_goal
         self._set_macro_fields_loading(False)
-        for key in ("protein_g", "carbs_g", "fat_g"):
-            self._fields[key].setText(prev[key])
+        for key in ("kcal", "protein_g", "carbs_g", "fat_g"):
+            raw = str(prev.get(key, "") or "").strip()
+            self._fields[key].setText(raw)
+            try:
+                set_macro_goal(self._db, key, max(1.0, float(raw)))
+            except Exception:
+                pass
+        ThemedMessageBox.warning(
+            self,
+            "Dishy recalculation failed",
+            "Could not rebalance goals right now. Your previous values were restored.",
+        )
 
     def set_sync_fn(self, fn):
         self._sync_fn = fn
+
+    def refresh(self):
+        self._load_body_metrics()
+        self._refresh_body_metric_visibility()
 
     def _reset_defaults(self):
         from utils.macro_goals import MACRO_SPECS, set_macro_goal
@@ -1887,6 +3045,50 @@ class _NutritionGoalsPage(QWidget):
             self._auto_note.setStyleSheet(
                 f"color: {manager.c('#888888', '#777777')}; background: transparent; font-size: 12px;"
             )
+        if self._metrics_title_lbl:
+            self._metrics_title_lbl.setStyleSheet(
+                f"font-size: 13px; font-weight: 700; color: {manager.c('#e0e0e0', '#1a1a1a')}; background: transparent;"
+            )
+        if self._metrics_hint_lbl:
+            self._metrics_hint_lbl.setStyleSheet(
+                f"font-size: 12px; color: {manager.c('#666666', '#777777')}; background: transparent;"
+            )
+        if self._metrics_status_lbl:
+            self._metrics_status_lbl.setStyleSheet(
+                f"font-size: 12px; color: {manager.c('#777777', '#666666')}; background: transparent;"
+            )
+        if self._me_name_lbl:
+            self._me_name_lbl.setStyleSheet(
+                f"font-size: 12px; font-weight: 700; color: {manager.c('#d8d8d8', '#222222')}; background: transparent;"
+            )
+        if self._pair_name_lbl:
+            self._pair_name_lbl.setStyleSheet(
+                f"font-size: 12px; font-weight: 700; color: {manager.c('#d8d8d8', '#222222')}; background: transparent;"
+            )
+        if self._me_box:
+            self._me_box.setStyleSheet(_subtle_surface_style())
+        if self._pair_box:
+            self._pair_box.setStyleSheet(_subtle_surface_style())
+        if self._body_height_input:
+            input_style = (
+                f"QLineEdit {{ background: {manager.c('#111111', '#ffffff')};"
+                f" color: {manager.c('#e8e8e8', '#1a1a1a')};"
+                f" border: 1px solid {manager.c('#2a2a2a', '#dcdcdc')}; border-radius: 8px; padding: 0 10px; }}"
+                "QLineEdit:focus { border-color: #ff6b35; }"
+            )
+            self._body_height_input.setStyleSheet(input_style)
+            if self._body_weight_input:
+                self._body_weight_input.setStyleSheet(input_style)
+            if self._pair_name_input:
+                self._pair_name_input.setStyleSheet(input_style)
+            if self._pair_height_input:
+                self._pair_height_input.setStyleSheet(input_style)
+            if self._pair_weight_input:
+                self._pair_weight_input.setStyleSheet(input_style)
+        if self._recommend_btn:
+            self._recommend_btn.setStyleSheet(_secondary_button_style())
+        if self._recommend_pair_btn:
+            self._recommend_pair_btn.setStyleSheet(_secondary_button_style())
         for lbl in self._macro_name_labels:
             lbl.setStyleSheet(
                 f"font-size: 14px; font-weight: 600;"
@@ -1914,6 +3116,7 @@ class _NutritionGoalsPage(QWidget):
                 f"  color: {manager.c('#cccccc', '#222222')};"
                 f"}}"
             )
+        self._refresh_body_metric_visibility()
 
 
 # ── Settings view ─────────────────────────────────────────────────────────────
@@ -1925,7 +3128,8 @@ _NAV_ITEMS = [
     ("fa5s.bullseye",     "Nutrition Goals"),   # index 3
     ("fa5s.sliders-h",    "Preferences"),       # index 4
     ("fa5s.database",     "Data && Backup"),     # index 5
-    ("fa5s.list-alt",     "Version History"),   # index 6
+    ("fa5s.chart-line",   "Monitoring"),        # index 6
+    ("fa5s.list-alt",     "Version History"),   # index 7
 ]
 
 
@@ -1933,9 +3137,10 @@ class SettingsView(QWidget):
     sign_in_requested = Signal()
     sign_out_requested = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, db: Database | None = None, parent=None):
         super().__init__(parent)
         self.setObjectName("view-container")
+        self._db = db or get_db()
         self._nav_btns: list[QPushButton] = []
         self._build_ui()
 
@@ -2004,12 +3209,13 @@ class SettingsView(QWidget):
 
         pages = [
             _AccountPage(),            # index 0
-            _ProfilePage(),            # index 1
-            _DishyPrefsPage(),         # index 2
-            _NutritionGoalsPage(),     # index 3
-            _AppPrefsPage(),           # index 4
-            _DataPage(),               # index 5
-            _VersionHistoryPage(),     # index 6
+            _ProfilePage(db=self._db),            # index 1
+            _DishyPrefsPage(db=self._db),         # index 2
+            _NutritionGoalsPage(db=self._db),     # index 3
+            _AppPrefsPage(db=self._db),           # index 4
+            _DataPage(db=self._db),               # index 5
+            _MonitoringPage(db=self._db),         # index 6
+            _VersionHistoryPage(),     # index 7
         ]
         self._pages = pages
         self._scroll_areas: list[QScrollArea] = []
@@ -2041,8 +3247,11 @@ class SettingsView(QWidget):
 
     def _select_page(self, index: int):
         self._stack.setCurrentIndex(index)
-        if index == 1:
-            self._pages[1].refresh()
+        if hasattr(self._pages[index], "refresh"):
+            try:
+                self._pages[index].refresh()
+            except Exception:
+                pass
         for i, btn in enumerate(self._nav_btns):
             is_active = i == index
             icon_name, label = _NAV_ITEMS[i]
@@ -2084,7 +3293,10 @@ class SettingsView(QWidget):
     def set_account_info(self, user: dict | None, sync_service) -> None:
         """Called by DishBoard.py after login to populate the Account page."""
         account_page = self._pages[0]
+        monitoring_page = self._pages[6]
         account_page.set_user(user, sync_service)
+        if hasattr(monitoring_page, "set_sync_service"):
+            monitoring_page.set_sync_service(sync_service)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             try:

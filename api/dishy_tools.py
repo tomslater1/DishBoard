@@ -9,7 +9,6 @@ DishyActions — executes tool calls, writes to the DB, and records which
 from __future__ import annotations
 
 import json
-import os
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -18,415 +17,8 @@ if TYPE_CHECKING:
 
 # ── Tool schemas (Anthropic format) ──────────────────────────────────────────
 
-TOOLS: list[dict] = [
-    {
-        "name": "save_recipe",
-        "description": (
-            "Save a fully-formed recipe to the user's DishBoard recipe library. "
-            "Use whenever the user asks you to create, invent, generate, or save a recipe — "
-            "including when you need to save a recipe before setting a meal slot. "
-            "Always provide: a real title, accurate ingredient quantities (e.g. '200 g chicken breast'), "
-            "numbered step-by-step instructions (one action per step), and exactly one meal-type tag "
-            "from this exact list (title-case): 'Breakfast', 'Lunch', 'Dinner', 'Snack', 'Dessert'. "
-            "Add descriptive tags too (e.g. 'Vegetarian', 'High-Protein', 'Quick (< 30 min)', 'Spicy'). "
-            "After saving, offer to add it to the meal plan or generate a shopping list for it. "
-            "CRITICAL: You MUST calculate and include accurate nutrition_per_serving (kcal, protein_g, "
-            "carbs_g, fat_g, fiber_g, sugar_g). Never omit nutrition. Never leave all macros as zero."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "Recipe title",
-                },
-                "summary": {
-                    "type": "string",
-                    "description": "One-sentence description of the dish",
-                },
-                "servings": {
-                    "type": "integer",
-                    "description": "Number of servings",
-                },
-                "ready_mins": {
-                    "type": "integer",
-                    "description": "Total time in minutes (prep + cook)",
-                },
-                "ingredients": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "Ingredient lines with quantities, "
-                        "e.g. ['200 g chicken breast', '2 cloves garlic, minced']"
-                    ),
-                },
-                "instructions": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Ordered step-by-step instructions (one step per item)",
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "Category tags for this recipe. MUST include exactly one meal-type tag "
-                        "from this exact list (title-case): 'Breakfast', 'Lunch', 'Dinner', "
-                        "'Snack', 'Dessert'. Then add any relevant descriptive tags such as "
-                        "'Vegetarian', 'High-Protein', 'Quick (< 30 min)', 'Spicy', etc. "
-                        "Example: ['Dinner', 'High-Protein', 'Spicy']"
-                    ),
-                },
-                "nutrition_per_serving": {
-                    "type": "object",
-                    "description": (
-                        "Nutritional values per serving. REQUIRED — calculate from ingredients. "
-                        "Providing this avoids a slow re-analysis step after saving. "
-                        "All values are numbers (floats). "
-                        "Example: {\"kcal\": 520, \"protein_g\": 38, \"carbs_g\": 45, "
-                        "\"fat_g\": 18, \"fiber_g\": 6, \"sugar_g\": 8}"
-                    ),
-                    "properties": {
-                        "kcal":      {"type": "number"},
-                        "protein_g": {"type": "number"},
-                        "carbs_g":   {"type": "number"},
-                        "fat_g":     {"type": "number"},
-                        "fiber_g":   {"type": "number"},
-                        "sugar_g":   {"type": "number"},
-                    },
-                },
-            },
-            "required": ["title", "ingredients", "instructions", "tags"],
-        },
-    },
-    {
-        "name": "set_meal_slot",
-        "description": (
-            "Assign a meal to a specific day and meal type in the current week's meal planner. "
-            "Use for single-slot requests such as 'add pasta to Tuesday dinner' or "
-            "'put avocado toast on Wednesday breakfast'. "
-            "If a saved recipe name matches, it will be linked automatically."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "day": {
-                    "type": "string",
-                    "enum": [
-                        "Monday", "Tuesday", "Wednesday",
-                        "Thursday", "Friday", "Saturday", "Sunday",
-                    ],
-                },
-                "meal_type": {
-                    "type": "string",
-                    "enum": ["breakfast", "lunch", "dinner"],
-                },
-                "meal_name": {
-                    "type": "string",
-                    "description": "Name of the meal or recipe to place in this slot",
-                },
-            },
-            "required": ["day", "meal_type", "meal_name"],
-        },
-    },
-    {
-        "name": "fill_week_meal_plan",
-        "description": (
-            "Fill an entire week's meal plan — Monday through Sunday, "
-            "breakfast, lunch, and dinner for each day. "
-            "Use when the user asks to plan the whole week, auto-fill the planner, "
-            "fill everything, or schedule meals for the week. "
-            "YOU must decide the plan and pass it via the 'plan' parameter — do not leave it empty. "
-            "Use only recipes that exist in the live context recipe library. "
-            "Prioritise the user's favourite recipes. Aim for variety — avoid repeating the same "
-            "recipe more than twice. Balance macros across the week where possible. "
-            "Today's meals are automatically logged to nutrition after filling — mention this in your reply."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "plan": {
-                    "type": "object",
-                    "description": (
-                        "The full 7-day meal plan you have decided on. "
-                        "Keys are day names (Monday–Sunday), values are objects with keys "
-                        "'breakfast', 'lunch', 'dinner' mapping to recipe title strings. "
-                        "Only use recipe titles that exist in the user's saved recipe library. "
-                        "Example: {\"Monday\": {\"breakfast\": \"Overnight Oats\", "
-                        "\"lunch\": \"Caesar Salad\", \"dinner\": \"Pasta Bolognese\"}, ...}"
-                    ),
-                },
-                "preferences": {
-                    "type": "string",
-                    "description": (
-                        "Dietary restrictions or preferences applied when choosing meals, "
-                        "e.g. 'vegetarian', 'high-protein', 'no dairy'."
-                    ),
-                },
-            },
-            "required": ["plan"],
-        },
-    },
-    {
-        "name": "add_shopping_items",
-        "description": (
-            "Add one or more grocery items to the user's shopping list. "
-            "Use when the user asks to add specific ingredients or products to their list: "
-            "'add milk', 'I need eggs and butter', 'add the ingredients for pasta bolognese'. "
-            "Always include quantity and unit when the user specifies them. "
-            "After adding, offer to build the full week's shopping list if relevant.\n\n"
-            "SHOPPING LIST RULES — think like a shopper, not a recipe parser:\n"
-            "1. CONSOLIDATE: if multiple recipes need the same ingredient (e.g. chicken breast "
-            "appears in 3 recipes), add it ONCE with a combined or estimated total quantity.\n"
-            "2. PRACTICAL UNITS: use real shopping units — '1 pack chicken breast', "
-            "'1 dozen eggs', '1 bag spinach', '1 tin chopped tomatoes'. "
-            "Never add '183g chicken breast' — no one buys that. Round to the nearest "
-            "practical shop unit (pack, bag, bunch, tin, bottle, jar, dozen, etc.).\n"
-            "3. SKIP PANTRY STAPLES: do NOT add salt, black pepper, olive oil, water, "
-            "sugar, plain flour, butter (unless a large amount), or other basics that "
-            "virtually every kitchen already has — unless the user explicitly requests them.\n"
-            "4. SKIP DUPLICATES: never add an item already on the shopping list.\n"
-            "5. KEEP IT MANAGEABLE: a good shopping list has 10–20 items, not 50. "
-            "Combine similar items, trim the obvious, focus on what needs buying.\n"
-            "NOTE: A Pantry/Storage feature is coming soon — it will let you see exactly "
-            "what the user already has and automatically skip those items. Until then, "
-            "use common sense to avoid adding things most kitchens stock."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name":     {"type": "string", "description": "Item name (practical shopping name, not recipe verbatim)"},
-                            "quantity": {"type": "string", "description": "Amount in practical units, e.g. '2', '1'"},
-                            "unit":     {"type": "string", "description": "Shopping unit, e.g. 'pack', 'bag', 'tin', 'bunch', 'bottle'"},
-                        },
-                        "required": ["name"],
-                    },
-                    "description": "Grocery items to add — consolidated, practical, no pantry staples",
-                },
-            },
-            "required": ["items"],
-        },
-    },
-    # ── Destructive / delete tools ────────────────────────────────────────────
-    {
-        "name": "delete_meal_slot",
-        "description": (
-            "Remove a single meal from a specific day and meal type in the current week's plan. "
-            "Use when the user asks to clear, remove, or delete a specific meal (e.g. 'remove Tuesday dinner'). "
-            "⚠️ CONFIRMATION REQUIRED: Before calling this tool you MUST ask the user to confirm "
-            "which slot they want to remove and receive a clear 'yes' or 'confirm'. "
-            "If their most recent message already clearly confirms the deletion, proceed."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "day": {
-                    "type": "string",
-                    "enum": [
-                        "Monday", "Tuesday", "Wednesday",
-                        "Thursday", "Friday", "Saturday", "Sunday",
-                    ],
-                },
-                "meal_type": {
-                    "type": "string",
-                    "enum": ["breakfast", "lunch", "dinner"],
-                },
-            },
-            "required": ["day", "meal_type"],
-        },
-    },
-    {
-        "name": "clear_meal_day",
-        "description": (
-            "Clear all meal slots (breakfast, lunch, and dinner) for a specific day. "
-            "Use when the user asks to wipe, clear, or remove all meals for a particular day — "
-            "e.g. 'clear Monday', 'wipe everything on Friday', 'remove all of Tuesday's meals'. "
-            "This removes all three meal types for that day in one action. "
-            "⚠️ CONFIRMATION REQUIRED: Before calling, confirm which day will be cleared "
-            "and receive a clear 'yes' or 'confirm' from the user."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "day": {
-                    "type": "string",
-                    "enum": [
-                        "Monday", "Tuesday", "Wednesday",
-                        "Thursday", "Friday", "Saturday", "Sunday",
-                    ],
-                    "description": "The day whose meals should all be cleared",
-                },
-            },
-            "required": ["day"],
-        },
-    },
-    {
-        "name": "clear_meal_plan",
-        "description": (
-            "Clear meal plan entries — either just this week, or the entire meal plan history. "
-            "⚠️ DESTRUCTIVE — CANNOT BE UNDONE. "
-            "Use all_weeks=true only if the user explicitly asks to wipe everything / all weeks. "
-            "NEVER call this tool without first explicitly telling the user exactly what will be deleted "
-            "and receiving a clear 'yes', 'confirm', or equivalent confirmation. "
-            "If you are unsure they have confirmed, ask again."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "all_weeks": {
-                    "type": "boolean",
-                    "description": (
-                        "If true, clears ALL meal plan data across every week (full wipe). "
-                        "If false or omitted, only the current week is cleared (default)."
-                    ),
-                },
-            },
-        },
-    },
-    {
-        "name": "delete_shopping_item",
-        "description": (
-            "Remove a specific item from the shopping list by name. "
-            "⚠️ CONFIRMATION REQUIRED: Before calling this tool you MUST confirm with the user "
-            "which item to remove and receive a clear 'yes' or 'confirm'. "
-            "If their most recent message already clearly confirms the deletion, proceed."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "item_name": {
-                    "type": "string",
-                    "description": "The name of the shopping item to remove (case-insensitive match)",
-                },
-            },
-            "required": ["item_name"],
-        },
-    },
-    {
-        "name": "clear_shopping_list",
-        "description": (
-            "Clear the entire shopping list — removes ALL items. "
-            "⚠️ DESTRUCTIVE — CANNOT BE UNDONE. "
-            "NEVER call this tool without first explicitly telling the user exactly what will be deleted "
-            "and receiving a clear 'yes', 'confirm', or equivalent confirmation. "
-            "If you are unsure they have confirmed, ask again."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "delete_recipe",
-        "description": (
-            "Permanently delete a single saved recipe from the recipe library by its title. "
-            "⚠️ CONFIRMATION REQUIRED: Before calling this tool you MUST confirm with the user "
-            "which recipe to delete and receive a clear 'yes' or 'confirm'. "
-            "If their most recent message already clearly confirms the deletion, proceed."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "The exact title of the recipe to delete",
-                },
-            },
-            "required": ["title"],
-        },
-    },
-    {
-        "name": "clear_recipe_library",
-        "description": (
-            "Delete ALL saved recipes from the recipe library — every single recipe is permanently removed. "
-            "⚠️ EXTREMELY DESTRUCTIVE — CANNOT BE UNDONE. "
-            "NEVER call this tool without first explicitly warning the user that ALL their recipes will be "
-            "permanently deleted and receiving a clear, unambiguous 'yes' or 'confirm'. "
-            "If there is any doubt, ask the user to type 'confirm' before proceeding."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "log_recipe_nutrition",
-        "description": (
-            "Log a saved recipe's nutritional values to today's food log in the Nutrition tracker. "
-            "Use when the user says they ate, cooked, or want to track a specific recipe — "
-            "e.g. 'I just had the chicken pasta', 'log my dinner', 'track what I ate'. "
-            "Looks up the recipe's stored nutrition data and adds it to today's log automatically. "
-            "Always confirm with the exact kcal and macro breakdown after logging."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "recipe_title": {
-                    "type": "string",
-                    "description": "The title of the saved recipe to log (exact or close match)",
-                },
-                "servings_eaten": {
-                    "type": "number",
-                    "description": "How many servings the user ate (default: 1)",
-                },
-            },
-            "required": ["recipe_title"],
-        },
-    },
-    {
-        "name": "sync_meal_plan_nutrition",
-        "description": (
-            "Sync a day's planned meals from the Meal Planner into the Nutrition log. "
-            "Reads each recipe linked to a meal slot for the specified day, takes its stored "
-            "per-serving nutrition data, and adds it to the day's food log. "
-            "Skips meals already logged for that date (unless overwrite=true). "
-            "Use when: the user asks to log their planned meals, track their day, sync their plan, "
-            "or asks how they're doing nutritionally and unlogged meals exist. "
-            "Also use proactively after filling the week's meal plan if the user asks about today's nutrition. "
-            "Meals without stored nutrition data are reported back so the user knows."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "day": {
-                    "type": "string",
-                    "description": (
-                        "Day to sync — a day name ('Monday', 'Tuesday', etc.) or 'today'. "
-                        "Defaults to today if omitted."
-                    ),
-                },
-                "overwrite": {
-                    "type": "boolean",
-                    "description": (
-                        "If true, re-log meals even if they are already in today's log "
-                        "(useful if the user says they want a fresh sync). Default: false."
-                    ),
-                },
-            },
-        },
-    },
-    {
-        "name": "shopping_list_from_meal_plan",
-        "description": (
-            "Extract ingredients from this week's saved meal plan and add them to the shopping list. "
-            "Use when the user asks to generate, populate, or build their shopping list from the meal planner. "
-            "The tool automatically consolidates duplicate ingredients across recipes and skips common "
-            "pantry staples (salt, pepper, oil, water, flour, sugar, butter). "
-            "Items are added with practical shopping names, not raw recipe strings. "
-            "NOTE: A Pantry/Storage feature is coming soon that will let users mark what they already "
-            "have so those items are automatically skipped — for now the tool uses sensible defaults."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-]
 
+from api.dishy_tool_specs import TOOLS
 
 # ── Colour / icon helpers ─────────────────────────────────────────────────────
 
@@ -488,6 +80,10 @@ TOOL_STATUS_MESSAGES: dict[str, str] = {
     "clear_meal_plan":              "Clearing meal plan...",
     "clear_recipe_library":         "Clearing library...",
     "clear_shopping_list":          "Clearing shopping list...",
+    "add_pantry_item":              "Adding to My Kitchen...",
+    "remove_pantry_item":           "Removing from My Kitchen...",
+    "clear_pantry_section":         "Clearing My Kitchen...",
+    "swap_meal_slots":              "Swapping meals...",
 }
 
 
@@ -648,8 +244,21 @@ class DishyActions:
             goal = db.get_setting("weekly_cooking_goal", "")
             if goal in _GOAL_LABELS:
                 profile_parts.append(f"aims for {_GOAL_LABELS[goal]}")
+            height_cm = str(db.get_setting("body_height_cm", "") or "").strip()
+            weight_kg = str(db.get_setting("body_weight_kg", "") or "").strip()
+            if height_cm and weight_kg:
+                profile_parts.append(f"body metrics {height_cm} cm, {weight_kg} kg")
             if profile_parts:
                 lines.append(f"User profile: {'; '.join(profile_parts)}")
+
+            # Linked-account profile 2 metrics (used for shared goal guidance)
+            linked_hid = str(db.get_setting("household_id", "") or "").strip()
+            if linked_hid:
+                p2_name = str(db.get_setting("household_user2_name", "") or "").strip() or "Profile 2"
+                p2_h = str(db.get_setting("household_user2_height_cm", "") or "").strip()
+                p2_w = str(db.get_setting("household_user2_weight_kg", "") or "").strip()
+                if p2_h and p2_w:
+                    lines.append(f"Linked profile: {p2_name} ({p2_h} cm, {p2_w} kg)")
 
             # ── Dietary preferences ───────────────────────────────────────────
             prefs = db.get_setting("dietary_prefs", "")
@@ -668,6 +277,23 @@ class DishyActions:
             if cuisines:
                 cuisines_readable = cuisines.replace("_", " ").replace(",", ", ").title()
                 lines.append(f"Favourite cuisines: {cuisines_readable}")
+
+            # ── Nutrition goals ──────────────────────────────────────────────
+            try:
+                from utils.macro_goals import get_macro_goals
+
+                goals = get_macro_goals(db)
+                lines.append(
+                    "Daily nutrition goals: "
+                    f"{round(float(goals.get('kcal', 0) or 0))} kcal | "
+                    f"{round(float(goals.get('protein_g', 0) or 0))}g protein | "
+                    f"{round(float(goals.get('carbs_g', 0) or 0))}g carbs | "
+                    f"{round(float(goals.get('fat_g', 0) or 0))}g fat | "
+                    f"{round(float(goals.get('fiber_g', 0) or 0))}g fiber | "
+                    f"{round(float(goals.get('sugar_g', 0) or 0))}g sugar"
+                )
+            except Exception:
+                pass
 
             # ── Saved recipes ─────────────────────────────────────────────────
             recipes = db.get_saved_recipes()
@@ -719,7 +345,7 @@ class DishyActions:
             week_start = _current_week_start()
             meal_rows  = db.get_meal_plan(week_start)
             DAYS  = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
-            MEALS = ["breakfast","lunch","dinner"]
+            MEALS = ["breakfast","lunch","dinner","snack"]
             if meal_rows:
                 by_day: dict[str, dict] = {}
                 for row in meal_rows:
@@ -743,6 +369,40 @@ class DishyActions:
                 lines.append(f"Shopping list ({len(unchecked)} items): {', '.join(unchecked[:25])}")
             else:
                 lines.append("Shopping list: empty")
+
+            # ── My Kitchen (pantry / fridge / freezer) ────────────────────────
+            pantry_items = db.get_pantry_items()
+            if pantry_items:
+                by_storage: dict[str, list] = {"Pantry": [], "Fridge": [], "Freezer": []}
+                for item in pantry_items:
+                    label = item["name"]
+                    if item.get("quantity"):
+                        label += f" ({item['quantity']} {item.get('unit', '')})"
+                    by_storage.get(item["storage"], by_storage["Pantry"]).append(label)
+                lines.append("\n### My Kitchen")
+                for section, items in by_storage.items():
+                    if items:
+                        lines.append(f"{section}: {', '.join(items)}")
+            else:
+                lines.append("\n### My Kitchen\nEmpty — user hasn't added any ingredients yet.")
+
+            # ── Expiring soon ─────────────────────────────────────────────────
+            if pantry_items:
+                expiring: list[str] = []
+                for item in pantry_items:
+                    exp = (item.get("expiry_date") or "").strip()
+                    if not exp:
+                        continue
+                    try:
+                        delta = (date.fromisoformat(exp) - date.today()).days
+                    except ValueError:
+                        continue
+                    if delta < 0:
+                        expiring.append(f"{item['name']} (EXPIRED {abs(delta)}d ago)")
+                    elif delta <= 3:
+                        expiring.append(f"{item['name']} (expires in {delta}d)")
+                if expiring:
+                    lines.append(f"⚠️ Expiring soon: {', '.join(expiring)}")
 
             # ── Today's nutrition ─────────────────────────────────────────────
             logs = db.get_nutrition_logs(today)
@@ -827,6 +487,32 @@ class DishyActions:
             return "\n".join(lines)
         except Exception:
             return ""
+
+    def get_memory_context(self, query: str) -> str:
+        """Return compact, query-targeted memory snippets for the current turn."""
+        db = None
+        try:
+            db = self._open_db()
+            active_user = db.get_setting("active_user_id", "")
+            try:
+                from utils.feature_flags import FeatureFlagService
+
+                if not FeatureFlagService(db, active_user).is_enabled("dishy_memory_context", default=True):
+                    return ""
+            except Exception:
+                pass
+
+            from utils.ai_memory import build_memory_context
+
+            return build_memory_context(db, query, max_items=12)
+        except Exception:
+            return ""
+        finally:
+            try:
+                if db is not None:
+                    db.close()
+            except Exception:
+                pass
 
     def execute(self, tool_name: str, tool_input: dict) -> str:
         """Dispatch a tool. Returns a plain-text result string sent back to Claude."""
@@ -1034,7 +720,7 @@ class DishyActions:
         recipe_map  = {r["title"].strip().lower(): r["id"] for r in saved_rows}
         week_start  = _current_week_start()
         DAYS  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        MEALS = ["breakfast", "lunch", "dinner"]
+        MEALS = ["breakfast", "lunch", "dinner", "snack"]
         filled = 0
         for day in DAYS:
             day_plan = plan.get(day, {})
@@ -1042,6 +728,8 @@ class DishyActions:
                 name = (day_plan.get(meal_type) or "").strip()
                 if name:
                     recipe_id = recipe_map.get(name.lower())
+                    if not recipe_id:
+                        continue
                     db.set_meal_slot(
                         week_start, day, meal_type,
                         custom_name=name, recipe_id=recipe_id,
@@ -1055,7 +743,7 @@ class DishyActions:
         today_name = date.today().strftime("%A")
         today_str  = date.today().isoformat()
         today_plan = plan.get(today_name, {})
-        for meal_type in MEALS:
+        for meal_type in ["breakfast", "lunch", "dinner", "snack"]:
             name = (today_plan.get(meal_type) or "").strip()
             if name:
                 rid = recipe_map.get(name.lower())
@@ -1108,7 +796,7 @@ class DishyActions:
         db.clear_meal_day_slots(week_start, day)
         if "meal_planner" not in self.pending_refreshes:
             self.pending_refreshes.append("meal_planner")
-        return f"Cleared all meals (breakfast, lunch, dinner) for {day}."
+        return f"Cleared all meals (breakfast, lunch, dinner, snack) for {day}."
 
     def _tool_clear_meal_plan(self, inp: dict) -> str:
         db         = self._open_db()
@@ -1123,6 +811,66 @@ class DishyActions:
         if "meal_planner" not in self.pending_refreshes:
             self.pending_refreshes.append("meal_planner")
         return "Cleared the entire meal plan for this week."
+
+    def _tool_swap_meal_slots(self, inp: dict) -> str:
+        day1   = (inp.get("day1")        or "").strip()
+        type1  = (inp.get("meal_type1")  or "").strip()
+        day2   = (inp.get("day2")        or "").strip()
+        type2  = (inp.get("meal_type2")  or "").strip()
+        if not all([day1, type1, day2, type2]):
+            return "Missing fields: day1, meal_type1, day2, and meal_type2 are all required."
+        db         = self._open_db()
+        week_start = _current_week_start()
+
+        def _get_slot(day, meal_type):
+            return db.conn.execute(
+                "SELECT id, recipe_id, custom_name, notes FROM meal_plans "
+                "WHERE week_start=? AND day_of_week=? AND meal_type=?",
+                (week_start, day, meal_type),
+            ).fetchone()
+
+        slot1 = _get_slot(day1, type1)
+        slot2 = _get_slot(day2, type2)
+
+        # Nothing in either slot — nothing to swap
+        if slot1 is None and slot2 is None:
+            return f"Both {day1} {type1} and {day2} {type2} are empty — nothing to swap."
+
+        def _upsert(day, meal_type, source_slot):
+            if source_slot is None:
+                db.conn.execute(
+                    "DELETE FROM meal_plans WHERE week_start=? AND day_of_week=? AND meal_type=?",
+                    (week_start, day, meal_type),
+                )
+            else:
+                existing = _get_slot(day, meal_type)
+                if existing:
+                    db.conn.execute(
+                        "UPDATE meal_plans SET recipe_id=?, custom_name=?, notes=?, updated_at=datetime('now') "
+                        "WHERE week_start=? AND day_of_week=? AND meal_type=?",
+                        (source_slot["recipe_id"], source_slot["custom_name"],
+                         source_slot["notes"], week_start, day, meal_type),
+                    )
+                else:
+                    db.conn.execute(
+                        "INSERT INTO meal_plans (week_start, day_of_week, meal_type, recipe_id, custom_name, notes) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (week_start, day, meal_type, source_slot["recipe_id"],
+                         source_slot["custom_name"], source_slot["notes"]),
+                    )
+
+        _upsert(day1, type1, slot2)
+        _upsert(day2, type2, slot1)
+        db.conn.commit()
+
+        if "meal_planner" not in self.pending_refreshes:
+            self.pending_refreshes.append("meal_planner")
+
+        name1 = (slot1["custom_name"] if slot1 else "empty") if slot1 else "empty"
+        name2 = (slot2["custom_name"] if slot2 else "empty") if slot2 else "empty"
+        return (
+            f"Swapped {day1} {type1} ({name1}) ↔ {day2} {type2} ({name2})."
+        )
 
     def _tool_delete_shopping_item(self, inp: dict) -> str:
         name = (inp.get("item_name") or "").strip()
@@ -1408,4 +1156,61 @@ class DishyActions:
                 f" Skipped {skipped_staples} pantry staple(s) (salt, pepper, oil, etc.) "
                 "— a Pantry mode is coming soon to let you manage what you already have."
             )
+        return msg
+
+    def _tool_add_pantry_item(self, inp: dict) -> str:
+        name     = (inp.get("name") or "").strip()
+        if not name:
+            return "Missing field: name is required."
+        qty_str  = (inp.get("quantity") or "").strip()
+        unit     = (inp.get("unit") or "").strip()
+        storage  = (inp.get("storage") or "Pantry").strip()
+        if storage not in ("Pantry", "Fridge", "Freezer"):
+            storage = "Pantry"
+        try:
+            qty = float(qty_str) if qty_str else None
+        except ValueError:
+            qty = None
+        db = self._open_db()
+        item_id = db.add_pantry_item(name, qty, unit, storage)
+        if "my_kitchen" not in self.pending_refreshes:
+            self.pending_refreshes.append("my_kitchen")
+        qty_label = f" ({qty_str} {unit})".strip() if (qty_str or unit) else ""
+        return f"Added '{name}'{qty_label} to {storage} in My Kitchen."
+
+    def _tool_remove_pantry_item(self, inp: dict) -> str:
+        name    = (inp.get("name") or "").strip()
+        storage = (inp.get("storage") or "").strip()
+        if not name:
+            return "Missing field: name is required."
+        db    = self._open_db()
+        items = db.get_pantry_items(storage if storage else None)
+        name_lower = name.lower()
+        match = None
+        for item in items:
+            if (item["name"].lower() in name_lower or name_lower in item["name"].lower()):
+                match = item
+                break
+        if not match:
+            return f"No item matching '{name}' found in My Kitchen."
+        db.delete_pantry_item(match["id"])
+        if "my_kitchen" not in self.pending_refreshes:
+            self.pending_refreshes.append("my_kitchen")
+        return f"Removed '{match['name']}' from {match['storage']} in My Kitchen."
+
+    def _tool_clear_pantry_section(self, inp: dict) -> str:
+        storage = (inp.get("storage") or "").strip()
+        if not storage:
+            return "Missing field: storage is required."
+        db = self._open_db()
+        if storage == "all":
+            db.clear_pantry()
+            msg = "Cleared all items from My Kitchen (Pantry, Fridge, and Freezer)."
+        elif storage in ("Pantry", "Fridge", "Freezer"):
+            db.clear_pantry(storage)
+            msg = f"Cleared all items from {storage} in My Kitchen."
+        else:
+            return f"Invalid storage '{storage}'. Use Pantry, Fridge, Freezer, or all."
+        if "my_kitchen" not in self.pending_refreshes:
+            self.pending_refreshes.append("my_kitchen")
         return msg

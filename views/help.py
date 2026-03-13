@@ -35,7 +35,10 @@ _SECTIONS = [
         "features": [
             "Paste any URL to import a recipe instantly",
             "Search online and save directly from 60 instant results",
+            "Run Recipe Health Check before saving to catch missing fields and quality issues",
             "Create recipes manually — Dishy looks up macros per ingredient as you type",
+            "Use Bulk Tools on filtered results (tag, favourite, or delete in one go)",
+            "Source Trust score highlights reliable recipe websites in search results",
             "Filter by tag: Breakfast, Lunch, Dinner, High-Protein, Vegetarian, and more",
             "Star favourites — Dishy prefers them when planning your week",
         ],
@@ -53,8 +56,9 @@ _SECTIONS = [
         "features": [
             "Click any slot and pick from your saved recipes",
             "Ask Dishy to fill your whole week in one go",
+            "Auto-Optimize fills empty slots using macro targets, variety, and pantry items",
             "Nutrition updates live the moment you plan today's meals",
-            "Export the week to Apple Calendar",
+            "Export the week to your calendar app (.ics)",
         ],
         "connects": [
             (1, "fa5s.book-open",     "#7c6af7", "Recipes"),
@@ -84,13 +88,19 @@ _SECTIONS = [
         "icon": "fa5s.box-open",
         "colour": "#e8924a",
         "title": "My Kitchen",
-        "summary": "Your pantry, fridge, and freezer tracker — coming soon.",
+        "summary": "Your pantry, fridge, and freezer in one place. Dishy knows exactly what you have and uses it when planning meals.",
         "features": [
-            "See exactly what ingredients you have at home",
-            "Get low stock alerts before you run out",
-            "Dishy will use your pantry when planning meals",
+            "Three sections — Pantry, Fridge, and Freezer",
+            "Tick items off your shopping list in Live Shop mode and they appear here automatically",
+            "Ingredients used by today's meals are deducted automatically when meal time arrives",
+            "Pantry waste and expiry risk insights are shown in Monitoring",
+            "Ask Dishy to add items, suggest recipes from what you have, or plan meals around your stock",
         ],
-        "connects": [],
+        "connects": [
+            (5, "fa5s.shopping-cart", "#f0a500", "Shopping List"),
+            (2, "fa5s.calendar-alt",  "#4caf8a", "Meal Planner"),
+            (6, "fa5s.robot",         "#34d399", "Dishy"),
+        ],
     },
     {
         "index": 5,
@@ -100,10 +110,11 @@ _SECTIONS = [
         "summary": "Build your grocery list manually or generate it from the week's meal plan. Items are grouped by category so you can shop aisle by aisle.",
         "features": [
             "Generate the full week's ingredients from the Meal Planner in one tap",
+            "Merge Duplicates combines repeat items and tidies quantities",
             "Items grouped by category — tap any section to expand or collapse",
             "Stats strip shows your total, items left to get, and basket progress",
             "Check off items as you shop, then clear them all at once",
-            "Export to Apple Notes for easy phone access",
+            "Export your list as Notes (macOS) or text file (Windows/Linux)",
             "Ask Dishy to add specific items or build your list from scratch",
         ],
         "connects": [
@@ -142,9 +153,13 @@ _SECTIONS = [
         "features": [
             "Toggle dark / light mode",
             "Set your own daily calorie and macro targets in Nutrition Goals",
+            "Add height and weight in Nutrition Goals so Dishy can personalise targets",
             "Set dietary preferences — Dishy uses these when planning meals",
             "Manage your account and view cloud sync status",
-            "Export or import a full backup of all your data",
+            "Create or join a Shared Household from Account settings",
+            "Export profiles: full backup, migration pack, meal-planning only, or nutrition only",
+            "Trash Bin recovery for deleted recipes, meal slots, shopping and pantry items",
+            "Monitoring includes sync integrity checks and pantry waste/cost insights",
         ],
         "connects": [
             (3, "fa5s.heartbeat", "#e05c7a", "Nutrition"),

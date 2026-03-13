@@ -7,15 +7,15 @@ The upload runs via CloudSyncService.push_all() with a progress label.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton,
+    QLabel, QPushButton, QWidget,
 )
 
 import qtawesome as qta
-from PySide6.QtCore import QSize
 
+from utils.theme import manager as theme_manager
 from utils.workers import run_async
 
 
@@ -24,13 +24,42 @@ class MigrationDialog(QDialog):
         super().__init__(parent)
         self._user_id = user_id
         self._recipe_count = recipe_count
-        self.setWindowTitle("Upload your data?")
-        self.setFixedWidth(420)
         self.setModal(True)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._drag_pos = None
         self._build_ui(recipe_count)
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton and self._drag_pos is not None:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+
+    def mouseReleaseEvent(self, _event):
+        self._drag_pos = None
+
     def _build_ui(self, recipe_count: int):
-        layout = QVBoxLayout(self)
+        tm = theme_manager
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(0)
+
+        card = QWidget()
+        card.setObjectName("migration-card")
+        card.setFixedWidth(420)
+        card.setStyleSheet(
+            f"QWidget#migration-card {{"
+            f"  background: {tm.c('#161616', '#ffffff')};"
+            f"  border-radius: 14px;"
+            f"  border: 1px solid {tm.c('#2a2a2a', '#e0e0e0')};"
+            f"}}"
+        )
+
+        layout = QVBoxLayout(card)
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(14)
 
@@ -44,7 +73,8 @@ class MigrationDialog(QDialog):
         title = QLabel("You have existing data")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
-            "font-size: 17px; font-weight: 700; background: transparent;"
+            f"font-size: 17px; font-weight: 700; background: transparent;"
+            f" color: {tm.c('#f0f0f0', '#1a1a1a')};"
         )
         layout.addWidget(title)
 
@@ -58,7 +88,8 @@ class MigrationDialog(QDialog):
         summary.setWordWrap(True)
         summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary.setStyleSheet(
-            "font-size: 13px; color: #888; background: transparent; line-height: 1.5;"
+            f"font-size: 13px; color: {tm.c('#888888', '#555555')};"
+            f" background: transparent; line-height: 1.5;"
         )
         layout.addWidget(summary)
 
@@ -81,11 +112,13 @@ class MigrationDialog(QDialog):
         self._skip_btn.setFixedHeight(44)
         self._skip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._skip_btn.setStyleSheet(
-            "QPushButton {"
-            "  background: transparent; border: 1px solid #333;"
-            "  border-radius: 10px; color: #888; font-size: 13px; font-weight: 600;"
-            "}"
-            "QPushButton:hover { border-color: #555; color: #ccc; }"
+            f"QPushButton {{"
+            f"  background: transparent; border: 1px solid {tm.c('#333333', '#dddddd')};"
+            f"  border-radius: 10px; color: {tm.c('#888888', '#666666')};"
+            f"  font-size: 13px; font-weight: 600;"
+            f"}}"
+            f"QPushButton:hover {{ border-color: {tm.c('#555555', '#aaaaaa')};"
+            f" color: {tm.c('#cccccc', '#333333')}; }}"
         )
         self._skip_btn.clicked.connect(self.reject)
 
@@ -107,6 +140,8 @@ class MigrationDialog(QDialog):
         btn_row.addWidget(self._skip_btn)
         btn_row.addWidget(self._upload_btn)
         layout.addLayout(btn_row)
+
+        outer.addWidget(card, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def _on_upload(self):
         self._upload_btn.setEnabled(False)

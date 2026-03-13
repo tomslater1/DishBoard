@@ -17,13 +17,13 @@ process exits, so no cleanup is required if the user closes the window early.
 
 from __future__ import annotations
 
-import json
 import threading
 
 _done_event: threading.Event | None = None
 _received_session: dict | None = None
 _server_thread: threading.Thread | None = None
 _shutdown_func = None
+_expected_state: str | None = None
 
 CALLBACK_PORT = 54321
 CALLBACK_URL  = f"http://127.0.0.1:{CALLBACK_PORT}/auth/callback"
@@ -87,10 +87,15 @@ _FRAGMENT_CAPTURE_HTML = f"""<!DOCTYPE html>
     var frag = window.location.hash.substring(1);
     if (!frag) return;
     var params = {{}};
+    var qs = new URLSearchParams(window.location.search);
+    var qState = qs.get('state') || '';
     frag.split('&').forEach(function(p) {{
       var kv = p.split('=');
       params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
     }});
+    if (!params.state && qState) {{
+      params.state = qState;
+    }}
     fetch('http://127.0.0.1:{CALLBACK_PORT}/auth/token', {{
       method: 'POST',
       headers: {{'Content-Type': 'application/json'}},
@@ -106,16 +111,17 @@ _FRAGMENT_CAPTURE_HTML = f"""<!DOCTYPE html>
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def start_oauth_callback_server() -> threading.Event:
+def start_oauth_callback_server(expected_state: str | None = None) -> threading.Event:
     """Start the Flask callback server in a daemon thread.
 
     Returns a threading.Event that is set when a session is received.
     The session dict (or None on failure) is available via get_received_session().
     """
-    global _done_event, _received_session, _server_thread, _shutdown_func
+    global _done_event, _received_session, _server_thread, _shutdown_func, _expected_state
 
     _done_event       = threading.Event()
     _received_session = None
+    _expected_state   = expected_state
 
     _server_thread = threading.Thread(target=_run_server, daemon=True)
     _server_thread.start()
@@ -155,6 +161,15 @@ def _run_server() -> None:
     @flask_app.route("/auth/callback")
     def callback():
         global _received_session
+        if request.remote_addr not in ("127.0.0.1", "::1"):
+            _done_event.set()
+            return _ERROR_HTML.format(error="invalid callback host"), 403
+
+        incoming_state = request.args.get("state", "")
+        if _expected_state and incoming_state != _expected_state:
+            _done_event.set()
+            return _ERROR_HTML.format(error="state mismatch"), 400
+
         code = request.args.get("code")
 
         if code:
@@ -181,9 +196,17 @@ def _run_server() -> None:
     @flask_app.route("/auth/token", methods=["POST"])
     def receive_token():
         global _received_session
+        if request.remote_addr not in ("127.0.0.1", "::1"):
+            _done_event.set()
+            return jsonify({"ok": False, "error": "invalid callback host"}), 403
         data          = request.get_json(force=True, silent=True) or {}
         access_token  = data.get("access_token", "")
         refresh_token = data.get("refresh_token", "")
+        incoming_state = data.get("state", "")
+
+        if _expected_state and incoming_state != _expected_state:
+            _done_event.set()
+            return jsonify({"ok": False, "error": "state mismatch"}), 400
 
         if not access_token:
             return jsonify({"ok": False, "error": "no access_token"}), 400

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from utils.theme import manager as theme_manager
+from utils.platform_ops import preferred_ui_font_family
 from utils.workers import run_async
 
 
@@ -404,7 +405,7 @@ class _TourBubble(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.drawEllipse(1, 1, size - 2, size - 2)
         p.setPen(QColor("#ffffff"))
-        f = QFont("SF Pro Display", 18, QFont.Weight.Bold)
+        f = QFont(preferred_ui_font_family(), 18, QFont.Weight.Bold)
         p.setFont(f)
         p.drawText(px.rect(), Qt.AlignmentFlag.AlignCenter, "D")
         p.end()

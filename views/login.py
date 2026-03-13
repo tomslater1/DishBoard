@@ -69,11 +69,7 @@ class LoginView(QWidget):
         logo_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         from utils.paths import get_resource_path
-        logo_path = get_resource_path(
-            "assets/icons/DishBoard-darkicon.png"
-            if theme_manager.mode == "dark"
-            else "assets/icons/DishBoard-lighticon.png"
-        )
+        logo_path = get_resource_path("assets/icons/Dishboard-orange.png")
         if os.path.exists(logo_path):
             px = QPixmap(logo_path).scaled(
                 44, 44,
@@ -191,6 +187,18 @@ class LoginView(QWidget):
         self._pw_input.returnPressed.connect(self._on_sign_in)
         layout.addWidget(self._pw_input)
 
+        layout.addSpacing(8)
+
+        # Confirm password (signup only)
+        self._pw_confirm_input = QLineEdit()
+        self._pw_confirm_input.setPlaceholderText("Confirm password")
+        self._pw_confirm_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._pw_confirm_input.setFixedHeight(44)
+        self._pw_confirm_input.setStyleSheet(field_style)
+        self._pw_confirm_input.returnPressed.connect(self._on_sign_in)
+        self._pw_confirm_input.setVisible(False)
+        layout.addWidget(self._pw_confirm_input)
+
         layout.addSpacing(4)
 
         # Password hint (signup only) + forgot password link (signin only)
@@ -270,8 +278,38 @@ class LoginView(QWidget):
 
         layout.addSpacing(16)
 
-        # OAuth buttons — both disabled pending setup
-        oauth_disabled_style = (
+        # Google OAuth button — active
+        google_style = (
+            "QPushButton {"
+            f"  background: {theme_manager.c('#1a1a1a', '#f8f8f8')};"
+            f"  color: {theme_manager.c('#e0e0e0', '#1a1a1a')};"
+            f"  border: 1px solid {theme_manager.c('#2a2a2a', '#dddddd')};"
+            "  border-radius: 10px; font-size: 13px; font-weight: 600;"
+            "  text-align: center; padding: 0 16px;"
+            "}"
+            "QPushButton:hover {"
+            f"  background: {theme_manager.c('#222222', '#eeeeee')};"
+            f"  border-color: {theme_manager.c('#444444', '#bbbbbb')};"
+            "}"
+            "QPushButton:disabled {"
+            f"  background: {theme_manager.c('#141414', '#f3f3f3')};"
+            f"  color: {theme_manager.c('#444', '#bbb')};"
+            "}"
+        )
+
+        self._google_btn = QPushButton("  Sign in with Google")
+        self._google_btn.setIcon(qta.icon("fa5b.google", color="#4285f4"))
+        self._google_btn.setIconSize(QSize(16, 16))
+        self._google_btn.setFixedHeight(46)
+        self._google_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._google_btn.setStyleSheet(google_style)
+        self._google_btn.clicked.connect(self._on_google)
+        layout.addWidget(self._google_btn)
+
+        layout.addSpacing(8)
+
+        # Apple button — still coming soon
+        apple_disabled_style = (
             "QPushButton {"
             f"  background: {theme_manager.c('#141414', '#f3f3f3')};"
             f"  color: {theme_manager.c('#444', '#bbb')};"
@@ -280,27 +318,13 @@ class LoginView(QWidget):
             "  text-align: center; padding: 0 16px;"
             "}"
         )
-
-        self._google_btn = QPushButton("  Sign in with Google  (coming soon)")
-        self._google_btn.setIcon(qta.icon("fa5b.google", color="#555555"))
-        self._google_btn.setIconSize(QSize(16, 16))
-        self._google_btn.setFixedHeight(46)
-        self._google_btn.setEnabled(False)
-        self._google_btn.setToolTip(
-            "Google sign-in is coming soon — use email and password for now"
-        )
-        self._google_btn.setStyleSheet(oauth_disabled_style)
-        layout.addWidget(self._google_btn)
-
-        layout.addSpacing(8)
-
         self._apple_btn = QPushButton("  Sign in with Apple  (coming soon)")
         self._apple_btn.setIcon(qta.icon("fa5b.apple", color=theme_manager.c("#555", "#aaa")))
         self._apple_btn.setIconSize(QSize(16, 16))
         self._apple_btn.setFixedHeight(46)
         self._apple_btn.setEnabled(False)
         self._apple_btn.setToolTip("Coming soon — requires Apple Developer account setup")
-        self._apple_btn.setStyleSheet(oauth_disabled_style)
+        self._apple_btn.setStyleSheet(apple_disabled_style)
         layout.addWidget(self._apple_btn)
 
         layout.addSpacing(24)
@@ -473,6 +497,7 @@ class LoginView(QWidget):
         self._is_signup_mode = signup
         self._signin_btn.setText("Create Account" if signup else "Sign In")
         self._pw_hint.setVisible(signup)
+        self._pw_confirm_input.setVisible(signup)
         self._forgot_pw_link.setVisible(not signup)
         self._clear_error()
         self._update_tab_style()
@@ -621,6 +646,14 @@ class LoginView(QWidget):
         if self._is_signup_mode and len(pw) < 6:
             self._show_error("Password must be at least 6 characters.")
             return
+        if self._is_signup_mode:
+            confirm = self._pw_confirm_input.text()
+            if not confirm:
+                self._show_error("Please confirm your password.")
+                return
+            if pw != confirm:
+                self._show_error("Passwords don't match — please check and try again.")
+                return
 
         self._set_loading(True)
         self._clear_error()
@@ -666,6 +699,11 @@ class LoginView(QWidget):
                 self._show_error(
                     "Too many sign-in attempts. Please wait 30 seconds and try again."
                 )
+            elif "user not found" in msg or ("no user" in msg and "found" in msg):
+                self._show_error(
+                    "No account found with that email — switching you to Create Account."
+                )
+                self._set_mode(True)
             elif "invalid" in msg and ("login" in msg or "credentials" in msg or "password" in msg):
                 self._show_error(
                     "Incorrect email or password. "
@@ -677,8 +715,9 @@ class LoginView(QWidget):
                 )
             elif "already registered" in msg or "already exists" in msg or "user_already_exists" in msg:
                 self._show_error(
-                    "An account with this email already exists — try signing in instead."
+                    "An account with this email already exists — switching you to Sign In."
                 )
+                self._set_mode(False)
             elif "password" in msg and ("weak" in msg or "short" in msg or "characters" in msg):
                 self._show_error("Password is too weak. Use at least 6 characters.")
             elif "network" in msg or "connect" in msg or "timeout" in msg or "unreachable" in msg:
@@ -692,10 +731,56 @@ class LoginView(QWidget):
 
         run_async(_work, on_result=_done, on_error=_err)
 
-    # ── Google OAuth (stub — kept for future use) ─────────────────────────────
+    # ── Google OAuth ──────────────────────────────────────────────────────────
 
     def _on_google(self):
-        pass   # button is disabled; this is never called
+        """Start Google OAuth: open browser → wait for callback → log in."""
+        from utils.workers import run_async
+        from auth.supabase_client import get_client
+        from auth.oauth_server import start_oauth_callback_server, CALLBACK_URL
+        import webbrowser
+        import secrets
+
+        self._google_btn.setEnabled(False)
+        self._google_btn.setText("  Opening browser…")
+        self._clear_error()
+        oauth_state = secrets.token_urlsafe(24)
+
+        def _work():
+            client = get_client()
+            if client is None:
+                raise RuntimeError("no_connection")
+            response = client.auth.sign_in_with_oauth({
+                "provider": "google",
+                "options": {
+                    "redirect_to": f"{CALLBACK_URL}?state={oauth_state}",
+                    "skip_browser_redirect": True,
+                },
+            })
+            return response.url
+
+        def _opened(url: str):
+            if not url:
+                self._show_error("Could not get Google sign-in URL. Try again.")
+                self._google_btn.setEnabled(True)
+                self._google_btn.setText("  Sign in with Google")
+                return
+            # Start local callback server and open browser
+            self._oauth_done_event = start_oauth_callback_server(expected_state=oauth_state)
+            webbrowser.open(url)
+            self._google_btn.setText("  Waiting for Google…")
+            self._oauth_poll_timer.start()
+
+        def _err(err: str):
+            self._google_btn.setEnabled(True)
+            self._google_btn.setText("  Sign in with Google")
+            msg = err.lower()
+            if "no_connection" in msg:
+                self._show_error("No internet connection. Check your network and try again.")
+            else:
+                self._show_error("Could not start Google sign-in. Please try again.")
+
+        run_async(_work, on_result=_opened, on_error=_err)
 
     def _poll_oauth(self):
         """Called every 500ms to check if OAuth callback has completed."""
@@ -710,6 +795,9 @@ class LoginView(QWidget):
         from auth.session_manager import save_session
         session = get_received_session()
         stop_server()
+
+        self._google_btn.setEnabled(True)
+        self._google_btn.setText("  Sign in with Google")
 
         if session and session.get("user", {}).get("id"):
             save_session(session)
@@ -731,9 +819,21 @@ class LoginView(QWidget):
         self._signin_btn.setEnabled(not loading)
         self._email_input.setEnabled(not loading)
         self._pw_input.setEnabled(not loading)
+        self._pw_confirm_input.setEnabled(not loading)
         self._signin_tab.setEnabled(not loading)
         self._signup_tab.setEnabled(not loading)
         if loading:
             self._signin_btn.setText("Please wait…")
         else:
             self._signin_btn.setText("Create Account" if self._is_signup_mode else "Sign In")
+
+    def reset(self):
+        """Reset the login view to a clean sign-in state — called after sign-out."""
+        self._email_input.clear()
+        self._pw_input.clear()
+        self._pw_confirm_input.clear()
+        self._clear_error()
+        self._page_stack.setCurrentIndex(0)
+        # Force back to sign-in mode without the guard check
+        self._is_signup_mode = True   # trick _set_mode into running
+        self._set_mode(False)

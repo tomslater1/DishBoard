@@ -2,88 +2,38 @@ import json
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from utils.theme import manager as theme_manager
+from utils.themed_dialog import ThemedMessageBox
 
 import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QScrollArea, QSizePolicy, QStackedWidget,
-    QDialog, QDialogButtonBox, QGridLayout, QComboBox,
-    QFrame, QFileDialog, QMessageBox,
+    QDialog, QGridLayout, QComboBox,
+    QFrame, QFileDialog,
 )
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath
 from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import QTimer
 
 from api.claude_ai import ClaudeAI
 from api.google_search import GoogleSearchAPI
 from api.recipe_scraper import scrape_recipe
 from models.database import Database
+from utils.data_service import get_db
+from utils.recipe_search import filter_and_rank_saved_recipes
+from utils.recipe_health import validate_recipe, health_label
 from utils.workers import run_async
+from views.recipe_catalog import (
+    RECIPE_ICONS,
+    RECIPE_COLOURS,
+    RECIPE_TAGS,
+    DAYS,
+    MEAL_TYPES,
+)
 from widgets.ingredient_row import NutritionIngredientList
 from widgets.primary_button import PrimaryButton
 
 _google = GoogleSearchAPI()
-
-# ── Icon / colour / tag palettes ────────────────────────────────────────────
-
-RECIPE_ICONS: list[tuple[str, str]] = [
-    ("fa5s.utensils",       "General"),
-    ("fa5s.pizza-slice",    "Pizza"),
-    ("fa5s.fish",           "Seafood"),
-    ("fa5s.drumstick-bite", "Chicken"),
-    ("fa5s.hamburger",      "Burger"),
-    ("fa5s.leaf",           "Veg"),
-    ("fa5s.seedling",       "Plant"),
-    ("fa5s.carrot",         "Veg"),
-    ("fa5s.apple-alt",      "Healthy"),
-    ("fa5s.bacon",          "Breakfast"),
-    ("fa5s.egg",            "Eggs"),
-    ("fa5s.coffee",         "Coffee"),
-    ("fa5s.birthday-cake",  "Baking"),
-    ("fa5s.cookie",         "Snacks"),
-    ("fa5s.fire",           "BBQ"),
-    ("fa5s.pepper-hot",     "Spicy"),
-    ("fa5s.mortar-pestle",  "Spices"),
-    ("fa5s.bread-slice",    "Bread"),
-    ("fa5s.ice-cream",      "Dessert"),
-    ("fa5s.blender",        "Smoothie"),
-    ("fa5s.lemon",          "Citrus"),
-    ("fa5s.cheese",         "Dairy"),
-    ("fa5s.hotdog",         "Fast Food"),
-    ("fa5s.mug-hot",        "Hot Drink"),
-    ("fa5s.snowflake",      "Cold"),
-    ("fa5s.wine-glass-alt", "Drinks"),
-    ("fa5s.star",           "Special"),
-    ("fa5s.heart",          "Favourite"),
-    ("fa5s.sun",            "Lunch"),
-    ("fa5s.moon",           "Dinner"),
-]
-
-RECIPE_COLOURS: list[tuple[str, str]] = [
-    ("#ff6b35", "Orange"),
-    ("#ef4444", "Red"),
-    ("#f59e0b", "Amber"),
-    ("#fbbf24", "Yellow"),
-    ("#34d399", "Green"),
-    ("#10b981", "Emerald"),
-    ("#4fc3f7", "Sky"),
-    ("#60a5fa", "Blue"),
-    ("#a78bfa", "Purple"),
-    ("#f472b6", "Pink"),
-    ("#fb7185", "Rose"),
-    ("#94a3b8", "Slate"),
-]
-
-RECIPE_TAGS: list[str] = [
-    "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
-    "High-Protein", "Low-Carb", "Keto", "Paleo",
-    "Quick (< 30 min)", "One-Pot", "Meal-Prep", "Batch Cook",
-    "Spicy", "Healthy", "Comfort Food", "Budget-Friendly",
-    "Date Night", "Kid-Friendly", "BBQ", "Breakfast",
-    "Lunch", "Dinner", "Snack", "Dessert", "Baking",
-]
-
-DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-MEAL_TYPES = ["breakfast", "lunch", "dinner"]
 
 
 # ── Small helpers ────────────────────────────────────────────────────────────
@@ -224,54 +174,154 @@ class AddToCalendarDialog(QDialog):
         self._db = db
         self._recipe_id = recipe_id
         self._recipe_title = recipe_title
-        self.setWindowTitle("Add to Meal Planner")
-        self.setMinimumWidth(340)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._drag_pos = None
         self._build_ui()
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton and self._drag_pos is not None:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+
+    def mouseReleaseEvent(self, _event):
+        self._drag_pos = None
+
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        from PySide6.QtWidgets import QWidget as _QWidget
+        tm = theme_manager
+        is_dark = tm.mode == "dark"
+        text = tm.c("#f0f0f0", "#1a1a1a")
+        muted = tm.c("#888888", "#666666")
+        input_bg = tm.c("#1a1a1a", "#f5f5f5")
+        border = tm.c("#2a2a2a", "#e0e0e0")
+
+        combo_style = (
+            f"QComboBox {{ background: {input_bg}; border: 1px solid {border};"
+            f" border-radius: 7px; color: {text}; padding: 5px 10px; font-size: 14px; }}"
+            f"QComboBox::drop-down {{ border: none; }}"
+            f"QComboBox QAbstractItemView {{ background: {tm.c('#1a1a1a', '#ffffff')};"
+            f" color: {text}; selection-background-color: {tm.c('#2a2a2a', '#e8e8e8')}; }}"
+        )
+        label_style = f"font-size: 12px; font-weight: 600; color: {muted}; background: transparent;"
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(0)
+
+        card = _QWidget()
+        card.setObjectName("atc-card")
+        card.setFixedWidth(360)
+        card.setStyleSheet(
+            f"QWidget#atc-card {{"
+            f"  background: {tm.c('#161616', '#ffffff')};"
+            f"  border-radius: 14px;"
+            f"  border: 1px solid {border};"
+            f"}}"
+        )
+
+        layout = QVBoxLayout(card)
         layout.setSpacing(14)
         layout.setContentsMargins(22, 20, 22, 20)
 
-        title = QLabel(f"Add  \"{self._recipe_title[:36]}\"  to the calendar")
-        title.setWordWrap(True)
-        title.setStyleSheet("color: #f0f0f0; font-size: 13px; font-weight: 600; background: transparent;")
-        layout.addWidget(title)
+        # Header row with title and X close button
+        hdr = QHBoxLayout()
+        hdr.setSpacing(8)
+        hdr_lbl = QLabel("Add to Meal Planner")
+        hdr_lbl.setStyleSheet(
+            f"font-size: 15px; font-weight: 700; color: {text}; background: transparent;"
+        )
+        hdr.addWidget(hdr_lbl, 1)
+        close_x = QPushButton()
+        close_x.setIcon(qta.icon("fa5s.times", color=muted))
+        close_x.setIconSize(QSize(13, 13))
+        close_x.setFixedSize(28, 28)
+        close_x.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_x.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; border-radius: 14px; }}"
+            f"QPushButton:hover {{ background: {('rgba(255,255,255,0.08)' if is_dark else 'rgba(0,0,0,0.06)')}; }}"
+        )
+        close_x.clicked.connect(self.reject)
+        hdr.addWidget(close_x, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(hdr)
+
+        recipe_lbl = QLabel(f"\"{self._recipe_title[:36]}\"")
+        recipe_lbl.setWordWrap(True)
+        recipe_lbl.setStyleSheet(
+            f"color: {tm.c('#aaaaaa', '#555555')}; font-size: 13px; background: transparent;"
+        )
+        layout.addWidget(recipe_lbl)
 
         # Week
         today = datetime.now().date()
         monday = today - timedelta(days=today.weekday())
         self._week_combo = QComboBox()
+        self._week_combo.setStyleSheet(combo_style)
         for i in range(4):
             ws = monday + timedelta(weeks=i)
             label = "This week" if i == 0 else ("Next week" if i == 1 else ws.strftime("%d %b"))
             self._week_combo.addItem(label, ws.isoformat())
-        layout.addWidget(QLabel("Week"))
+        wk_lbl = QLabel("Week")
+        wk_lbl.setStyleSheet(label_style)
+        layout.addWidget(wk_lbl)
         layout.addWidget(self._week_combo)
 
         # Day
         self._day_combo = QComboBox()
+        self._day_combo.setStyleSheet(combo_style)
         for d in DAYS:
             self._day_combo.addItem(d)
         current_day = today.strftime("%A")
         if current_day in DAYS:
             self._day_combo.setCurrentIndex(DAYS.index(current_day))
-        layout.addWidget(QLabel("Day"))
+        day_lbl = QLabel("Day")
+        day_lbl.setStyleSheet(label_style)
+        layout.addWidget(day_lbl)
         layout.addWidget(self._day_combo)
 
         # Meal type
         self._meal_combo = QComboBox()
+        self._meal_combo.setStyleSheet(combo_style)
         for m in MEAL_TYPES:
             self._meal_combo.addItem(m.capitalize(), m)
-        layout.addWidget(QLabel("Meal"))
+        meal_lbl = QLabel("Meal")
+        meal_lbl.setStyleSheet(label_style)
+        layout.addWidget(meal_lbl)
         layout.addWidget(self._meal_combo)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setFixedHeight(38)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: 1px solid {border};"
+            f" border-radius: 9px; color: {muted}; font-size: 13px; padding: 0 18px; }}"
+            f"QPushButton:hover {{ background: {tm.c('#1e1e1e', '#f0f0f0')}; }}"
         )
-        buttons.accepted.connect(self._save)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        cancel_btn.clicked.connect(self.reject)
+
+        add_btn = QPushButton("Add")
+        add_btn.setFixedHeight(38)
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.setStyleSheet(
+            "QPushButton { background: #ff6b35; color: #ffffff; border: none;"
+            " border-radius: 9px; font-size: 13px; font-weight: 600; padding: 0 18px; }"
+            "QPushButton:hover { background: #e05a28; }"
+        )
+        add_btn.clicked.connect(self._save)
+
+        btn_row.addWidget(cancel_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(add_btn)
+        layout.addLayout(btn_row)
+
+        outer.addWidget(card, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def _save(self):
         week_start = self._week_combo.currentData()
@@ -283,6 +333,117 @@ class AddToCalendarDialog(QDialog):
             recipe_id=self._recipe_id,
         )
         self.accept()
+
+
+class DishyNutritionLoadingDialog(QDialog):
+    """Blocking themed modal shown while Dishy gathers recipe nutrition."""
+
+    _SPIN = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+
+    def __init__(self, host: str, parent=None):
+        super().__init__(parent)
+        self._host = host or "the web"
+        self._step = 0
+        self._can_close = False
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setModal(True)
+        self._build_ui()
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(90)
+
+    def _build_ui(self):
+        tm = theme_manager
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(0)
+
+        card = QWidget()
+        card.setObjectName("dishy-nutrition-loading")
+        card.setFixedWidth(410)
+        card.setStyleSheet(
+            f"QWidget#dishy-nutrition-loading {{"
+            f" background: {tm.c('#161616', '#ffffff')};"
+            f" border: 1px solid {tm.c('#2a2a2a', '#e0e0e0')};"
+            f" border-radius: 14px;"
+            f"}}"
+        )
+
+        vl = QVBoxLayout(card)
+        vl.setContentsMargins(26, 24, 26, 24)
+        vl.setSpacing(10)
+
+        icon = QLabel()
+        icon.setPixmap(qta.icon("fa5s.robot", color="#34d399").pixmap(QSize(32, 32)))
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setStyleSheet("background: transparent;")
+        vl.addWidget(icon)
+
+        title = QLabel("Dishy is gathering nutrition data")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet(
+            f"background: transparent; color: {tm.c('#f0f0f0', '#1a1a1a')};"
+            "font-size: 15px; font-weight: 700;"
+        )
+        vl.addWidget(title)
+
+        sub = QLabel(f"Fetching and analyzing this recipe from {self._host}")
+        sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub.setWordWrap(True)
+        sub.setStyleSheet(
+            f"background: transparent; color: {tm.c('#999999', '#666666')};"
+            "font-size: 12px;"
+        )
+        vl.addWidget(sub)
+
+        self._status = QLabel(f"{self._SPIN[0]}  Working...")
+        self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status.setStyleSheet(
+            "background: rgba(52,211,153,0.10); color: #34d399;"
+            "border: 1px solid rgba(52,211,153,0.30); border-radius: 8px;"
+            "font-size: 12px; font-weight: 700; padding: 8px 10px;"
+        )
+        vl.addWidget(self._status)
+
+        note = QLabel("Please wait — this window will close automatically when ready.")
+        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note.setWordWrap(True)
+        note.setStyleSheet(
+            f"background: transparent; color: {tm.c('#777777', '#888888')};"
+            "font-size: 11px;"
+        )
+        vl.addWidget(note)
+
+        outer.addWidget(card, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    def _tick(self):
+        self._step = (self._step + 1) % len(self._SPIN)
+        self._status.setText(f"{self._SPIN[self._step]}  Working...")
+
+    def set_status(self, text: str):
+        self._status.setText(f"{self._SPIN[self._step]}  {text}")
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            event.ignore()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        # Prevent user-driven close while nutrition gathering is active.
+        if not self._can_close:
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+    def allow_close(self):
+        try:
+            self._timer.stop()
+        except Exception:
+            pass
+        self._can_close = True
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
@@ -732,36 +893,47 @@ class SearchResultRow(QWidget):
     """Modern card-style search result. Shows title, source domain, snippet
     and a Dishy AI badge indicating macros will be auto-analysed on import."""
 
-    def __init__(self, result: dict, on_select, parent=None):
+    def __init__(
+        self,
+        result: dict,
+        on_select,
+        on_get_nutrition,
+        state: str = "idle",
+        trust_score: float | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._callback = lambda: on_select(result)
+        self._on_get_nutrition = lambda: on_get_nutrition(result)
+        self._state = state
         tm = theme_manager
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(86)
+        self.setMinimumHeight(102)
 
-        self._normal_bg  = tm.c("#161616", "#ffffff")
-        self._hover_bg   = tm.c("#1c1c1c", "#f5f5f5")
-        self._normal_bdr = tm.c("#242424", "#e8e8e8")
+        self._normal_bg  = tm.c("#14191f", "#ffffff")
+        self._hover_bg   = tm.c("#1a2028", "#f7fafc")
+        self._normal_bdr = tm.c("#263242", "#e1e8f0")
         self._hover_bdr  = "#ff6b35"
         self._apply_style(hover=False)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(16, 14, 16, 14)
-        outer.setSpacing(14)
+        outer.setContentsMargins(16, 12, 14, 12)
+        outer.setSpacing(12)
 
         # Site initial badge
         host = urlparse(result.get("url", "")).netloc.replace("www.", "")
         initial = host[0].upper() if host else "R"
         site_badge = QLabel(initial)
-        site_badge.setFixedSize(38, 38)
+        site_badge.setFixedSize(40, 40)
         site_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         site_badge.setStyleSheet(
-            f"background: {tm.c('#242424', '#f0f0f0')};"
-            " border-radius: 10px;"
-            f" color: {tm.c('#888888', '#999999')};"
-            " font-size: 15px; font-weight: 700;"
+            f"background: {tm.c('#223042', '#eef3f8')};"
+            f"border: 1px solid {tm.c('#2f4258', '#d6e0ea')};"
+            " border-radius: 11px;"
+            f" color: {tm.c('#a7b9cf', '#6f8398')};"
+            " font-size: 14px; font-weight: 700;"
         )
 
         # Text column
@@ -773,31 +945,38 @@ class SearchResultRow(QWidget):
         title_lbl = QLabel(title[:78] + ("…" if len(title) > 78 else ""))
         title_lbl.setStyleSheet(
             f"background: transparent;"
-            f" color: {tm.c('#e8e8e8', '#111111')};"
-            " font-size: 13px; font-weight: 600;"
+            f" color: {tm.c('#eef5ff', '#102033')};"
+            " font-size: 14px; font-weight: 700;"
         )
 
         # Domain + Dishy badge row
         meta_row = QHBoxLayout()
-        meta_row.setSpacing(8)
+        meta_row.setSpacing(6)
         meta_row.setContentsMargins(0, 0, 0, 0)
 
         host_lbl = QLabel(host)
         host_lbl.setStyleSheet(
             f"background: transparent;"
-            f" color: {tm.c('#555555', '#999999')};"
-            " font-size: 11px;"
+            f" color: {tm.c('#8ea2ba', '#70859c')};"
+            " font-size: 11px; font-weight: 600;"
         )
 
-        dishy_badge = QLabel("✦  Dishy macros")
+        dishy_badge = QLabel("Dishy nutrition")
         dishy_badge.setStyleSheet(
-            "background: rgba(52,211,153,0.13);"
+            "background: rgba(52,211,153,0.12);"
             " color: #34d399;"
             " font-size: 10px; font-weight: 700;"
-            " border-radius: 4px; padding: 2px 7px;"
+            " border-radius: 5px; padding: 2px 8px;"
         )
 
         meta_row.addWidget(host_lbl)
+        self._trust_lbl = QLabel("")
+        self._trust_lbl.setStyleSheet(
+            f"background: transparent;"
+            f" color: {tm.c('#7ea0c5', '#6d86a0')};"
+            " font-size: 10px; font-weight: 700;"
+        )
+        meta_row.addWidget(self._trust_lbl)
         meta_row.addWidget(dishy_badge)
         meta_row.addStretch()
 
@@ -809,29 +988,49 @@ class SearchResultRow(QWidget):
             snippet_lbl = QLabel(snippet[:110] + ("…" if len(snippet) > 110 else ""))
             snippet_lbl.setStyleSheet(
                 f"background: transparent;"
-                f" color: {tm.c('#484848', '#999999')};"
+                f" color: {tm.c('#8092a8', '#8598ad')};"
                 " font-size: 11px;"
             )
             snippet_lbl.setWordWrap(False)
             text_col.addWidget(snippet_lbl)
 
-        # Arrow
-        arrow_lbl = QLabel()
-        arrow_lbl.setPixmap(
-            qta.icon("fa5s.chevron-right", color=tm.c("#444444", "#cccccc")).pixmap(QSize(10, 10))
+        controls = QVBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(8)
+        controls.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self._nutrition_btn = QPushButton()
+        self._nutrition_btn.setFixedHeight(31)
+        self._nutrition_btn.setMinimumWidth(136)
+        self._nutrition_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._nutrition_btn.clicked.connect(lambda _checked=False: self._on_get_nutrition())
+        controls.addWidget(self._nutrition_btn)
+
+        arrow_wrap = QLabel()
+        arrow_wrap.setFixedSize(30, 30)
+        arrow_wrap.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        arrow_wrap.setPixmap(
+            qta.icon("fa5s.chevron-right", color=tm.c("#8ea2ba", "#8ca0b5")).pixmap(QSize(10, 10))
         )
-        arrow_lbl.setStyleSheet("background: transparent;")
+        arrow_wrap.setStyleSheet(
+            f"background: {tm.c('rgba(255,255,255,0.05)', '#f1f5f9')};"
+            f"border: 1px solid {tm.c('#2c3b4f', '#d9e2ec')}; border-radius: 9px;"
+        )
+        controls.addWidget(arrow_wrap, 0, Qt.AlignmentFlag.AlignRight)
+        controls.addStretch()
 
         outer.addWidget(site_badge)
         outer.addLayout(text_col, 1)
-        outer.addWidget(arrow_lbl)
+        outer.addLayout(controls)
+        self.set_trust_score(trust_score if trust_score is not None else 50.0)
+        self.set_nutrition_state(state)
 
     def _apply_style(self, hover: bool):
         bg  = self._hover_bg  if hover else self._normal_bg
         bdr = self._hover_bdr if hover else self._normal_bdr
         self.setStyleSheet(
             f"SearchResultRow {{ background: {bg}; border: 1px solid {bdr};"
-            " border-radius: 10px; }"
+            " border-radius: 12px; }"
         )
 
     def enterEvent(self, event):
@@ -843,8 +1042,73 @@ class SearchResultRow(QWidget):
         super().leaveEvent(event)
 
     def mousePressEvent(self, event):
+        pos = event.position().toPoint()
+        if self._nutrition_btn.geometry().contains(pos):
+            super().mousePressEvent(event)
+            return
         self._callback()
         super().mousePressEvent(event)
+
+    def set_nutrition_state(self, state: str):
+        self._state = state
+        if state == "loading":
+            self._nutrition_btn.setEnabled(False)
+            self._nutrition_btn.setText("  Gathering…")
+            self._nutrition_btn.setIcon(qta.icon("fa5s.circle-notch", color="#34d399"))
+            self._nutrition_btn.setIconSize(QSize(11, 11))
+            self._nutrition_btn.setStyleSheet(
+                "QPushButton { background: rgba(52,211,153,0.14); color: #34d399;"
+                " border: 1px solid rgba(52,211,153,0.35); border-radius: 8px;"
+                " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
+            )
+            return
+        if state == "ready":
+            self._nutrition_btn.setEnabled(True)
+            self._nutrition_btn.setText("  Ready ✓")
+            self._nutrition_btn.setIcon(qta.icon("fa5s.check", color="#34d399"))
+            self._nutrition_btn.setIconSize(QSize(11, 11))
+            self._nutrition_btn.setStyleSheet(
+                "QPushButton { background: rgba(52,211,153,0.12); color: #34d399;"
+                " border: 1px solid rgba(52,211,153,0.38); border-radius: 8px;"
+                " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
+                "QPushButton:hover { background: rgba(52,211,153,0.18); }"
+            )
+            return
+        if state == "error":
+            self._nutrition_btn.setEnabled(True)
+            self._nutrition_btn.setText("  Retry Nutrition")
+            self._nutrition_btn.setIcon(qta.icon("fa5s.exclamation-triangle", color="#f0a500"))
+            self._nutrition_btn.setIconSize(QSize(11, 11))
+            self._nutrition_btn.setStyleSheet(
+                "QPushButton { background: rgba(240,165,0,0.10); color: #f0a500;"
+                " border: 1px solid rgba(240,165,0,0.35); border-radius: 8px;"
+                " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
+                "QPushButton:hover { background: rgba(240,165,0,0.16); }"
+            )
+            return
+        # idle
+        self._nutrition_btn.setEnabled(True)
+        self._nutrition_btn.setText("  Get Nutrition")
+        self._nutrition_btn.setIcon(qta.icon("fa5s.robot", color="#34d399"))
+        self._nutrition_btn.setIconSize(QSize(11, 11))
+        self._nutrition_btn.setStyleSheet(
+            "QPushButton { background: rgba(52,211,153,0.10); color: #34d399;"
+            " border: 1px solid rgba(52,211,153,0.30); border-radius: 8px;"
+            " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
+            "QPushButton:hover { background: rgba(52,211,153,0.16); }"
+        )
+
+    def set_trust_score(self, score: float):
+        val = max(0.0, min(100.0, float(score or 0)))
+        if val >= 80:
+            grade = "A"
+        elif val >= 68:
+            grade = "B"
+        elif val >= 55:
+            grade = "C"
+        else:
+            grade = "D"
+        self._trust_lbl.setText(f"Trust {grade} · {val:.0f}")
 
 
 # ── Create-recipe form helpers ───────────────────────────────────────────────
@@ -853,7 +1117,7 @@ class _DynamicList(QWidget):
     """Numbered list of instruction steps with Enter-to-add-next."""
 
     _FONT = (
-        'font-family: "SF Pro Display","SF Pro Text",-apple-system,'
+        'font-family: "Segoe UI","SF Pro Text",-apple-system,'
         '".AppleSystemUIFont","Helvetica Neue",Arial,sans-serif;'
     )
 
@@ -1805,17 +2069,13 @@ class CreateRecipePage(QScrollArea):
                 "SELECT id FROM recipes WHERE LOWER(title)=LOWER(?)", (title,)
             ).fetchone()
         if existing:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Recipe already exists")
-            msg.setText(
-                f'A recipe called "{title}" is already saved.\n\n'
-                "What would you like to do?"
+            result = ThemedMessageBox.show_buttons(
+                self, "Recipe already exists",
+                f'A recipe called "{title}" is already saved.\n\nWhat would you like to do?',
+                ["Cancel", "Save anyway"],
+                kind="question",
             )
-            msg.setIcon(QMessageBox.Icon.Question)
-            save_anyway = msg.addButton("Save anyway", QMessageBox.ButtonRole.AcceptRole)
-            msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-            msg.exec()
-            if msg.clickedButton() is not save_anyway:
+            if result != "Save anyway":
                 return
 
         prep  = int(self._prep_input.text() or 0)
@@ -1843,6 +2103,27 @@ class CreateRecipePage(QScrollArea):
             data["nutrition_ingredients"] = nutr["ingredients"]
             data["nutrition_total"]       = nutr["total"]
             data["nutrition_per_serving"] = nutr["per_serving"]
+
+        report = validate_recipe(data)
+        data = dict(report.get("fixed") or data)
+        if report.get("errors"):
+            ThemedMessageBox.warning(
+                self,
+                "Recipe Health Check Failed",
+                "Fix these before saving:\n" + "\n".join(f"• {e}" for e in report["errors"][:6]),
+            )
+            return
+        if report.get("warnings"):
+            proceed = ThemedMessageBox.confirm(
+                self,
+                "Recipe Health Warnings",
+                "This recipe has warnings:\n"
+                + "\n".join(f"• {w}" for w in report["warnings"][:5])
+                + "\n\nSave anyway?",
+                confirm_text="Save anyway",
+            )
+            if not proceed:
+                return
 
         if self._edit_id is not None:
             # Update existing recipe
@@ -1872,11 +2153,10 @@ class CreateRecipePage(QScrollArea):
 # ── Main recipes view ─────────────────────────────────────────────────────────
 
 class RecipesView(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, db: Database | None = None, parent=None):
         super().__init__(parent)
         self.setObjectName("view-container")
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._current_recipe: dict | None = None
         self._current_recipe_db_id: int | None = None
         self._current_recipe_is_fav: bool = False
@@ -1884,6 +2164,13 @@ class RecipesView(QWidget):
         self._nutrition_refresh_fn = None # set by MainWindow via set_nutrition_refresh()
         self._sync_fn = None              # set by MainWindow to trigger cloud sync
         self._claude = ClaudeAI()
+        self._search_recipe_cache: dict[str, dict] = {}
+        self._result_rows: dict[str, SearchResultRow] = {}
+        self._last_filtered_recipe_ids: list[int] = []
+        self._nutrition_inflight_urls: set[str] = set()
+        self._nutrition_error_urls: set[str] = set()
+        self._nutrition_loading_dialog: DishyNutritionLoadingDialog | None = None
+        self._nutrition_loading_url: str = ""
         self._build_ui()
 
     def set_nutrition_refresh(self, fn):
@@ -1896,6 +2183,75 @@ class RecipesView(QWidget):
     def set_sync_fn(self, fn):
         """Called by MainWindow to trigger cloud sync after recipe saves/deletes."""
         self._sync_fn = fn
+
+    @staticmethod
+    def _has_recipe_nutrition(recipe: dict | None) -> bool:
+        if not recipe:
+            return False
+        per = recipe.get("nutrition_per_serving") or {}
+        total = recipe.get("nutrition_total") or {}
+
+        def _score(bucket: dict) -> float:
+            if not isinstance(bucket, dict):
+                return 0.0
+            return (
+                float(bucket.get("kcal", 0) or 0)
+                + float(bucket.get("protein_g", bucket.get("protein", 0)) or 0)
+                + float(bucket.get("carbs_g", bucket.get("carbs", 0)) or 0)
+                + float(bucket.get("fat_g", bucket.get("fat", 0)) or 0)
+            )
+
+        return _score(per) > 0 or _score(total) > 0
+
+    @staticmethod
+    def _estimate_recipe_servings(recipe: dict) -> int:
+        raw = recipe.get("servings") or recipe.get("yields") or 1
+        if isinstance(raw, (int, float)):
+            return max(1, int(raw))
+        text = str(raw or "").strip()
+        digits = "".join(ch if ch.isdigit() else " " for ch in text).split()
+        if digits:
+            try:
+                return max(1, int(digits[0]))
+            except Exception:
+                pass
+        return 1
+
+    @staticmethod
+    def _merge_enrichment(recipe: dict, enrichment: dict) -> dict:
+        merged = dict(recipe or {})
+        if not enrichment:
+            return merged
+        merged["description"] = enrichment.get("description", merged.get("description", ""))
+        existing_tags = merged.get("tags", []) or []
+        new_tags = enrichment.get("tags", []) or []
+        tags = list(dict.fromkeys(new_tags + existing_tags))
+        if "Online" not in tags:
+            tags = ["Online"] + tags
+        merged["tags"] = tags
+        merged["icon"] = enrichment.get("icon", merged.get("icon", "fa5s.utensils"))
+        merged["colour"] = enrichment.get("colour", merged.get("colour", "#4fc3f7"))
+        if enrichment.get("servings"):
+            merged["servings"] = enrichment["servings"]
+        return merged
+
+    def _trust_score_for_url(self, url: str) -> float:
+        host = urlparse(str(url or "").strip()).netloc.replace("www.", "").lower().strip()
+        if not host:
+            return 50.0
+        try:
+            return float(self._db.get_recipe_source_score(host))
+        except Exception:
+            return 50.0
+
+    def _record_source_event(self, url: str, *, event: str, ok: bool) -> None:
+        host = urlparse(str(url or "").strip()).netloc.replace("www.", "").lower().strip()
+        if not host:
+            return
+        try:
+            self._db.record_recipe_source_event(host, event=event, ok=ok)
+        except Exception:
+            pass
 
     def _trigger_image_upload(self, recipe_id: int, image_url: str) -> None:
         """Fire-and-forget: upload image to Supabase Storage, update DB on success."""
@@ -1925,7 +2281,7 @@ class RecipesView(QWidget):
                 except Exception:
                     pass
 
-        run_async(_upload, _done)
+        run_async(_upload, on_result=_done, on_error=lambda _err: None)
 
     def refresh(self):
         """Reload saved recipes — called after Dishy saves a recipe."""
@@ -1976,7 +2332,7 @@ class RecipesView(QWidget):
         self._create_page.apply_theme(mode) # update create-form inline styles
 
     def _build_ui(self):
-        self.setMinimumHeight(480)  # prevents the view from collapsing at small window heights
+        self.setMinimumHeight(360)  # prevents the view from collapsing at small window heights
         outer = QVBoxLayout(self)
         outer.setContentsMargins(36, 36, 36, 10)
         outer.setSpacing(18)
@@ -2033,11 +2389,29 @@ class RecipesView(QWidget):
         self._ask_dishy_btn.setToolTip("Ask Dishy to create and save a recipe for you")
         self._ask_dishy_btn.clicked.connect(self._ask_dishy_for_recipe)
 
+        self._health_btn = QPushButton("  Check Recipe")
+        self._health_btn.setObjectName("ghost-btn")
+        self._health_btn.setIcon(qta.icon("fa5s.stethoscope", color="#34d399"))
+        self._health_btn.setIconSize(QSize(12, 12))
+        self._health_btn.setFixedHeight(42)
+        self._health_btn.setToolTip("Run quality checks on the open recipe")
+        self._health_btn.clicked.connect(self._run_health_check_current)
+
+        self._bulk_btn = QPushButton("  Bulk Edit")
+        self._bulk_btn.setObjectName("ghost-btn")
+        self._bulk_btn.setIcon(qta.icon("fa5s.tasks", color="#888888"))
+        self._bulk_btn.setIconSize(QSize(12, 12))
+        self._bulk_btn.setFixedHeight(42)
+        self._bulk_btn.setToolTip("Apply one action to all currently filtered saved recipes")
+        self._bulk_btn.clicked.connect(self._run_bulk_tools)
+
         action_row.addWidget(self._search_input)
         action_row.addWidget(search_btn)
         action_row.addWidget(create_btn)
         action_row.addWidget(saved_btn)
         action_row.addWidget(self._ask_dishy_btn)
+        action_row.addWidget(self._health_btn)
+        action_row.addWidget(self._bulk_btn)
         outer.addLayout(action_row)
 
         # Status
@@ -2303,25 +2677,40 @@ class RecipesView(QWidget):
         # ── Filter by local search text ───────────────────────────────────────
         local_q = self._local_search.text().strip().lower()
         if local_q:
-            filtered = []
-            for r in recipes:
-                if local_q in r["title"].lower():
-                    filtered.append(r)
-                    continue
-                try:
-                    data = json.loads(r["data_json"] or "{}")
-                    haystack = " ".join([
-                        " ".join(data.get("tags", [])),
-                        data.get("description", ""),
-                        " ".join(data.get("ingredients", [])),
-                    ]).lower()
-                    if local_q in haystack:
+            use_enhanced = True
+            try:
+                from utils.feature_flags import FeatureFlagService
+
+                uid = self._db.get_setting("active_user_id", "")
+                use_enhanced = FeatureFlagService(self._db, uid).is_enabled(
+                    "enhanced_recipe_search", default=True
+                )
+            except Exception:
+                pass
+
+            if use_enhanced:
+                recipes = filter_and_rank_saved_recipes(recipes, local_q)
+            else:
+                filtered = []
+                for r in recipes:
+                    if local_q in r["title"].lower():
                         filtered.append(r)
-                except Exception:
-                    pass
-            recipes = filtered
+                        continue
+                    try:
+                        data = json.loads(r["data_json"] or "{}")
+                        haystack = " ".join([
+                            " ".join(data.get("tags", [])),
+                            data.get("description", ""),
+                            " ".join(data.get("ingredients", [])),
+                        ]).lower()
+                        if local_q in haystack:
+                            filtered.append(r)
+                    except Exception:
+                        pass
+                recipes = filtered
 
         if not recipes:
+            self._last_filtered_recipe_ids = []
             if local_q:
                 msg = f"No recipes match \"{local_q}\""
             elif self._active_tag:
@@ -2337,6 +2726,7 @@ class RecipesView(QWidget):
 
         total = len(all_recipes)
         shown = len(recipes)
+        self._last_filtered_recipe_ids = [int(r["id"]) for r in recipes if int(r["id"])]
         if local_q:
             suffix = f" ({shown} match{'es' if shown != 1 else ''})"
         elif self._active_tag and shown != total:
@@ -2369,17 +2759,11 @@ class RecipesView(QWidget):
 
             def _make_delete(rid=recipe_id, rname=rec_dict.get("title", "this recipe")):
                 def _del():
-                    msg = QMessageBox(self)
-                    msg.setWindowTitle("Delete Recipe")
-                    msg.setText(f"Delete \"{rname[:50]}\"?")
-                    msg.setInformativeText("This cannot be undone.")
-                    msg.setIcon(QMessageBox.Icon.Warning)
-                    msg.setStandardButtons(
-                        QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok
-                    )
-                    msg.setDefaultButton(QMessageBox.StandardButton.Cancel)
-                    msg.button(QMessageBox.StandardButton.Ok).setText("Delete")
-                    if msg.exec() == QMessageBox.StandardButton.Ok:
+                    if ThemedMessageBox.confirm(
+                        self, "Delete Recipe",
+                        f'Delete "{rname[:50]}"?\n\nThis cannot be undone.',
+                        confirm_text="Delete",
+                    ):
                         self._db.delete_recipe(rid)
                         self._load_saved_recipes()
                         if self._sync_fn:
@@ -2478,6 +2862,118 @@ class RecipesView(QWidget):
                 "Ask me what kind of recipe I want first — what cuisine, dietary needs, or occasion."
             )
 
+    def _run_health_check_current(self):
+        recipe = dict(self._current_recipe or {})
+        if not recipe:
+            # fall back to first filtered saved recipe
+            try:
+                rows = self._db.get_saved_recipes()
+                if rows:
+                    row = dict(rows[0])
+                    recipe = json.loads(row.get("data_json") or "{}")
+                    recipe.setdefault("title", row.get("title", ""))
+            except Exception:
+                recipe = {}
+        if not recipe:
+            ThemedMessageBox.information(self, "Recipe Health Check", "Open a recipe first to run a health check.")
+            return
+        report = validate_recipe(recipe)
+        fixed = report.get("fixed", {}) or {}
+        errors = report.get("errors", []) or []
+        warnings = report.get("warnings", []) or []
+        score = int(report.get("score", 0) or 0)
+        lines = [
+            f"Score: {score}/100 ({health_label(score)})",
+            "",
+        ]
+        if errors:
+            lines.append("Errors:")
+            for e in errors[:5]:
+                lines.append(f"• {e}")
+            lines.append("")
+        if warnings:
+            lines.append("Warnings:")
+            for w in warnings[:6]:
+                lines.append(f"• {w}")
+            lines.append("")
+        lines.append("Quick fixes were applied in preview (trimmed text, removed duplicate ingredients/steps).")
+        ThemedMessageBox.information(self, "Recipe Health Check", "\n".join(lines))
+
+        if self._current_recipe:
+            self._current_recipe = dict(fixed)
+            self._populate_detail(
+                self._current_recipe,
+                db_id=self._current_recipe_db_id,
+                is_fav=self._current_recipe_is_fav,
+            )
+
+    def _run_bulk_tools(self):
+        ids = [int(i) for i in self._last_filtered_recipe_ids if int(i or 0) > 0]
+        if not ids:
+            ThemedMessageBox.information(
+                self,
+                "Bulk Tools",
+                "No filtered recipes selected.\nUse Saved recipes search/tag filters first.",
+            )
+            return
+
+        choice = ThemedMessageBox.show_buttons(
+            self,
+            "Bulk Recipe Tools",
+            f"Apply one action to {len(ids)} filtered recipe(s).",
+            ["Cancel", "Add Meal-Prep Tag", "Mark Favourite", "Move to Trash"],
+            kind="question",
+        )
+        if choice == "Add Meal-Prep Tag":
+            changed = 0
+            for rid in ids:
+                row = self._db.conn.execute("SELECT data_json FROM recipes WHERE id=?", (rid,)).fetchone()
+                if not row:
+                    continue
+                try:
+                    data = json.loads(row["data_json"] or "{}")
+                except Exception:
+                    data = {}
+                tags = [str(t) for t in (data.get("tags") or [])]
+                if "Meal-Prep" not in tags:
+                    tags.append("Meal-Prep")
+                    data["tags"] = tags
+                    self._db.conn.execute(
+                        "UPDATE recipes SET data_json=?, updated_at=datetime('now') WHERE id=?",
+                        (json.dumps(data), rid),
+                    )
+                    changed += 1
+            self._db.conn.commit()
+            self._load_saved_recipes()
+            self._status.setText(f"Bulk update: added Meal-Prep tag to {changed} recipe(s)")
+            if self._sync_fn:
+                self._sync_fn()
+            return
+
+        if choice == "Mark Favourite":
+            for rid in ids:
+                self._db.toggle_favourite(rid, True)
+            self._load_saved_recipes()
+            self._status.setText(f"Bulk update: marked {len(ids)} recipe(s) as favourite")
+            if self._sync_fn:
+                self._sync_fn()
+            return
+
+        if choice == "Move to Trash":
+            if not ThemedMessageBox.confirm(
+                self,
+                "Move filtered recipes to Trash?",
+                f"This will move {len(ids)} recipe(s) to Trash Bin.",
+                confirm_text="Move to Trash",
+            ):
+                return
+            for rid in ids:
+                self._db.delete_recipe(rid)
+            self._load_saved_recipes()
+            self._status.setText(f"Bulk delete: moved {len(ids)} recipe(s) to Trash Bin")
+            if self._sync_fn:
+                self._sync_fn()
+
     def showEvent(self, event):
         super().showEvent(event)
         self._load_saved_recipes()
@@ -2503,12 +2999,38 @@ class RecipesView(QWidget):
             self._status.setText("No results found — try a different search")
             self._stack.setCurrentIndex(0)
             return
-        self._stack.setCurrentIndex(1)
-        n = len(results)
-        self._status.setText(f"{n} recipe{'s' if n != 1 else ''} found — click one to load")
-        self._result_count_lbl.setText(f"{n} results")
+        scored_results = []
         for r in results:
-            card = SearchResultRow(r, on_select=self._scrape_recipe)
+            url = str(r.get("url", "") or "").strip()
+            scored_results.append((self._trust_score_for_url(url), r))
+        scored_results.sort(key=lambda item: item[0], reverse=True)
+
+        self._stack.setCurrentIndex(1)
+        n = len(scored_results)
+        self._status.setText(
+            f"{n} recipe{'s' if n != 1 else ''} found — use Get Nutrition before saving"
+        )
+        self._result_count_lbl.setText(f"{n} results")
+        for trust_score, r in scored_results:
+            url = str(r.get("url", "") or "").strip()
+            cached = self._search_recipe_cache.get(url)
+            if url in self._nutrition_inflight_urls:
+                state = "loading"
+            elif url in self._nutrition_error_urls:
+                state = "error"
+            elif self._has_recipe_nutrition(cached):
+                state = "ready"
+            else:
+                state = "idle"
+            card = SearchResultRow(
+                r,
+                on_select=self._scrape_recipe,
+                on_get_nutrition=self._gather_result_nutrition,
+                state=state,
+                trust_score=trust_score,
+            )
+            if url:
+                self._result_rows[url] = card
             self._results_layout.insertWidget(self._results_layout.count() - 1, card)
 
     def _on_search_error(self, _err: str):
@@ -2517,6 +3039,7 @@ class RecipesView(QWidget):
 
     def _clear_results(self):
         self._result_count_lbl.setText("")
+        self._result_rows.clear()
         while self._results_layout.count() > 1:
             item = self._results_layout.takeAt(0)
             if item.widget():
@@ -2525,90 +3048,257 @@ class RecipesView(QWidget):
     # ── scrape ────────────────────────────────────────────────────────────────
 
     def _scrape_recipe(self, result: dict):
-        host = urlparse(result.get("url", "")).netloc.replace("www.", "")
+        url = str(result.get("url", "") or "").strip()
+        if not url:
+            self._status.setText("Invalid recipe result — missing URL")
+            return
+        cached = self._search_recipe_cache.get(url)
+        if cached:
+            self._open_scraped_recipe(cached)
+            return
+        host = urlparse(url).netloc.replace("www.", "")
         self._status.setText(f"Loading recipe from {host}…")
         run_async(
-            scrape_recipe, result["url"],
-            on_result=self._on_scraped,
-            on_error=self._on_scrape_error,
+            scrape_recipe, url,
+            on_result=lambda recipe, u=url: self._on_scraped(u, recipe),
+            on_error=lambda err, u=url: self._on_scrape_error(u, err),
         )
 
-    def _on_scraped(self, recipe: dict):
-        self._current_recipe = recipe
+    def _open_scraped_recipe(self, recipe: dict):
+        self._current_recipe = dict(recipe)
         self._current_recipe_db_id = None
         self._current_recipe_is_fav = False
         self._came_from_search = True
-        self._populate_detail(recipe, db_id=None, is_fav=False)
+        self._populate_detail(self._current_recipe, db_id=None, is_fav=False)
         self._stack.setCurrentIndex(2)
-        self._status.setText("Enhancing recipe with Dishy…")
-        # Kick off background enrichment — updates the detail view when done
-        run_async(
-            self._claude.enrich_scraped_recipe, recipe,
-            on_result=self._on_enriched,
-            on_error=lambda _err: self._status.setText(recipe.get("title", "Recipe loaded")),
-        )
-
-    def _on_enriched(self, enrichment: dict):
-        """Merge Dishy's enrichment into the current recipe and refresh the detail view."""
-        if not enrichment or self._current_recipe is None:
-            return
-        recipe = dict(self._current_recipe)
-        recipe["description"] = enrichment.get("description", "")
-        # Preserve existing tags (e.g. from scraper), merge with enriched ones, add Online
-        existing_tags = recipe.get("tags", [])
-        new_tags = enrichment.get("tags", [])
-        merged = list(dict.fromkeys(new_tags + existing_tags))  # dedup, new first
-        if "Online" not in merged:
-            merged = ["Online"] + merged
-        recipe["tags"] = merged
-        recipe["icon"]     = enrichment.get("icon",     recipe.get("icon", "fa5s.utensils"))
-        recipe["colour"]   = enrichment.get("colour",   recipe.get("colour", "#4fc3f7"))
-        if enrichment.get("servings"):
-            recipe["servings"] = enrichment["servings"]
-        self._current_recipe = recipe
-        self._populate_detail(recipe, db_id=self._current_recipe_db_id,
-                              is_fav=self._current_recipe_is_fav)
-        self._status.setText(recipe.get("title", "Recipe loaded"))
-
-        # Auto-analyze nutrition if not already present
-        ingredients = recipe.get("ingredients", [])
-        if ingredients and not recipe.get("nutrition_per_serving"):
-            servings = int(recipe.get("servings", 1) or 1)
-            self._status.setText("Analysing nutrition with Dishy…")
-            run_async(
-                self._claude.analyze_recipe_nutrition, ingredients, servings,
-                on_result=self._on_nutrition_analyzed,
-                on_error=lambda _: self._status.setText(recipe.get("title", "Recipe loaded")),
+        current_url = str(recipe.get("url", "") or "").strip()
+        if current_url in self._nutrition_inflight_urls:
+            self._status.setText("Dishy is still gathering nutrition for this recipe…")
+        elif self._has_recipe_nutrition(recipe):
+            self._status.setText(recipe.get("title", "Recipe loaded"))
+        else:
+            self._status.setText(
+                "Recipe loaded — tap Get Nutrition before saving it."
             )
 
-    def _on_scrape_error(self, _err: str):
-        self._status.setText("Couldn't load that recipe — try another result")
-
-    def _on_nutrition_analyzed(self, nutrition_data: dict):
-        """Merge Dishy's recipe nutrition analysis into the current recipe and refresh."""
-        if not self._current_recipe or not nutrition_data:
+    def _on_scraped(self, url: str, recipe: dict):
+        if not recipe:
+            self._status.setText("Couldn't load that recipe — try another result")
+            self._record_source_event(url, event="scrape", ok=False)
+            row_now = self._result_rows.get(url)
+            if row_now:
+                row_now.set_trust_score(self._trust_score_for_url(url))
             return
-        recipe = dict(self._current_recipe)
-        recipe["nutrition_ingredients"] = nutrition_data.get("ingredients", [])
-        recipe["nutrition_total"]       = nutrition_data.get("total", {})
-        recipe["nutrition_per_serving"] = nutrition_data.get("per_serving", {})
-        self._current_recipe = recipe
-        # Persist to DB if recipe is already saved
-        if self._current_recipe_db_id is not None:
-            try:
-                self._db.conn.execute(
-                    "UPDATE recipes SET data_json=? WHERE id=?",
-                    (json.dumps(recipe), self._current_recipe_db_id),
-                )
-                self._db.conn.commit()
-            except Exception:
-                pass
+        self._record_source_event(url, event="scrape", ok=True)
+        row_now = self._result_rows.get(url)
+        if row_now:
+            row_now.set_trust_score(self._trust_score_for_url(url))
+        parsed = dict(recipe)
+        parsed["url"] = url
+        self._search_recipe_cache[url] = parsed
+        self._open_scraped_recipe(parsed)
+
+        # Lightweight metadata enhancement runs in the background.
+        run_async(
+            self._claude.enrich_scraped_recipe, dict(parsed),
+            on_result=lambda enrichment, u=url: self._on_enriched(u, enrichment),
+            on_error=lambda _err: None,
+        )
+
+    def _on_enriched(self, url: str, enrichment: dict):
+        """Merge Dishy's enrichment into cached recipe data and refresh detail if open."""
+        base = self._search_recipe_cache.get(url)
+        if not base:
+            return
+        recipe = self._merge_enrichment(base, enrichment)
+        self._search_recipe_cache[url] = recipe
+        if not self._current_recipe:
+            return
+        current_url = str(self._current_recipe.get("url", "") or "").strip()
+        if current_url != url:
+            return
+        self._current_recipe = dict(recipe)
         self._populate_detail(
-            recipe,
+            self._current_recipe,
             db_id=self._current_recipe_db_id,
             is_fav=self._current_recipe_is_fav,
         )
-        self._status.setText(recipe.get("title", "Recipe loaded"))
+        if self._has_recipe_nutrition(self._current_recipe):
+            self._status.setText(self._current_recipe.get("title", "Recipe loaded"))
+
+    def _close_nutrition_loading_dialog(self, url: str = ""):
+        dlg = self._nutrition_loading_dialog
+        if dlg is None:
+            return
+        if url and self._nutrition_loading_url and url != self._nutrition_loading_url:
+            return
+        self._nutrition_loading_dialog = None
+        self._nutrition_loading_url = ""
+        try:
+            dlg.allow_close()
+            dlg.done(QDialog.DialogCode.Accepted)
+            dlg.deleteLater()
+        except Exception:
+            pass
+
+    def _gather_result_nutrition(self, result: dict):
+        url = str(result.get("url", "") or "").strip()
+        if not url:
+            return
+        self._gather_recipe_nutrition(url=url, block_ui=True)
+
+    def _gather_current_recipe_nutrition(self):
+        if not self._current_recipe:
+            return
+        url = str(self._current_recipe.get("url", "") or "").strip()
+        if not url:
+            self._status.setText("This recipe has no source URL to analyze.")
+            return
+        self._gather_recipe_nutrition(url=url, block_ui=True)
+
+    def _gather_recipe_nutrition(self, url: str, block_ui: bool = True):
+        url = str(url or "").strip()
+        if not url:
+            return
+        if url in self._nutrition_inflight_urls:
+            return
+
+        row = self._result_rows.get(url)
+        if row:
+            row.set_nutrition_state("loading")
+        self._nutrition_error_urls.discard(url)
+        self._nutrition_inflight_urls.add(url)
+
+        host = urlparse(url).netloc.replace("www.", "") or "the web"
+        if block_ui:
+            dlg = DishyNutritionLoadingDialog(host, parent=self)
+            self._nutrition_loading_dialog = dlg
+            self._nutrition_loading_url = url
+            dlg.set_status("Scraping recipe...")
+
+        def _work():
+            # Use cached/open recipe data first, but guarantee we have actual
+            # scraped body fields before asking Dishy for nutrition.
+            recipe = dict(self._search_recipe_cache.get(url) or {})
+            if self._current_recipe and str(self._current_recipe.get("url", "") or "").strip() == url:
+                recipe = {**recipe, **dict(self._current_recipe)}
+
+            ingredients = [
+                str(item or "").strip()
+                for item in (recipe.get("ingredients") or [])
+                if str(item or "").strip()
+            ]
+            instructions = recipe.get("instructions") or []
+            has_scraped_body = bool(ingredients or instructions)
+
+            if not has_scraped_body:
+                scraped = dict(scrape_recipe(url))
+                recipe = {**recipe, **scraped}
+
+            recipe["url"] = url
+            ingredients = [
+                str(item or "").strip()
+                for item in (recipe.get("ingredients") or [])
+                if str(item or "").strip()
+            ]
+            if not ingredients:
+                raise RuntimeError(
+                    "Couldn't read ingredients from this page. Try another result."
+                )
+            servings = self._estimate_recipe_servings(recipe)
+            nutrition = self._claude.analyze_recipe_nutrition(ingredients, servings)
+            recipe["nutrition_ingredients"] = nutrition.get("ingredients", [])
+            recipe["nutrition_total"] = nutrition.get("total", {})
+            recipe["nutrition_per_serving"] = nutrition.get("per_serving", {})
+            return recipe
+
+        def _done(recipe: dict):
+            try:
+                self._nutrition_inflight_urls.discard(url)
+                self._search_recipe_cache[url] = dict(recipe or {})
+                self._record_source_event(url, event="nutrition", ok=True)
+                row_now = self._result_rows.get(url)
+                if row_now:
+                    row_now.set_trust_score(self._trust_score_for_url(url))
+                self._on_nutrition_analyzed(
+                    url,
+                    {
+                        "ingredients": recipe.get("nutrition_ingredients", []),
+                        "total": recipe.get("nutrition_total", {}),
+                        "per_serving": recipe.get("nutrition_per_serving", {}),
+                    },
+                )
+
+                # Enhance metadata after nutrition completes (non-blocking).
+                if recipe and not recipe.get("description"):
+                    run_async(
+                        self._claude.enrich_scraped_recipe, dict(recipe),
+                        on_result=lambda enrichment, u=url: self._on_enriched(u, enrichment),
+                        on_error=lambda _err: None,
+                    )
+            finally:
+                self._close_nutrition_loading_dialog(url)
+
+        def _error(_err: str):
+            try:
+                self._nutrition_inflight_urls.discard(url)
+                self._nutrition_error_urls.add(url)
+                self._record_source_event(url, event="nutrition", ok=False)
+                row_now = self._result_rows.get(url)
+                if row_now:
+                    row_now.set_trust_score(self._trust_score_for_url(url))
+                    row_now.set_nutrition_state("error")
+                detail = (_err or "").strip().splitlines()[-1][:140] if _err else ""
+                if detail:
+                    self._status.setText(f"Dishy nutrition failed: {detail}")
+                else:
+                    self._status.setText("Dishy couldn't gather nutrition for that recipe.")
+                ThemedMessageBox.warning(
+                    self,
+                    "Nutrition Lookup Failed",
+                    "Dishy couldn't gather nutrition for that recipe right now.\n"
+                    "Try again or choose a different result.",
+                )
+            finally:
+                self._close_nutrition_loading_dialog(url)
+
+        run_async(_work, on_result=_done, on_error=_error)
+        if block_ui and self._nutrition_loading_dialog is not None:
+            self._nutrition_loading_dialog.exec()
+
+    def _on_scrape_error(self, _url: str, _err: str):
+        self._status.setText("Couldn't load that recipe — try another result")
+        self._record_source_event(_url, event="scrape", ok=False)
+        row_now = self._result_rows.get(_url)
+        if row_now:
+            row_now.set_trust_score(self._trust_score_for_url(_url))
+
+    def _on_nutrition_analyzed(self, url: str, nutrition_data: dict):
+        """Merge Dishy's nutrition analysis into the cached/current recipe and refresh."""
+        base = self._search_recipe_cache.get(url)
+        if not base:
+            return
+        recipe = dict(base)
+        recipe["nutrition_ingredients"] = nutrition_data.get("ingredients", [])
+        recipe["nutrition_total"] = nutrition_data.get("total", {})
+        recipe["nutrition_per_serving"] = nutrition_data.get("per_serving", {})
+        self._search_recipe_cache[url] = recipe
+        self._nutrition_error_urls.discard(url)
+
+        row = self._result_rows.get(url)
+        if row:
+            row.set_nutrition_state("ready")
+
+        if self._current_recipe:
+            current_url = str(self._current_recipe.get("url", "") or "").strip()
+            if current_url == url:
+                self._current_recipe = dict(recipe)
+                self._populate_detail(
+                    self._current_recipe,
+                    db_id=self._current_recipe_db_id,
+                    is_fav=self._current_recipe_is_fav,
+                )
+        self._status.setText(f"Nutrition ready: {recipe.get('title', 'Recipe')}")
 
     def _log_recipe_to_today(self, recipe: dict):
         """Log a recipe's per-serving nutrition to today's food log."""
@@ -2886,6 +3576,11 @@ class RecipesView(QWidget):
         # 9. Action buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
+        needs_nutrition = (
+            db_id is None
+            and self._came_from_search
+            and not self._has_recipe_nutrition(recipe)
+        )
 
         # Save / already saved
         self._save_btn = QPushButton("  Save Recipe")
@@ -2897,6 +3592,10 @@ class RecipesView(QWidget):
         if db_id is not None:
             self._save_btn.setText("  Saved ✓")
             self._save_btn.setDisabled(True)
+        elif needs_nutrition:
+            self._save_btn.setText("  Get Nutrition First")
+            self._save_btn.setDisabled(True)
+            self._save_btn.setToolTip("Run Dishy nutrition before saving this web recipe")
         else:
             self._save_btn.clicked.connect(self._save_recipe)
 
@@ -2944,6 +3643,15 @@ class RecipesView(QWidget):
             edit_btn.setToolTip("Edit this recipe")
             edit_btn.clicked.connect(lambda: self._edit_recipe(db_id))
             btn_row.addWidget(edit_btn)
+
+        if db_id is None and self._came_from_search:
+            nutr_btn = QPushButton("  Get Dishy Nutrition")
+            nutr_btn.setObjectName("ghost-btn")
+            nutr_btn.setIcon(qta.icon("fa5s.robot", color="#34d399"))
+            nutr_btn.setIconSize(QSize(13, 13))
+            nutr_btn.setFixedHeight(40)
+            nutr_btn.clicked.connect(self._gather_current_recipe_nutrition)
+            btn_row.addWidget(nutr_btn)
 
         btn_row.addWidget(self._save_btn)
         btn_row.addWidget(self._fav_btn)
@@ -3020,25 +3728,50 @@ class RecipesView(QWidget):
     def _save_recipe(self):
         if not self._current_recipe:
             return
-        r = self._current_recipe
+        report = validate_recipe(self._current_recipe)
+        r = dict(report.get("fixed") or self._current_recipe)
+        self._current_recipe = dict(r)
         title = r.get("title", "Untitled")
+        if report.get("errors"):
+            ThemedMessageBox.warning(
+                self,
+                "Recipe Health Check Failed",
+                "This recipe is missing required fields and cannot be saved yet:\n"
+                + "\n".join(f"• {e}" for e in report["errors"][:6]),
+            )
+            return
+        if report.get("warnings"):
+            proceed = ThemedMessageBox.confirm(
+                self,
+                "Recipe Health Warnings",
+                "Dishy found some quality warnings:\n"
+                + "\n".join(f"• {w}" for w in report["warnings"][:5])
+                + "\n\nSave anyway?",
+                confirm_text="Save anyway",
+            )
+            if not proceed:
+                return
+        if not self._has_recipe_nutrition(r):
+            ThemedMessageBox.warning(
+                self,
+                "Nutrition Required",
+                "Run Dishy nutrition for this recipe before saving it.\n"
+                "Use the Get Dishy Nutrition button.",
+            )
+            return
 
         # Duplicate detection
         existing = self._db.conn.execute(
             "SELECT id FROM recipes WHERE LOWER(title)=LOWER(?)", (title,)
         ).fetchone()
         if existing:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Recipe already exists")
-            msg.setText(
-                f'"{title}" is already in your saved recipes.\n\n'
-                "Save another copy anyway?"
+            result = ThemedMessageBox.show_buttons(
+                self, "Recipe already exists",
+                f'"{title}" is already in your saved recipes.\n\nSave another copy anyway?',
+                ["Cancel", "Save anyway"],
+                kind="question",
             )
-            msg.setIcon(QMessageBox.Icon.Question)
-            save_anyway = msg.addButton("Save anyway", QMessageBox.ButtonRole.AcceptRole)
-            msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-            msg.exec()
-            if msg.clickedButton() is not save_anyway:
+            if result != "Save anyway":
                 return
 
         recipe_id = self._db.save_recipe(
@@ -3059,6 +3792,8 @@ class RecipesView(QWidget):
         self._fav_btn.setEnabled(True)
         self._status.setText(f"Saved: {title}")
         self._trigger_image_upload(recipe_id, r.get("image", ""))
+        if self._sync_fn:
+            self._sync_fn()
 
     # ── recipe created from form ───────────────────────────────────────────────
 

@@ -3,15 +3,20 @@ import json
 import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QSizePolicy, QLineEdit, QGridLayout, QScrollArea, QCheckBox,
+    QPushButton, QSizePolicy, QLineEdit, QGridLayout, QScrollArea, QCheckBox, QFrame,
 )
 from PySide6.QtCore import Qt, QSize
 
 from models.database import Database
+from utils.data_service import get_db
 from utils.theme import manager as _tm
 from utils.macro_goals import get_macro_goals, get_broadcaster
 from views.nutrition import MacroRing
 from views.shopping_list import CATEGORIES, _categorize
+from views.my_kitchen_storage import (
+    _STORAGE_CATEGORIES, _categorize_kitchen_item, _TABS as _KITCHEN_TABS,
+    _days_until_expiry, get_pantry_broadcaster,
+)
 
 
 def _greeting() -> str:
@@ -87,20 +92,366 @@ _DASH_MACROS = [
 ]
 
 
+class _ExpiryAlertCard(QWidget):
+    """
+    Compact banner shown on the home dashboard when pantry items are expiring soon.
+    Hidden when nothing is expiring. Updates via _PantryBroadcaster signal.
+    """
+
+    def __init__(self, db: Database, navigate_to, trigger_dishy, parent=None):
+        super().__init__(parent)
+        self._db = db
+        self._navigate_to = navigate_to
+        self._trigger_dishy = trigger_dishy
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self._inner = QWidget()
+        self._inner.setObjectName("card")
+        layout.addWidget(self._inner)
+        self._inner_layout = QHBoxLayout(self._inner)
+        self._inner_layout.setContentsMargins(16, 10, 16, 10)
+        self._inner_layout.setSpacing(10)
+        self.refresh()
+
+    def refresh(self):
+        # Clear existing widgets
+        while self._inner_layout.count():
+            item = self._inner_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        try:
+            items = self._db.get_pantry_items()
+        except Exception:
+            items = []
+
+        expiring = []
+        for item in items:
+            days = _days_until_expiry(item.get("expiry_date") or "")
+            if days is not None and days <= 3:
+                expiring.append((item["name"], days))
+
+        if not expiring:
+            self.hide()
+            return
+
+        self.show()
+
+        # Warning icon
+        icon_lbl = QLabel()
+        icon_lbl.setPixmap(qta.icon("fa5s.exclamation-triangle", color="#f0a500").pixmap(QSize(14, 14)))
+        icon_lbl.setStyleSheet("background: transparent;")
+        self._inner_layout.addWidget(icon_lbl)
+
+        # Build label text
+        names = []
+        for name, days in expiring[:3]:
+            if days < 0:
+                names.append(f"{name} (expired)")
+            elif days == 0:
+                names.append(f"{name} (today)")
+            else:
+                names.append(f"{name} ({days}d)")
+        extra = len(expiring) - 3
+        text = ", ".join(names)
+        if extra > 0:
+            text += f" +{extra} more"
+
+        msg = QLabel(f"Expiring soon: {text}")
+        msg.setStyleSheet(
+            f"background: transparent; color: {_tm.c('#e0e0e0', '#1a1a1a')};"
+            " font-size: 12px;"
+        )
+        self._inner_layout.addWidget(msg, 1)
+
+        # "Use it up" button
+        btn = QPushButton("Use it up →")
+        btn.setObjectName("ghost-btn")
+        btn.setFixedHeight(24)
+        item_names = ", ".join(n for n, _ in expiring)
+        msg_text = f"Suggest recipes I can make using these items that are expiring soon: {item_names}"
+        btn.clicked.connect(lambda: (self._navigate_to(6), self._trigger_dishy(msg_text)))
+        self._inner_layout.addWidget(btn)
+
+    def apply_theme(self, _mode: str):
+        self.refresh()
+
+
+class _KitchenPreviewCard(QWidget):
+    """
+    Compact My Kitchen storage preview for the home dashboard.
+    Mirrors the Shopping List preview card layout — scrollable, category-grouped.
+    Refreshes in place when pantry data changes.
+    """
+
+    def __init__(self, db: Database, navigate_to, parent=None):
+        super().__init__(parent)
+        self._db = db
+        self._navigate_to = navigate_to
+
+        # Outer wrapper is transparent — inner plain QWidget gets objectName("card")
+        # so the global QWidget#card stylesheet matches it exactly like the shopping card
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._card = QWidget()
+        self._card.setObjectName("card")
+        outer.addWidget(self._card)
+
+        self._root = QVBoxLayout(self._card)
+        self._root.setContentsMargins(20, 16, 20, 14)
+        self._root.setSpacing(8)
+        self._root.addLayout(self._build_header())
+
+        # Body container — cleared and rebuilt on each refresh()
+        self._body = QWidget()
+        self._body.setStyleSheet("background: transparent;")
+        self._body_layout = QVBoxLayout(self._body)
+        self._body_layout.setContentsMargins(0, 0, 0, 0)
+        self._body_layout.setSpacing(0)
+        self._root.addWidget(self._body, 1)
+
+        self.refresh()
+
+    def apply_theme(self, mode: str):
+        pass
+
+    def _build_header(self) -> QHBoxLayout:
+        hdr = QHBoxLayout()
+        ic = QLabel()
+        ic.setPixmap(qta.icon("fa5s.box-open", color="#e8924a").pixmap(QSize(20, 20)))
+        ic.setStyleSheet("background: transparent;")
+        title_lbl = QLabel("MY KITCHEN")
+        title_lbl.setStyleSheet(
+            f"background: transparent; color: {_tm.c('#888888', '#666666')};"
+            " font-size: 13px; font-weight: 700; letter-spacing: 1px;"
+        )
+        view_btn = QPushButton("View →")
+        view_btn.setObjectName("ghost-btn")
+        view_btn.setFixedHeight(24)
+        view_btn.clicked.connect(lambda: self._navigate_to(4))
+        hdr.addWidget(ic)
+        hdr.addSpacing(8)
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(view_btn)
+        return hdr
+
+    def _scroll_style(self) -> str:
+        return (
+            "QScrollArea { background: transparent; border: none; }"
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
+            "QScrollBar:vertical { background: transparent; width: 4px; margin: 0; }"
+            f"QScrollBar::handle:vertical {{ background: {_tm.c('#2a2a2a', '#cccccc')};"
+            " border-radius: 2px; min-height: 20px; }"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        )
+
+    def refresh(self):
+        """Clear and rebuild the card body from live DB data."""
+        while self._body_layout.count():
+            item = self._body_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        try:
+            all_items = self._db.get_pantry_items()
+        except Exception:
+            all_items = []
+
+        total = len(all_items)
+
+        if all_items:
+            from collections import defaultdict
+
+            # Group by storage section
+            storage_groups: dict[str, list] = defaultdict(list)
+            for item in all_items:
+                storage_groups[item.get("storage", "Pantry")].append(item)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            scroll.setStyleSheet(self._scroll_style())
+
+            inner = QWidget()
+            inner.setStyleSheet("background: transparent;")
+            inner_layout = QVBoxLayout(inner)
+            inner_layout.setContentsMargins(0, 0, 4, 0)
+            inner_layout.setSpacing(3)
+
+            txt_main = _tm.c('#e0e0e0', '#1a1a1a')
+            txt_sub  = _tm.c('#666666', '#888888')
+
+            for storage, color, icon_name in _KITCHEN_TABS:
+                items_for_storage = storage_groups.get(storage, [])
+                if not items_for_storage:
+                    continue
+
+                # Storage section header (Pantry / Fridge / Freezer)
+                sec_hdr = QWidget()
+                sec_hdr.setStyleSheet("background: transparent;")
+                sec_hdr.setFixedHeight(28)
+                sec_l = QHBoxLayout(sec_hdr)
+                sec_l.setContentsMargins(0, 6, 0, 2)
+                sec_l.setSpacing(6)
+                sec_ic = QLabel()
+                sec_ic.setPixmap(qta.icon(icon_name, color=color).pixmap(QSize(13, 13)))
+                sec_ic.setStyleSheet("background: transparent;")
+                sec_lbl = QLabel(storage.upper())
+                sec_lbl.setStyleSheet(
+                    f"background: transparent; color: {color};"
+                    " font-size: 10px; font-weight: 700; letter-spacing: 0.8px;"
+                )
+                cnt_lbl = QLabel(f"({len(items_for_storage)})")
+                cnt_lbl.setStyleSheet(
+                    f"background: transparent; color: {_tm.c('#555555', '#aaaaaa')}; font-size: 10px;"
+                )
+                line = QFrame()
+                line.setFrameShape(QFrame.Shape.HLine)
+                line.setStyleSheet(
+                    f"background: {_tm.c('#2a2a2a', '#e8e8e8')}; border: none; max-height: 1px;"
+                )
+                sec_l.addWidget(sec_ic)
+                sec_l.addWidget(sec_lbl)
+                sec_l.addWidget(cnt_lbl)
+                sec_l.addWidget(line, 1)
+                inner_layout.addWidget(sec_hdr)
+
+                # Group items within this storage by category
+                cats = _STORAGE_CATEGORIES.get(storage, [])
+                cat_grouped: dict[str, list] = defaultdict(list)
+                for item in items_for_storage:
+                    cat_grouped[_categorize_kitchen_item(item["name"], storage)].append(item)
+
+                for cat_name, cat_icon, cat_colour, _kws in cats:
+                    cat_items = cat_grouped.get(cat_name, [])
+                    if not cat_items:
+                        continue
+
+                    # Category sub-header
+                    cat_hdr = QWidget()
+                    cat_hdr.setStyleSheet("background: transparent;")
+                    cat_hdr.setFixedHeight(22)
+                    cat_l = QHBoxLayout(cat_hdr)
+                    cat_l.setContentsMargins(4, 2, 0, 0)
+                    cat_l.setSpacing(5)
+                    cat_ic_lbl = QLabel()
+                    cat_ic_lbl.setPixmap(qta.icon(cat_icon, color=cat_colour).pixmap(QSize(11, 11)))
+                    cat_ic_lbl.setStyleSheet("background: transparent;")
+                    cat_name_lbl = QLabel(cat_name)
+                    cat_name_lbl.setStyleSheet(
+                        f"background: transparent; color: {cat_colour};"
+                        " font-size: 10px; font-weight: 700; letter-spacing: 0.5px;"
+                    )
+                    cat_cnt = QLabel(f"({len(cat_items)})")
+                    cat_cnt.setStyleSheet(
+                        f"background: transparent; color: {_tm.c('#555555', '#aaaaaa')}; font-size: 10px;"
+                    )
+                    cat_l.addWidget(cat_ic_lbl)
+                    cat_l.addWidget(cat_name_lbl)
+                    cat_l.addWidget(cat_cnt)
+                    cat_l.addStretch()
+                    inner_layout.addWidget(cat_hdr)
+
+                    for item in cat_items:
+                        item_row = QWidget()
+                        item_row.setStyleSheet("background: transparent;")
+                        item_row.setFixedHeight(34)
+                        row_l = QHBoxLayout(item_row)
+                        row_l.setContentsMargins(4, 0, 0, 0)
+                        row_l.setSpacing(8)
+
+                        name_str = item["name"][:28] + ("…" if len(item["name"]) > 28 else "")
+                        name_lbl = QLabel(name_str)
+                        name_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+                        name_lbl.setStyleSheet(
+                            f"background: transparent; color: {txt_main}; font-size: 13px; font-weight: 500;"
+                        )
+
+                        qty = item.get("quantity")
+                        unit = item.get("unit", "")
+                        qty_str = ""
+                        if qty is not None:
+                            try:
+                                qty_str = str(int(float(qty))) if float(qty) == int(float(qty)) else str(qty)
+                            except Exception:
+                                qty_str = str(qty)
+                            if unit:
+                                qty_str += f" {unit}"
+                        qty_lbl = QLabel(qty_str)
+                        qty_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        qty_lbl.setStyleSheet(
+                            f"background: transparent; color: {txt_sub}; font-size: 11px;"
+                        )
+
+                        row_l.addWidget(name_lbl, 1)
+
+                        # Expiry badge for items expiring soon
+                        days = _days_until_expiry(item.get("expiry_date") or "")
+                        if days is not None:
+                            if days < 0:
+                                badge_text, badge_col = "Expired", "#ef4444"
+                                badge_bg = "rgba(239,68,68,0.15)"
+                            elif days <= 3:
+                                badge_text = f"{days}d"
+                                badge_col, badge_bg = "#f0a500", "rgba(240,165,0,0.15)"
+                            else:
+                                badge_text = ""
+                            if badge_text:
+                                exp_lbl = QLabel(badge_text)
+                                exp_lbl.setStyleSheet(
+                                    f"color:{badge_col};font-size:9px;font-weight:700;"
+                                    f"background:{badge_bg};border-radius:4px;padding:1px 5px"
+                                )
+                                row_l.addWidget(exp_lbl)
+
+                        row_l.addWidget(qty_lbl)
+                        inner_layout.addWidget(item_row)
+
+            inner_layout.addStretch()
+            scroll.setWidget(inner)
+            self._body_layout.addWidget(scroll, 1)
+
+            count_lbl = QLabel(f"{total} item{'s' if total != 1 else ''} in storage")
+            count_lbl.setStyleSheet(
+                f"background: transparent; color: {_tm.c('#444444', '#999999')}; font-size: 11px;"
+            )
+            self._body_layout.addWidget(count_lbl)
+
+        else:
+            self._body_layout.addStretch()
+            ph = QLabel("My Kitchen is empty")
+            ph.setObjectName("placeholder-text")
+            ph.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sub = QLabel("Add items to track your pantry, fridge & freezer")
+            sub.setObjectName("placeholder-sub")
+            sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._body_layout.addWidget(ph)
+            self._body_layout.addWidget(sub)
+            self._body_layout.addStretch()
+
+
 class MyKitchenView(QWidget):
-    def __init__(self, navigate_to=None, trigger_dishy=None, parent=None):
+    def __init__(self, db: Database | None = None, navigate_to=None, trigger_dishy=None, parent=None):
         super().__init__(parent)
         self.setObjectName("view-container")
         self._navigate_to   = navigate_to   or (lambda i: None)
         self._trigger_dishy = trigger_dishy or (lambda t: None)
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
         self._macro_rings: dict[str, MacroRing] = {}
 
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(0, 0, 0, 0)
         self._outer.setSpacing(0)
+        self._kitchen_preview: _KitchenPreviewCard | None = None
+        self._expiry_card: _ExpiryAlertCard | None = None
         get_broadcaster().goals_changed.connect(self._on_goals_changed)
+        get_pantry_broadcaster().pantry_changed.connect(self._on_kitchen_changed)
         self._rebuild_content()
 
     def _rebuild_content(self):
@@ -147,6 +498,10 @@ class MyKitchenView(QWidget):
         # Compact quick-action strip
         layout.addWidget(self._quick_actions_strip())
 
+        # Expiry alert banner (hidden when nothing is expiring)
+        self._expiry_card = _ExpiryAlertCard(self._db, self._navigate_to, self._trigger_dishy)
+        layout.addWidget(self._expiry_card)
+
         # Row B — [Macro Rings + Dishy stacked] | Shopping Preview | Favourites
         row_b = QHBoxLayout()
         row_b.setSpacing(12)
@@ -163,12 +518,12 @@ class MyKitchenView(QWidget):
 
         shopping_card = self._shopping_preview()
         shopping_card.setMinimumHeight(280)
-        fav_card = self._favourites_card()
-        fav_card.setMinimumHeight(280)
+        self._kitchen_preview = _KitchenPreviewCard(self._db, self._navigate_to)
+        self._kitchen_preview.setMinimumHeight(280)
 
         row_b.addWidget(left_col, 5)
         row_b.addWidget(shopping_card, 3)
-        row_b.addWidget(fav_card, 3)
+        row_b.addWidget(self._kitchen_preview, 3)
         layout.addLayout(row_b, 1)
 
         scroll.setWidget(content)
@@ -266,6 +621,7 @@ class MyKitchenView(QWidget):
             ("breakfast", "fa5s.egg",            "#ff9a5c", "BREAKFAST"),
             ("lunch",     "fa5s.utensils",       "#34d399", "LUNCH"),
             ("dinner",    "fa5s.concierge-bell", "#60a5fa", "DINNER"),
+            ("snack",     "fa5s.apple-alt",      "#f0a500", "SNACK"),
         ]
         for i, (meal_type, icon_name, colour, label) in enumerate(meal_defs):
             layout.addWidget(self._plan_row(label, icon_name, colour, meals_today.get(meal_type, "")))
@@ -656,6 +1012,19 @@ class MyKitchenView(QWidget):
         for key, ring in self._macro_rings.items():
             ring.set_goal(goals.get(key, 0.0))
 
+    def _on_kitchen_changed(self):
+        """Refresh the kitchen preview and expiry banner in-place when any pantry item changes."""
+        try:
+            if self._kitchen_preview is not None:
+                self._kitchen_preview.refresh()
+        except RuntimeError:
+            pass
+        try:
+            if self._expiry_card is not None:
+                self._expiry_card.refresh()
+        except RuntimeError:
+            pass
+
     # ── Shopping Preview ────────────────────────────────────────────────────
 
     def _scroll_style(self) -> str:
@@ -838,115 +1207,3 @@ class MyKitchenView(QWidget):
 
         return card
 
-    # ── Favourite Recipes ───────────────────────────────────────────────────
-
-    def _favourites_card(self) -> QWidget:
-        card = QWidget()
-        card.setObjectName("card")
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(20, 16, 20, 14)
-        layout.setSpacing(8)
-
-        hdr = QHBoxLayout()
-        star_ic = QLabel()
-        star_ic.setPixmap(qta.icon("fa5s.star", color="#f0a500").pixmap(QSize(20, 20)))
-        star_ic.setStyleSheet("background: transparent;")
-        title_lbl = QLabel("FAVOURITES")
-        title_lbl.setStyleSheet(
-            f"background: transparent; color: {_tm.c('#888888', '#666666')};"
-            " font-size: 13px; font-weight: 700; letter-spacing: 1px;"
-        )
-        view_btn = QPushButton("View →")
-        view_btn.setObjectName("ghost-btn")
-        view_btn.setFixedHeight(24)
-        view_btn.clicked.connect(lambda: self._navigate_to(1))
-        hdr.addWidget(star_ic)
-        hdr.addSpacing(8)
-        hdr.addWidget(title_lbl)
-        hdr.addStretch()
-        hdr.addWidget(view_btn)
-        layout.addLayout(hdr)
-
-        try:
-            recipes = self._db.conn.execute(
-                "SELECT id, title, ready_mins, data_json FROM recipes "
-                "WHERE is_favourite=1 ORDER BY saved_at DESC"
-            ).fetchall()
-        except Exception:
-            recipes = []
-
-        if recipes:
-            scroll = QScrollArea()
-            scroll.setWidgetResizable(True)
-            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-            scroll.setStyleSheet(self._scroll_style())
-            inner = QWidget()
-            inner_layout = QVBoxLayout(inner)
-            inner_layout.setContentsMargins(0, 0, 4, 0)
-            inner_layout.setSpacing(5)
-
-            row_bg   = _tm.c('#0d0d0d', '#f8f8f8')
-            row_bdr  = _tm.c('#272727', '#e8e8e8')
-            txt_main = _tm.c('#e0e0e0', '#1a1a1a')
-            txt_sub  = _tm.c('#666666', '#888888')
-
-            for recipe in recipes:
-                row = QWidget()
-                row.setObjectName("dash-fav-row")
-                row.setFixedHeight(46)
-                row.setCursor(Qt.CursorShape.PointingHandCursor)
-                row.setStyleSheet(
-                    f"QWidget#dash-fav-row {{ background: {row_bg}; border-radius: 9px;"
-                    f" border: 1px solid {row_bdr}; }}"
-                    f"QWidget#dash-fav-row:hover {{ border-color: rgba(240,165,0,0.4);"
-                    f" background: {_tm.c('#101010', '#f4f4f4')}; }}"
-                )
-                rl = QHBoxLayout(row)
-                rl.setContentsMargins(12, 0, 12, 0)
-                rl.setSpacing(8)
-                ic = QLabel()
-                ic.setPixmap(qta.icon("fa5s.star", color="#f0a500").pixmap(QSize(14, 14)))
-                ic.setStyleSheet("background: transparent; border: none;")
-                ic.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-                title_txt = recipe["title"]
-                name_lbl = QLabel(title_txt[:30] + ("…" if len(title_txt) > 30 else ""))
-                name_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-                name_lbl.setStyleSheet(
-                    f"background: transparent; border: none; color: {txt_main}; font-size: 13px; font-weight: 600;"
-                )
-                time_str = f"{recipe['ready_mins']} min" if recipe["ready_mins"] else ""
-                time_lbl = QLabel(time_str)
-                time_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                time_lbl.setStyleSheet(
-                    f"background: transparent; border: none; color: {txt_sub}; font-size: 12px;"
-                )
-                rl.addWidget(ic)
-                rl.addWidget(name_lbl, 1)
-                rl.addWidget(time_lbl)
-                row.mousePressEvent = lambda e: self._navigate_to(1)
-                inner_layout.addWidget(row)
-
-            inner_layout.addStretch()
-            scroll.setWidget(inner)
-            layout.addWidget(scroll, 1)
-
-            count_lbl = QLabel(f"{len(recipes)} favourite{'s' if len(recipes) != 1 else ''}")
-            count_lbl.setStyleSheet(
-                f"background: transparent; color: {_tm.c('#444444', '#999999')}; font-size: 11px;"
-            )
-            layout.addWidget(count_lbl)
-        else:
-            layout.addStretch()
-            ph = QLabel("No favourites yet")
-            ph.setObjectName("placeholder-text")
-            ph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            sub = QLabel("Star a recipe to pin it here")
-            sub.setObjectName("placeholder-sub")
-            sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(ph)
-            layout.addWidget(sub)
-            layout.addStretch()
-
-        return card

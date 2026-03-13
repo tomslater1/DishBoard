@@ -8,8 +8,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QScrollArea, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QSize, QTimer, QEvent, QRectF, Signal
-from PySide6.QtGui import QPainter, QColor, QBrush, QPen, QPainterPath
+from PySide6.QtCore import Qt, QSize, QTimer, QEvent, Signal
 
 from api.claude_ai import ClaudeAI
 from api.dishy_tools import TOOLS, TOOL_STATUS_MESSAGES, summarise_tool_calls
@@ -26,6 +25,8 @@ PANEL_H  = 520
 FAB_SIZE = 54
 GAP      = 10
 MARGIN   = 20
+
+DISHY_GREEN = "#34d399"
 
 
 def _clean(text: str) -> str:
@@ -56,13 +57,13 @@ PAGE_CONTEXTS = {
         "create a recipe, save it immediately with save_recipe (include full nutrition).",
 
     "Meal Planner":
-        "The user is on the Meal Planner — a weekly Mon–Sun grid with Breakfast, Lunch, Dinner "
-        "slots. Every slot must link to a saved recipe (no free-text custom names). If they ask "
-        "you to add a meal, save the recipe first then set the slot. Check the live context for "
+        "The user is on the Meal Planner — a weekly Mon–Sun grid with Breakfast, Lunch, Dinner, "
+        "and Snack slots. Every slot must link to a saved recipe (no free-text custom names). If they ask "
+        "you to add a meal or snack, save the recipe first then set the slot. Check the live context for "
         "the current week's plan — reference what's already scheduled. If slots are empty, offer "
-        "to fill the week. If they want individual changes, use set_meal_slot. When you set "
-        "today's meals, nutrition is logged automatically. Prefer their favourite recipes and "
-        "respect dietary preferences when suggesting meals.",
+        "to fill the week. If they want individual changes, use set_meal_slot with meal_type='snack' "
+        "for snacks. When you set today's meals, nutrition is logged automatically. Prefer their "
+        "favourite recipes and respect dietary preferences when suggesting meals.",
 
     "Nutrition":
         "The user is on the Nutrition dashboard. It shows six macro rings vs daily goals "
@@ -75,7 +76,7 @@ PAGE_CONTEXTS = {
 
     "Shopping List":
         "The user is on the Shopping List. They can add items manually, check items off, clear "
-        "checked items, and export to Apple Notes. You can add items directly (add_shopping_items) "
+        "checked items, and export their list. You can add items directly (add_shopping_items) "
         "or generate the full list from the week's meal plan (shopping_list_from_meal_plan). "
         "Check the live context for what's already on the list and what's on the meal plan — "
         "if the list is empty and a meal plan exists, offer to generate it. Help with quantities, "
@@ -108,129 +109,93 @@ PAGE_GREETINGS = {
 }
 
 
-_MINI_FONT = ('font-family: "SF Pro Display","SF Pro Text",-apple-system,'
+_MINI_FONT = ('font-family: "Segoe UI","SF Pro Text",-apple-system,'
              '".AppleSystemUIFont","Helvetica Neue",Arial,sans-serif;')
 
 
-# ── Painted pill helper ───────────────────────────────────────────────────────
+# ── Mini avatar ───────────────────────────────────────────────────────────────
 
-class _MiniPill(QWidget):
-    """Anti-aliased uniform-radius pill for the float panel."""
-    def __init__(self, text: str, bg: QColor, border: QColor, text_color: str,
-                 radius: int = 13, font_size: int = 13, bold: bool = False,
-                 max_width: int = 0, parent=None):
+class _MiniAvatar(QWidget):
+    """Small non-painted Dishy avatar."""
+
+    def __init__(self, size: int = 26, parent=None):
         super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        if max_width:
-            self.setMaximumWidth(max_width)
-        self._bg     = bg
-        self._border = border
-        self._r      = radius
+        self._size = size
+        self.setFixedSize(size, size)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lbl = QLabel()
+        icon_px = max(int(size * 0.44), 8)
+        lbl.setPixmap(qta.icon("fa5s.robot", color="#ffffff").pixmap(QSize(icon_px, icon_px)))
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(lbl)
+        self.apply_theme(theme_manager.mode)
 
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(13, 8, 13, 8)
+    def apply_theme(self, _mode: str):
+        r = int(self._size / 2)
+        self.setStyleSheet(
+            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #4ef2bc,stop:1 #1ea86e);"
+            f"border: 1px solid {theme_manager.c('rgba(52,211,153,0.45)', 'rgba(52,211,153,0.40)')};"
+            f"border-radius: {r}px;"
+        )
+
+
+class _MiniPillBubble(QWidget):
+    def __init__(self, text: str, is_user: bool, parent=None):
+        super().__init__(parent)
+        self._is_user = is_user
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self.setMaximumWidth(PANEL_W - 84)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(12, 8, 12, 8)
         lay.setSpacing(0)
 
         self._lbl = QLabel(text)
-        self._lbl.setWordWrap(bool(max_width))
+        self._lbl.setWordWrap(True)
         self._lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        weight = "font-weight: 600;" if bold else ""
-        self._lbl.setStyleSheet(
-            f"background: transparent; border: none; color: {text_color};"
-            f" font-size: {font_size}px; {weight} {_MINI_FONT}"
-        )
         lay.addWidget(self._lbl)
+        self.apply_theme(theme_manager.mode)
 
-    def setText(self, text: str):
-        self._lbl.setText(text)
-        self.adjustSize()
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(self._border)
-        pen.setWidthF(2.0)
-        p.setPen(pen)
-        p.setBrush(QBrush(self._bg))
-        s = 1.0
-        p.drawRoundedRect(QRectF(s, s, self.width() - 2*s, self.height() - 2*s),
-                          self._r, self._r)
-
-
-# ── Painted bubble helper ─────────────────────────────────────────────────────
-
-class _MiniPillBubble(QWidget):
-    """Anti-aliased asymmetric-corner bubble for the float panel."""
-    def __init__(self, text: str, is_user: bool, parent=None):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        self.setMaximumWidth(PANEL_W - 56)
-
-        is_dark = theme_manager.mode == "dark"
-        if is_user:
-            self._bg     = QColor(255, 107, 53, 26)   # rgba(255,107,53,0.10)
-            self._border = QColor(255, 107, 53, 80)   # ~0.31 — more visible with 2px pen
-            self._radii  = (13, 13, 4, 13)
-            txt = theme_manager.c('#e8e8e8', '#1a1a1a')
+    def apply_theme(self, mode: str):
+        is_dark = mode == "dark"
+        if self._is_user:
+            bg = "rgba(52,211,153,0.18)" if is_dark else "#e8fbf3"
+            border = "rgba(52,211,153,0.55)" if is_dark else "#66cda5"
+            text = "#e9fff5" if is_dark else "#0f3a2c"
         else:
-            self._bg     = QColor(255, 255, 255, 10) if is_dark else QColor("#f7f7f7")
-            self._border = QColor(255, 255, 255, 45) if is_dark else QColor("#d0d0d0")
-            self._radii  = (4, 13, 13, 13)
-            txt = theme_manager.c('#cccccc', '#1a1a1a')
-
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(13, 8, 13, 8)
-        lay.setSpacing(0)
-
-        lbl = QLabel(text)
-        lbl.setWordWrap(True)
-        lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        lbl.setStyleSheet(
-            f"background: transparent; border: none; color: {txt};"
-            f" font-size: 13px; {_MINI_FONT}"
+            bg = "#151e2a" if is_dark else "#ffffff"
+            border = "#2e3c52" if is_dark else "#d7e1ee"
+            text = "#e8edf8" if is_dark else "#1a2435"
+        self.setStyleSheet(
+            f"background: {bg}; border: 1px solid {border}; border-radius: 12px;"
         )
-        lay.addWidget(lbl)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        pen = QPen(self._border)
-        pen.setWidthF(2.0)
-        p.setPen(pen)
-        p.setBrush(QBrush(self._bg))
-        s = 1.0
-        r = QRectF(s, s, self.width() - 2*s, self.height() - 2*s)
-        tl, tr, br, bl = self._radii
-        path = QPainterPath()
-        path.moveTo(r.x() + tl, r.y())
-        path.lineTo(r.x() + r.width() - tr, r.y())
-        path.quadTo(r.x() + r.width(), r.y(), r.x() + r.width(), r.y() + tr)
-        path.lineTo(r.x() + r.width(), r.y() + r.height() - br)
-        path.quadTo(r.x() + r.width(), r.y() + r.height(),
-                    r.x() + r.width() - br, r.y() + r.height())
-        path.lineTo(r.x() + bl, r.y() + r.height())
-        path.quadTo(r.x(), r.y() + r.height(), r.x(), r.y() + r.height() - bl)
-        path.lineTo(r.x(), r.y() + tl)
-        path.quadTo(r.x(), r.y(), r.x() + tl, r.y())
-        path.closeSubpath()
-        p.drawPath(path)
+        self._lbl.setStyleSheet(
+            f"background: transparent; border: none; color: {text}; font-size: 13px; {_MINI_FONT}"
+        )
 
 
 class _MiniMessage(QWidget):
     def __init__(self, text: str, is_user: bool, parent=None):
         super().__init__(parent)
+        self._bubble = _MiniPillBubble(text, is_user)
         hl = QHBoxLayout(self)
-        hl.setContentsMargins(0, 3, 0, 3)
-        bubble = _MiniPillBubble(text, is_user)
+        hl.setContentsMargins(0, 4, 0, 4)
+        hl.setSpacing(9)
         if is_user:
             hl.addStretch()
-            hl.addWidget(bubble)
+            hl.addWidget(self._bubble)
         else:
-            hl.addWidget(bubble)
+            self._avatar = _MiniAvatar(24)
+            hl.addWidget(self._avatar, 0, Qt.AlignmentFlag.AlignTop)
+            hl.addWidget(self._bubble)
             hl.addStretch()
+
+    def apply_theme(self, mode: str):
+        self._bubble.apply_theme(mode)
+        if hasattr(self, "_avatar"):
+            self._avatar.apply_theme(mode)
 
 
 class _MiniActionSummary(QWidget):
@@ -239,17 +204,20 @@ class _MiniActionSummary(QWidget):
     def __init__(self, labels: list[str], parent=None):
         super().__init__(parent)
         vl = QVBoxLayout(self)
-        vl.setContentsMargins(0, 2, 0, 2)
-        vl.setSpacing(3)
+        vl.setContentsMargins(34, 2, 0, 4)
+        vl.setSpacing(4)
         for text in labels:
             hl = QHBoxLayout()
             hl.setContentsMargins(0, 0, 0, 0)
-            pill = _MiniPill(
-                f"✓  {text}",
-                bg=QColor(52, 211, 153, 18),
-                border=QColor(52, 211, 153, 80),
-                text_color="#34d399",
-                radius=12, font_size=12, bold=True,
+            pill = QLabel(f"✓  {text}")
+            pill.setStyleSheet(
+                "QLabel {"
+                " color: #34d399;"
+                f" background: {theme_manager.c('rgba(52,211,153,0.16)', 'rgba(52,211,153,0.12)')};"
+                " border: 1px solid rgba(52,211,153,0.40);"
+                " border-radius: 9px;"
+                f" padding: 4px 10px; font-size: 11px; font-weight: 700; {_MINI_FONT}"
+                "}"
             )
             hl.addWidget(pill)
             hl.addStretch()
@@ -257,39 +225,45 @@ class _MiniActionSummary(QWidget):
 
 
 class _MiniTypingIndicator(QWidget):
-    """Spinner + live status text for the floating bubble panel."""
+    """Compact spinner/cube indicator."""
+
     _SPIN = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        hl = QHBoxLayout(self)
-        hl.setContentsMargins(0, 3, 0, 3)
-        self._step   = 0
-        self._status = "Thinking..."
         self._pending: list[str] = []
+        self._status = "Thinking..."
+        self._step = 0
 
-        is_dark = theme_manager.mode == "dark"
-        self._pill = _MiniPill(
-            f"{self._SPIN[0]}  Thinking...",
-            bg=QColor(255, 255, 255, 10) if is_dark else QColor("#f7f7f7"),
-            border=QColor(255, 255, 255, 45) if is_dark else QColor("#d0d0d0"),
-            text_color="#34d399",
-            radius=13, font_size=12,
+        hl = QHBoxLayout(self)
+        hl.setContentsMargins(0, 4, 0, 4)
+        hl.setSpacing(9)
+        self._avatar = _MiniAvatar(24)
+        hl.addWidget(self._avatar, 0, Qt.AlignmentFlag.AlignTop)
+
+        self._lbl = QLabel(f"{self._SPIN[0]}  {self._status}")
+        self._lbl.setStyleSheet(
+            "QLabel {"
+            f"color: {DISHY_GREEN};"
+            f"background: {theme_manager.c('#151e2a', '#ffffff')};"
+            f"border: 1px solid {theme_manager.c('#2e3c52', '#d7e1ee')};"
+            "border-radius: 10px;"
+            f"padding: 6px 10px; font-size: 11px; font-weight: 700; {_MINI_FONT}"
+            "}"
         )
-        self._lbl = self._pill._lbl  # proxy for compat
-
-        hl.addWidget(self._pill)
+        hl.addWidget(self._lbl)
         hl.addStretch()
+
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(80)
+        self._timer.start(90)
 
     def _tick(self):
         if self._pending:
             self._status = self._pending.pop()
             self._pending.clear()
         self._step = (self._step + 1) % len(self._SPIN)
-        self._pill.setText(f"{self._SPIN[self._step]}  {self._status}")
+        self._lbl.setText(f"{self._SPIN[self._step]}  {self._status}")
 
     def update_status(self, text: str):
         """Thread-safe: append to queue; main-thread timer picks it up."""
@@ -333,12 +307,6 @@ class DishyBubble(QWidget):
         """
         self._actions    = actions
         self._refresh_cb = refresh_callback
-        # Update the visual badge so we can confirm wiring at runtime
-        self._tools_badge.setText("⚙ tools on")
-        self._tools_badge.setStyleSheet(
-            "color: #34d399; font-size: 9px; font-weight: 600;"
-            " background: transparent; border: none; padding: 0 2px;"
-        )
 
     # ──────────────────────────────────────────── build
 
@@ -346,6 +314,7 @@ class DishyBubble(QWidget):
         self._panel = self._build_panel()
         self._panel.setVisible(False)
         self._panel.setParent(self)
+        self._apply_panel_theme()
 
         self._fab = QPushButton(self)
         self._fab.setFixedSize(FAB_SIZE, FAB_SIZE)
@@ -355,12 +324,16 @@ class DishyBubble(QWidget):
         self._fab.setToolTip("Ask Dishy")
         self._fab.setStyleSheet(
             "QPushButton {"
-            "  background: #34d399;"
+            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #4ef2bc,stop:1 #1ea86e);"
             "  border-radius: 27px;"
-            "  border: 2px solid rgba(255,255,255,0.1);"
+            "  border: 2px solid rgba(255,255,255,0.24);"
             "}"
-            "QPushButton:hover { background: #4ae3a8; }"
-            "QPushButton:pressed { background: #2ac48a; }"
+            "QPushButton:hover {"
+            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #5df8c6,stop:1 #2abf85);"
+            "}"
+            "QPushButton:pressed {"
+            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #34d399,stop:1 #157f54);"
+            "}"
         )
         self._fab.clicked.connect(self._toggle)
 
@@ -368,13 +341,6 @@ class DishyBubble(QWidget):
         panel = QWidget(self)
         panel.setObjectName("dishy-panel")
         panel.setFixedSize(PANEL_W, PANEL_H)
-        panel.setStyleSheet(
-            "QWidget#dishy-panel {"
-            f"  background: {theme_manager.c('#0e0e0e', '#ffffff')};"
-            "  border-radius: 14px;"
-            f"  border: 1.5px solid {theme_manager.c('rgba(255,255,255,0.08)', '#e0e0e0')};"
-            "}"
-        )
 
         vl = QVBoxLayout(panel)
         vl.setContentsMargins(0, 0, 0, 0)
@@ -382,61 +348,33 @@ class DishyBubble(QWidget):
 
         # ── Header ─────────────────────────────────────────────────────────
         header = QWidget()
-        header.setFixedHeight(52)
-        header.setStyleSheet(
-            f"background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.08),stop:1 rgba(52,211,153,0.03))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.07),stop:1 rgba(52,211,153,0.02))')};"
-            " border-radius: 14px 14px 0 0;"
-            f" border-bottom: 1px solid {theme_manager.c('rgba(255,255,255,0.07)', '#e4e4e4')};"
-        )
+        header.setFixedHeight(62)
+        header.setObjectName("dishy-mini-header")
         self._panel_header = header
         hl = QHBoxLayout(header)
-        hl.setContentsMargins(14, 0, 10, 0)
-        hl.setSpacing(8)
+        hl.setContentsMargins(14, 0, 12, 0)
+        hl.setSpacing(10)
 
-        robot_lbl = QLabel()
-        robot_lbl.setPixmap(qta.icon("fa5s.robot", color="#34d399").pixmap(QSize(15, 15)))
-        robot_lbl.setStyleSheet("background: transparent; border: none;")
+        avatar_icon = _MiniAvatar(28)
 
         title_lbl = QLabel("Dishy")
-        title_lbl.setStyleSheet(
-            f"color: {theme_manager.c('#e0e0e0', '#1a1a1a')}; font-size: 14px; font-weight: 700;"
-            " background: transparent; border: none;"
-        )
         self._title_lbl = title_lbl
 
         self._page_badge = QLabel("Home")
-        self._page_badge.setStyleSheet(
-            "color: #555555; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;"
-            f" background: {theme_manager.c('rgba(255,255,255,0.05)', '#f0f0f0')};"
-            f" border: 1.5px solid {theme_manager.c('rgba(255,255,255,0.08)', '#e0e0e0')};"
-            " border-radius: 5px; padding: 1px 7px;"
-        )
+        self._page_badge.setFixedHeight(20)
 
-        # Actions-enabled badge — updates when setup_actions() is called
-        self._tools_badge = QLabel("⚙ tools off")
-        self._tools_badge.setStyleSheet(
-            "color: #555555; font-size: 9px; font-weight: 600;"
-            " background: transparent; border: none; padding: 0 2px;"
-        )
-
-        close_btn = QPushButton("✕")
+        close_btn = QPushButton()
         close_btn.setFixedSize(28, 28)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.setStyleSheet(
-            f"QPushButton {{ color: {theme_manager.c('#888888', '#666666')}; font-size: 13px;"
-            "  background: transparent; border: none; border-radius: 14px; }"
-            f"QPushButton:hover {{ color: {theme_manager.c('#d0d0d0', '#111111')};"
-            f" background: {theme_manager.c('#1e1e1e', '#e0e0e0')}; }}"
-        )
+        close_btn.setIcon(qta.icon("fa5s.times", color=theme_manager.c("#a6b6cc", "#6d8098")))
+        close_btn.setIconSize(QSize(11, 11))
         self._close_btn = close_btn
         close_btn.clicked.connect(self._close_panel)
 
-        hl.addWidget(robot_lbl)
+        hl.addWidget(avatar_icon)
         hl.addWidget(title_lbl)
-        hl.addSpacing(4)
+        hl.addSpacing(1)
         hl.addWidget(self._page_badge)
-        hl.addSpacing(4)
-        hl.addWidget(self._tools_badge)
         hl.addStretch()
         hl.addWidget(close_btn)
         vl.addWidget(header)
@@ -444,15 +382,12 @@ class DishyBubble(QWidget):
         # ── Scroll / chat area ──────────────────────────────────────────────
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
-        self._scroll.setStyleSheet(
-            "QScrollArea { border: none; background: transparent; }"
-            "QScrollBar:vertical { width: 4px; }"
-        )
+        self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
         self._chat_container = QWidget()
-        self._chat_container.setStyleSheet("background: transparent;")
+        self._chat_container.setObjectName("dishy-mini-chat")
         self._chat_layout = QVBoxLayout(self._chat_container)
-        self._chat_layout.setContentsMargins(12, 10, 8, 10)
+        self._chat_layout.setContentsMargins(12, 12, 12, 12)
         self._chat_layout.setSpacing(4)
         self._chat_layout.addStretch()
 
@@ -461,32 +396,24 @@ class DishyBubble(QWidget):
 
         # ── Input bar ───────────────────────────────────────────────────────
         input_area = QWidget()
-        input_area.setFixedHeight(58)
-        input_area.setStyleSheet(
-            f"background: {theme_manager.c('#0a0a0a', '#f8f8f8')};"
-            " border-radius: 0 0 14px 14px;"
-            f" border-top: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', '#e4e4e4')};"
-        )
+        input_area.setFixedHeight(64)
+        input_area.setObjectName("dishy-mini-footer")
         self._panel_footer = input_area
         il = QHBoxLayout(input_area)
-        il.setContentsMargins(10, 9, 10, 9)
+        il.setContentsMargins(12, 10, 12, 10)
         il.setSpacing(8)
 
         self._input = QLineEdit()
         self._input.setPlaceholderText("Ask Dishy something…")
-        self._input.setFixedHeight(36)
+        self._input.setFixedHeight(40)
         self._input.returnPressed.connect(self._send)
+        self._apply_input_style()
 
         self._send_btn = QPushButton()
-        self._send_btn.setFixedSize(36, 36)
+        self._send_btn.setFixedSize(40, 40)
         self._send_btn.setIcon(qta.icon("fa5s.paper-plane", color="#ffffff"))
         self._send_btn.setIconSize(QSize(14, 14))
         self._send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._send_btn.setStyleSheet(
-            "QPushButton { background: #34d399; border-radius: 8px; border: none; }"
-            "QPushButton:hover { background: #4ae3a8; }"
-            f"QPushButton:disabled {{ background: {theme_manager.c('#1a1a1a', '#d5d5d5')}; }}"
-        )
         self._send_btn.clicked.connect(self._send)
 
         il.addWidget(self._input)
@@ -494,6 +421,91 @@ class DishyBubble(QWidget):
         vl.addWidget(input_area)
 
         return panel
+
+    def _apply_input_style(self):
+        self._input.setStyleSheet(
+            "QLineEdit {"
+            f"  background: {theme_manager.c('#141e2b', '#ffffff')};"
+            f"  color: {theme_manager.c('#eef4ff', '#142133')};"
+            f"  border: 1.3px solid {theme_manager.c('#2f3d52', '#d5deea')};"
+            "  border-radius: 11px;"
+            "  padding: 0 12px;"
+            "  font-size: 13px;"
+            f"  font-weight: 600; {_MINI_FONT}"
+            "  selection-background-color: #34d399;"
+            "  selection-color: #000000;"
+            "}"
+            "QLineEdit:focus {"
+            "  border-color: #34d399;"
+            f"  background: {theme_manager.c('#182536', '#ffffff')};"
+            "}"
+            "QLineEdit::placeholder {"
+            f"  color: {theme_manager.c('#7d90aa', '#8ea0b8')};"
+            "}"
+        )
+
+    def _apply_scroll_style(self):
+        self._scroll.setStyleSheet(
+            "QScrollArea { border: none; background: transparent; }"
+            "QScrollBar:vertical { width: 5px; background: transparent; margin: 4px 0; }"
+            f"QScrollBar::handle:vertical {{ background: {theme_manager.c('#33445d', '#b9c7d9')};"
+            " border-radius: 2px; min-height: 24px; }"
+            f"QScrollBar::handle:vertical:hover {{ background: {theme_manager.c('#48607f', '#9fb0c6')}; }}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        )
+
+    def _apply_panel_theme(self):
+        self._panel.setStyleSheet(
+            "QWidget#dishy-panel {"
+            f"  background: {theme_manager.c('#111a26', '#f8fbff')};"
+            "  border-radius: 16px;"
+            f"  border: 1px solid {theme_manager.c('#243347', '#d8e2ef')};"
+            "}"
+        )
+        self._panel_header.setStyleSheet(
+            "QWidget#dishy-mini-header {"
+            f" background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.16),stop:1 rgba(52,211,153,0.05))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.11),stop:1 rgba(52,211,153,0.03))')};"
+            " border-radius: 16px 16px 0 0;"
+            f" border-bottom: 1px solid {theme_manager.c('rgba(52,211,153,0.28)', 'rgba(52,211,153,0.24)')};"
+            "}"
+        )
+        self._title_lbl.setStyleSheet(
+            "background: transparent; border: none;"
+            f"color: {theme_manager.c('#f4f8ff', '#122033')}; font-size: 16px; font-weight: 800; {_MINI_FONT}"
+        )
+        self._page_badge.setStyleSheet(
+            f"color: {theme_manager.c('#9fb0c9', '#60748d')}; font-size: 10px; font-weight: 700; {_MINI_FONT}"
+            f" background: {theme_manager.c('rgba(255,255,255,0.08)', '#ecf2f8')};"
+            f" border: 1px solid {theme_manager.c('#2f3d52', '#d5deea')};"
+            " border-radius: 6px; padding: 0 8px;"
+        )
+        self._close_btn.setIcon(qta.icon("fa5s.times", color=theme_manager.c("#a6b6cc", "#6d8098")))
+        self._close_btn.setStyleSheet(
+            "QPushButton {"
+            f" background: {theme_manager.c('rgba(255,255,255,0.08)', '#ecf2f8')};"
+            " border: none; border-radius: 14px;"
+            "}"
+            "QPushButton:hover {"
+            f" background: {theme_manager.c('rgba(255,255,255,0.14)', '#e2ebf5')};"
+            "}"
+        )
+        self._chat_container.setStyleSheet(
+            f"QWidget#dishy-mini-chat {{ background: {theme_manager.c('#111a26', '#f8fbff')}; }}"
+        )
+        self._panel_footer.setStyleSheet(
+            "QWidget#dishy-mini-footer {"
+            f" background: {theme_manager.c('#111a26', '#f8fbff')};"
+            " border-radius: 0 0 16px 16px;"
+            f" border-top: 1px solid {theme_manager.c('#243347', '#d8e2ef')};"
+            "}"
+        )
+        self._send_btn.setStyleSheet(
+            "QPushButton { background: #34d399; border-radius: 11px; border: none; }"
+            "QPushButton:hover { background: #2ec48d; }"
+            f"QPushButton:disabled {{ background: {theme_manager.c('#2a4a3e', '#b9c8c0')}; }}"
+        )
+        self._apply_input_style()
+        self._apply_scroll_style()
 
     # ──────────────────────────────────────────── page context
 
@@ -549,6 +561,9 @@ class DishyBubble(QWidget):
     def _add_bubble(self, text: str, is_user: bool):
         msg = _MiniMessage(text, is_user)
         self._chat_layout.insertWidget(self._chat_layout.count() - 1, msg)
+        self._chat_container.updateGeometry()
+        self._chat_container.update()
+        self._scroll.viewport().update()
         QTimer.singleShot(40, lambda: self._scroll.verticalScrollBar().setValue(
             self._scroll.verticalScrollBar().maximum()
         ))
@@ -567,6 +582,7 @@ class DishyBubble(QWidget):
         self._add_bubble(text, is_user=True)
         self._input.clear()
         self._send_btn.setEnabled(False)
+        self._send_btn.setIcon(qta.icon("fa5s.circle-notch", color="#ffffff"))
 
         # Show typing indicator
         self._typing_indicator = _MiniTypingIndicator()
@@ -580,12 +596,15 @@ class DishyBubble(QWidget):
 
         page_ctx = PAGE_CONTEXTS.get(self._page, "")
         app_ctx  = actions.get_context_string() if actions is not None else ""
+        memory_ctx = actions.get_memory_context(text) if actions is not None else ""
 
         ctx_parts: list[str] = []
         if page_ctx:
             ctx_parts.append(f"[Page context: {page_ctx}]")
         if app_ctx:
             ctx_parts.append(app_ctx)
+        if memory_ctx:
+            ctx_parts.append(memory_ctx)
         full_msg = "\n\n".join(ctx_parts + [text]) if ctx_parts else text
 
         # Trim history to avoid very long context windows
@@ -600,7 +619,7 @@ class DishyBubble(QWidget):
         if actions is None:
             # This means setup_actions() was never called — show warning in chat
             self._add_bubble(
-                "⚠ Dishy tools are not active. Restart the app to enable recipe saving and meal planning.",
+                "Dishy tools are not active. Restart the app to enable recipe saving and meal planning.",
                 is_user=False,
             )
 
@@ -659,6 +678,7 @@ class DishyBubble(QWidget):
                 self._add_bubble(cleaned, is_user=False)
 
             self._send_btn.setEnabled(True)
+            self._send_btn.setIcon(qta.icon("fa5s.paper-plane", color="#ffffff"))
             QTimer.singleShot(60, lambda: self._scroll.verticalScrollBar().setValue(
                 self._scroll.verticalScrollBar().maximum()
             ))
@@ -682,6 +702,12 @@ class DishyBubble(QWidget):
         _is_auth = False
         if "credit balance" in err_lower or "too low" in err_lower:
             msg = "Anthropic credits are out. Top up at console.anthropic.com/settings/billing."
+        elif "overloaded" in err_lower or "529" in err_lower:
+            msg = "Dishy's AI is a little busy right now — please try again in a moment."
+        elif "dishy_rate_limited" in err_lower or "daily ai request limit" in err_lower:
+            msg = "Daily AI limit reached (50/day). Try again tomorrow."
+        elif "ai usage metering unavailable" in err_lower:
+            msg = "Dishy is temporarily unavailable due to AI usage metering. Try again in a moment."
         elif "dishy_not_signed_in" in err_lower:
             msg = "Dishy couldn't connect — tap 'Sign Out Instead' to sign back in."
             _is_auth = True
@@ -694,6 +720,7 @@ class DishyBubble(QWidget):
             msg = f"Error: {short[:200]}"
         self._add_bubble(msg, is_user=False)
         self._send_btn.setEnabled(True)
+        self._send_btn.setIcon(qta.icon("fa5s.paper-plane", color="#ffffff"))
         if _is_auth:
             try:
                 from auth.session_manager import load_session
@@ -725,44 +752,7 @@ class DishyBubble(QWidget):
     def apply_theme(self, mode: str):
         """Update panel colors when theme changes."""
         self._close_panel()  # clear chat; next open rebuilds with new colors
-        self._panel.setStyleSheet(
-            "QWidget#dishy-panel {"
-            f"  background: {theme_manager.c('#0e0e0e', '#ffffff')};"
-            "  border-radius: 14px;"
-            f"  border: 1.5px solid {theme_manager.c('rgba(255,255,255,0.08)', '#e0e0e0')};"
-            "}"
-        )
-        self._panel_header.setStyleSheet(
-            f"background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.08),stop:1 rgba(52,211,153,0.03))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.07),stop:1 rgba(52,211,153,0.02))')};"
-            " border-radius: 14px 14px 0 0;"
-            f" border-bottom: 1px solid {theme_manager.c('rgba(255,255,255,0.07)', '#e4e4e4')};"
-        )
-        self._title_lbl.setStyleSheet(
-            f"color: {theme_manager.c('#e0e0e0', '#1a1a1a')}; font-size: 14px; font-weight: 700;"
-            " background: transparent; border: none;"
-        )
-        self._page_badge.setStyleSheet(
-            "color: #555555; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;"
-            f" background: {theme_manager.c('rgba(255,255,255,0.05)', '#f0f0f0')};"
-            f" border: 1.5px solid {theme_manager.c('rgba(255,255,255,0.08)', '#e0e0e0')};"
-            " border-radius: 5px; padding: 1px 7px;"
-        )
-        self._close_btn.setStyleSheet(
-            f"QPushButton {{ color: {theme_manager.c('#888888', '#666666')}; font-size: 13px;"
-            "  background: transparent; border: none; border-radius: 14px; }"
-            f"QPushButton:hover {{ color: {theme_manager.c('#d0d0d0', '#111111')};"
-            f" background: {theme_manager.c('#1e1e1e', '#e0e0e0')}; }}"
-        )
-        self._panel_footer.setStyleSheet(
-            f"background: {theme_manager.c('#0a0a0a', '#f8f8f8')};"
-            " border-radius: 0 0 14px 14px;"
-            f" border-top: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', '#e4e4e4')};"
-        )
-        self._send_btn.setStyleSheet(
-            "QPushButton { background: #34d399; border-radius: 8px; border: none; }"
-            "QPushButton:hover { background: #4ae3a8; }"
-            f"QPushButton:disabled {{ background: {theme_manager.c('#1a1a1a', '#d5d5d5')}; }}"
-        )
+        self._apply_panel_theme()
 
     # ──────────────────────────────────────────── event filter
 

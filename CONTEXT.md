@@ -45,11 +45,11 @@ DishBoard/
 │
 ├── views/
 │   ├── my_kitchen.py            # Home (index 0): stat cards, quick actions, recent recipes, macro rings
-│   ├── my_kitchen_coming_soon.py # My Kitchen (index 4): coming soon placeholder for pantry/storage tracker
+│   ├── my_kitchen_storage.py    # My Kitchen (index 4): full pantry/fridge/freezer tracker
 │   ├── recipes.py               # Recipe browser + create/edit form + detail view (QStackedWidget)
 │   ├── meal_planner.py          # Weekly meal planner grid (Mon–Sun × Breakfast/Lunch/Dinner)
 │   ├── nutrition.py             # Daily nutrition log + macro rings (custom QPainter widget)
-│   ├── shopping_list.py         # Shopping list with check/delete, import from meal plan
+│   ├── shopping_list.py         # Shopping list + Live Shop mode (tick items → auto adds to My Kitchen)
 │   ├── dishy.py                 # Full-page Dishy AI chat view (sidebar nav item)
 │   ├── settings.py              # API keys, theme toggle, dietary prefs, data export/import, nutrition goals
 │   └── help.py                  # How-to-use guide
@@ -80,6 +80,7 @@ DishBoard/
 │   ├── workers.py               # Worker (QRunnable) + run_async() + ImageLoader
 │   ├── macro_goals.py           # MACRO_SPECS, get/set macro goals (DB), goals_changed Signal broadcaster
 │   ├── cloud_sync_service.py    # CloudSyncBackgroundService — QTimer 5min polling + Realtime WebSocket
+│   ├── meal_deduction.py        # MealDeductionService — QTimer deducts pantry items when meal times pass
 │   └── image_upload.py          # upload_recipe_image() + is_supabase_url() — no Qt dep
 │
 └── assets/
@@ -103,6 +104,9 @@ meal_plans         id, day_of_week, meal_type, recipe_id, custom_name, week_star
                    cloud_id, updated_at
 
 shopping_items     id, name, quantity, unit, checked, source, added_at, cloud_id, updated_at
+
+pantry_items       id, name, quantity, unit, storage ('Pantry'|'Fridge'|'Freezer'),
+                   expiry_date, added_at, cloud_id, updated_at
 
 settings           key, value   (key-value store: dietary_prefs, dishy_tip, dishy_tip_date,
                    sync_last_push_at, sync_last_pull_at, supabase_url, supabase_anon_key, etc.)
@@ -128,7 +132,7 @@ The `QStackedWidget` in `MainWindow` has views at fixed indices:
 | 1 | RecipesView | #7c6af7 (purple) |
 | 2 | MealPlannerView | #4caf8a (teal/green) |
 | 3 | NutritionView | #e05c7a (pink) |
-| 4 | MyKitchenComingSoonView (My Kitchen) | #e8924a (warm amber) |
+| 4 | MyKitchenStorageView (My Kitchen) | #e8924a (warm amber) |
 | 5 | ShoppingListView | #f0a500 (amber) |
 | 6 | DishyView | #34d399 (green) |
 | 7 | HelpView | — |
@@ -306,6 +310,7 @@ color = theme_manager.c('#c8c8c8', '#333333')  # dark, light
 
 | Version | Summary |
 |---|---|
+| v0.66 | Windows compatibility milestone: OS-aware app-data paths, cross-platform file-open/export flows, Windows-ready PyInstaller spec/icon/keyring backend, updater asset selection by platform, and Windows build scripts (`build_windows.ps1` / `.bat`) |
 | v0.37 | Smart shopping lists (consolidate, practical units, skip pantry staples, pantry mode teaser); clear_meal_day tool; clear_meal_plan all_weeks support; meal planner wipe fixed |
 | v0.36 | Instant cloud sync on every data change; Today's Log reads directly from meal planner (no duplicates); macro rings driven by meal plan; NutritionSyncService removed |
 | v0.35 | Supabase auth + cloud sync: login screen, Google OAuth, bidirectional sync, offline-first, sync indicator, Account settings page |
@@ -347,8 +352,14 @@ color = theme_manager.c('#c8c8c8', '#333333')  # dark, light
 | v0.43 | Editable macro goals in Settings → Nutrition Goals; goals saved to DB (cloud synced); goals_changed Signal updates nutrition rings and My Kitchen rings instantly; MACRO_SPECS moved to utils/macro_goals.py |
 | v0.42 | Server-side AI proxy (Supabase Edge Function); Supabase Storage for recipe images; Realtime WebSocket sync; "Live" sync indicator state; polling reduced to 5 min |
 | v0.41 | Full light mode: Dishy chat, Settings header/nav, login logo all theme-adaptive at runtime; new icon set |
+| v0.56 | Themed dialogs: `utils/themed_dialog.py` ThemedMessageBox replaces all QMessageBox calls; UpdateDialog, MigrationDialog, ChatHistoryDialog, AddToCalendarDialog, _AddItemDialog all use FramelessWindowHint + card pattern + drag support; no native OS chrome on any popup |
+| v0.60 | Pantry intelligence: expiry alerts banner on home dashboard (items ≤3 days); 'Use it up →' button pre-loads Dishy; expiry context injected into Dishy live context; 'What can I make with what I have?' quick-prompt chip; new `swap_meal_slots` Dishy tool |
+| v0.61 | Feature platform release: Monitoring page (data totals, AI usage, jobs, notifications, telemetry), feature flags (global + per-user + optional cloud refresh), in-app notifications + workflow runner, daily AI hard limit (50/day) enforced in app + Supabase Edge proxy, Dishy retrieved-memory context, typo-tolerant weighted local recipe search, optional Sentry/PostHog hooks |
+| v0.59 | Home dashboard: Favourites card replaced with live My Kitchen preview; shows all pantry/fridge/freezer items by storage section + category; expiry badges; instant live refresh via pantry_changed Signal from `get_pantry_broadcaster()` in `my_kitchen_storage.py` |
+| v0.58 | Dishy bubble UI redesign: avatar on Dishy messages + typing indicator; gradient FAB; card-colour panel bg; themed input field; icon close button; removed tools badge; indented action pills; 16px corner radius; styled scrollbar |
+| v0.57 | Responsive scaling: sidebar auto-collapses at <940px window width (re-expands at >1060px); logo icon always visible (30px collapsed / 52px expanded); Dishy's Tip removed from sidebar; window minimum 780×520; meal planner, recipes, shopping list minimum size constraints lowered |
 
-**Current version: v0.45.3**
+**Current version: v0.61**
 
 > IMPORTANT: Always increment version on every session that makes changes. Do NOT reach v1.0 without explicit user approval.
 > When bumping version: (1) update `APP_VERSION` in `utils/version.py`, (2) prepend a new entry to `VERSION_HISTORY` in the same file, (3) update CONTEXT.md and MEMORY.md version tables.

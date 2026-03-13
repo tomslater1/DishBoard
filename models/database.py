@@ -1,12 +1,85 @@
 import sqlite3
 import os
+import json
+from datetime import datetime, timezone
 
 from utils.paths import get_data_dir
 
 DB_PATH = os.path.join(get_data_dir(), "dishboard.db")
 
 
+def _utc_now_iso() -> str:
+    """Return a canonical UTC timestamp string for local + cloud sync fields."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _parse_sync_ts(value) -> datetime | None:
+    """Parse mixed timestamp formats into a UTC-aware datetime."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    # Common SQLite format: "YYYY-MM-DD HH:MM:SS"
+    if " " in raw and "T" not in raw:
+        raw = raw.replace(" ", "T", 1)
+    # Common RFC3339 UTC marker
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
+
+def _normalise_sync_ts(value) -> str | None:
+    """Normalize any parseable timestamp to a canonical UTC ISO string."""
+    dt = _parse_sync_ts(value)
+    return dt.isoformat(timespec="seconds") if dt else None
+
+
+def _cloud_is_newer(local_raw, cloud_raw) -> bool:
+    """Return True when cloud timestamp is strictly newer than local timestamp."""
+    local_dt = _parse_sync_ts(local_raw)
+    cloud_dt = _parse_sync_ts(cloud_raw)
+    if local_dt and cloud_dt:
+        return cloud_dt > local_dt
+    if local_dt and not cloud_dt:
+        return False
+    if cloud_dt and not local_dt:
+        return True
+    local_s = str(local_raw or "")
+    cloud_s = str(cloud_raw or "")
+    if local_s and cloud_s:
+        return cloud_s > local_s
+    return bool(cloud_s and not local_s)
+
+
 class Database:
+    _USER_DATA_TABLES = (
+        "recipes",
+        "meal_plans",
+        "shopping_items",
+        "nutrition_logs",
+        "dishy_chat_history",
+        "pantry_items",
+        "in_app_notifications",
+        "ai_usage_daily",
+        "workflow_jobs",
+        "telemetry_events",
+        "trash_bin",
+        "recipe_source_stats",
+        "pantry_waste_log",
+    )
+
     def __init__(self, path: str = DB_PATH):
         self.path = path
         self._conn: sqlite3.Connection | None = None
@@ -129,8 +202,137 @@ class Database:
     cloud_id     TEXT,
     updated_at   DATETIME DEFAULT NULL
 )"""),
+        # v3: data integrity + query performance indexes
+        (3, """DELETE FROM meal_plans
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM meal_plans
+                    GROUP BY week_start, day_of_week, meal_type
+                )"""),
+        (3, "CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_plans_slot_unique ON meal_plans (week_start, day_of_week, meal_type)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_recipes_updated_at ON recipes(updated_at)"),
+        (3, "CREATE UNIQUE INDEX IF NOT EXISTS idx_recipes_cloud_id_uq ON recipes(cloud_id) WHERE cloud_id IS NOT NULL"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_recipes_saved_at ON recipes(saved_at)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_meal_plans_updated_at ON meal_plans(updated_at)"),
+        (3, "CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_plans_cloud_id_uq ON meal_plans(cloud_id) WHERE cloud_id IS NOT NULL"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_meal_plans_week_day ON meal_plans(week_start, day_of_week)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_meal_plans_recipe_cloud_id ON meal_plans(recipe_cloud_id)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_shopping_updated_at ON shopping_items(updated_at)"),
+        (3, "CREATE UNIQUE INDEX IF NOT EXISTS idx_shopping_cloud_id_uq ON shopping_items(cloud_id) WHERE cloud_id IS NOT NULL"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_shopping_checked_added ON shopping_items(checked, added_at)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_nutrition_updated_at ON nutrition_logs(updated_at)"),
+        (3, "CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_cloud_id_uq ON nutrition_logs(cloud_id) WHERE cloud_id IS NOT NULL"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_nutrition_log_date ON nutrition_logs(log_date)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_dishy_chat_updated_at ON dishy_chat_history(updated_at)"),
+        (3, "CREATE UNIQUE INDEX IF NOT EXISTS idx_dishy_chat_cloud_id_uq ON dishy_chat_history(cloud_id) WHERE cloud_id IS NOT NULL"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_dishy_chat_session_time ON dishy_chat_history(session_id, timestamp)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_pantry_updated_at ON pantry_items(updated_at)"),
+        (3, "CREATE UNIQUE INDEX IF NOT EXISTS idx_pantry_cloud_id_uq ON pantry_items(cloud_id) WHERE cloud_id IS NOT NULL"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_pantry_storage_name ON pantry_items(storage, name)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_pantry_expiry ON pantry_items(expiry_date)"),
+        (3, "CREATE INDEX IF NOT EXISTS idx_sync_tombstones_table_cloud ON sync_tombstones(table_name, cloud_id)"),
+        # v4: ensure older DBs that missed recipe_cloud_id get it safely
+        (4, "ALTER TABLE meal_plans ADD COLUMN recipe_cloud_id TEXT"),
+        (4, "CREATE INDEX IF NOT EXISTS idx_meal_plans_recipe_cloud_id ON meal_plans(recipe_cloud_id)"),
+        # v5: in-app notifications, AI metering, workflow jobs, telemetry events
+        (5, """CREATE TABLE IF NOT EXISTS in_app_notifications (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      TEXT    NOT NULL DEFAULT '',
+    notif_type   TEXT    NOT NULL,
+    title        TEXT    NOT NULL,
+    message      TEXT    NOT NULL,
+    severity     TEXT    NOT NULL DEFAULT 'info',
+    data_json    TEXT    DEFAULT '{}',
+    dedupe_key   TEXT    DEFAULT NULL,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    read_at      DATETIME DEFAULT NULL,
+    updated_at   DATETIME DEFAULT NULL
+)"""),
+        (5, "CREATE UNIQUE INDEX IF NOT EXISTS idx_notifs_dedupe_uq ON in_app_notifications(dedupe_key) WHERE dedupe_key IS NOT NULL"),
+        (5, "CREATE INDEX IF NOT EXISTS idx_notifs_user_created ON in_app_notifications(user_id, created_at DESC)"),
+        (5, "CREATE INDEX IF NOT EXISTS idx_notifs_user_read ON in_app_notifications(user_id, read_at)"),
+        (5, """CREATE TABLE IF NOT EXISTS ai_usage_daily (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       TEXT    NOT NULL,
+    usage_date    DATE    NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    blocked_count INTEGER NOT NULL DEFAULT 0,
+    updated_at    DATETIME DEFAULT NULL
+)"""),
+        (5, "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_usage_user_day_uq ON ai_usage_daily(user_id, usage_date)"),
+        (5, "CREATE INDEX IF NOT EXISTS idx_ai_usage_day ON ai_usage_daily(usage_date)"),
+        (5, """CREATE TABLE IF NOT EXISTS workflow_jobs (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_key           TEXT    UNIQUE,
+    job_type          TEXT    NOT NULL,
+    payload_json      TEXT    DEFAULT '{}',
+    status            TEXT    NOT NULL DEFAULT 'scheduled',
+    run_every_minutes INTEGER NOT NULL DEFAULT 60,
+    next_run_at       DATETIME NOT NULL,
+    last_run_at       DATETIME DEFAULT NULL,
+    last_error        TEXT    DEFAULT '',
+    attempt_count     INTEGER NOT NULL DEFAULT 0,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT NULL
+)"""),
+        (5, "CREATE INDEX IF NOT EXISTS idx_jobs_next_run ON workflow_jobs(next_run_at, status)"),
+        (5, """CREATE TABLE IF NOT EXISTS telemetry_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         TEXT    NOT NULL DEFAULT '',
+    event_name      TEXT    NOT NULL,
+    properties_json TEXT    DEFAULT '{}',
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+)"""),
+        (5, "CREATE INDEX IF NOT EXISTS idx_telemetry_user_created ON telemetry_events(user_id, created_at DESC)"),
+        # v6: trash/recovery, source trust stats, pantry waste log, household-aware sync columns
+        (6, "ALTER TABLE recipes ADD COLUMN household_id TEXT"),
+        (6, "ALTER TABLE meal_plans ADD COLUMN household_id TEXT"),
+        (6, "ALTER TABLE shopping_items ADD COLUMN household_id TEXT"),
+        (6, "ALTER TABLE nutrition_logs ADD COLUMN household_id TEXT"),
+        (6, "ALTER TABLE pantry_items ADD COLUMN household_id TEXT"),
+        (6, "ALTER TABLE sync_tombstones ADD COLUMN household_id TEXT"),
+        (6, "CREATE INDEX IF NOT EXISTS idx_recipes_household_id ON recipes(household_id)"),
+        (6, "CREATE INDEX IF NOT EXISTS idx_meal_plans_household_id ON meal_plans(household_id)"),
+        (6, "CREATE INDEX IF NOT EXISTS idx_shopping_household_id ON shopping_items(household_id)"),
+        (6, "CREATE INDEX IF NOT EXISTS idx_nutrition_household_id ON nutrition_logs(household_id)"),
+        (6, "CREATE INDEX IF NOT EXISTS idx_pantry_household_id ON pantry_items(household_id)"),
+        (6, "CREATE INDEX IF NOT EXISTS idx_tombstones_household_id ON sync_tombstones(household_id)"),
+        (6, """CREATE TABLE IF NOT EXISTS trash_bin (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         TEXT    NOT NULL DEFAULT '',
+    entity_type     TEXT    NOT NULL,
+    payload_json    TEXT    NOT NULL,
+    reason          TEXT    NOT NULL DEFAULT 'deleted',
+    deleted_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+)"""),
+        (6, "CREATE INDEX IF NOT EXISTS idx_trash_user_deleted ON trash_bin(user_id, deleted_at DESC)"),
+        (6, """CREATE TABLE IF NOT EXISTS recipe_source_stats (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id               TEXT    NOT NULL DEFAULT '',
+    source_host           TEXT    NOT NULL,
+    scrape_success_count  INTEGER NOT NULL DEFAULT 0,
+    scrape_fail_count     INTEGER NOT NULL DEFAULT 0,
+    nutrition_success_count INTEGER NOT NULL DEFAULT 0,
+    nutrition_fail_count  INTEGER NOT NULL DEFAULT 0,
+    avg_latency_ms        REAL    NOT NULL DEFAULT 0,
+    sample_count          INTEGER NOT NULL DEFAULT 0,
+    last_status           TEXT    NOT NULL DEFAULT '',
+    updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
+)"""),
+        (6, "CREATE UNIQUE INDEX IF NOT EXISTS idx_source_stats_user_host_uq ON recipe_source_stats(user_id, source_host)"),
+        (6, """CREATE TABLE IF NOT EXISTS pantry_waste_log (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           TEXT    NOT NULL DEFAULT '',
+    item_name         TEXT    NOT NULL,
+    quantity          REAL    DEFAULT NULL,
+    unit              TEXT    DEFAULT '',
+    reason            TEXT    NOT NULL DEFAULT 'discarded',
+    estimated_value   REAL    NOT NULL DEFAULT 0,
+    logged_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+)"""),
+        (6, "CREATE INDEX IF NOT EXISTS idx_pantry_waste_user_time ON pantry_waste_log(user_id, logged_at DESC)"),
     ]
-    _LATEST_SCHEMA_VERSION = 2
+    _LATEST_SCHEMA_VERSION = 6
 
     def _run_migrations(self) -> None:
         """Apply pending schema migrations, tracked via PRAGMA user_version.
@@ -171,6 +373,406 @@ class Database:
         )
         self.conn.commit()
 
+    def _active_user_id(self) -> str:
+        return str(self.get_setting("active_user_id", "") or "").strip()
+
+    def _active_household_id(self) -> str:
+        hid = str(self.get_setting("household_id", "") or "").strip()
+        return hid or self._active_user_id()
+
+    @staticmethod
+    def _as_dict(row) -> dict:
+        return dict(row) if row is not None else {}
+
+    def _stash_deleted_row(self, entity_type: str, payload: dict, *, reason: str = "deleted") -> None:
+        if not payload:
+            return
+        try:
+            self.conn.execute(
+                "INSERT INTO trash_bin (user_id, entity_type, payload_json, reason)"
+                " VALUES (?, ?, ?, ?)",
+                (
+                    self._active_user_id(),
+                    entity_type,
+                    json.dumps(payload),
+                    reason or "deleted",
+                ),
+            )
+            self.conn.commit()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _to_number(value) -> float:
+        try:
+            return float(value or 0)
+        except Exception:
+            return 0.0
+
+    def _estimate_waste_value(self, row: dict) -> float:
+        default_item_cost = self._to_number(self.get_setting("pantry_default_item_cost", "2.50"))
+        if default_item_cost <= 0:
+            default_item_cost = 2.5
+        qty = self._to_number((row or {}).get("quantity"))
+        if qty > 0:
+            return round(qty * default_item_cost, 2)
+        return round(default_item_cost, 2)
+
+    def _log_pantry_waste(self, row: dict, *, reason: str = "discarded") -> None:
+        if not row:
+            return
+        try:
+            self.conn.execute(
+                "INSERT INTO pantry_waste_log (user_id, item_name, quantity, unit, reason, estimated_value)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    self._active_user_id(),
+                    str(row.get("name") or "Item"),
+                    row.get("quantity"),
+                    str(row.get("unit") or ""),
+                    reason or "discarded",
+                    self._estimate_waste_value(row),
+                ),
+            )
+            self.conn.commit()
+        except Exception:
+            pass
+
+    def list_trash_items(self, *, limit: int = 200) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM trash_bin WHERE user_id=? ORDER BY deleted_at DESC LIMIT ?",
+            (self._active_user_id(), max(1, int(limit))),
+        ).fetchall()
+        out: list[dict] = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["payload"] = json.loads(item.get("payload_json") or "{}")
+            except Exception:
+                item["payload"] = {}
+            out.append(item)
+        return out
+
+    def clear_trash(self) -> int:
+        cursor = self.conn.execute(
+            "DELETE FROM trash_bin WHERE user_id=?",
+            (self._active_user_id(),),
+        )
+        self.conn.commit()
+        return int(cursor.rowcount or 0)
+
+    def restore_trash_item(self, trash_id: int) -> bool:
+        row = self.conn.execute(
+            "SELECT * FROM trash_bin WHERE id=? AND user_id=?",
+            (int(trash_id), self._active_user_id()),
+        ).fetchone()
+        if not row:
+            return False
+        entity = str(row["entity_type"] or "")
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except Exception:
+            payload = {}
+
+        now = _utc_now_iso()
+        ok = False
+        try:
+            if entity == "recipes":
+                payload.pop("id", None)
+                payload["cloud_id"] = None
+                payload["updated_at"] = now
+                cols = [
+                    "source_id", "source", "title", "image_url", "summary", "servings",
+                    "ready_mins", "data_json", "saved_at", "is_favourite", "cloud_id",
+                    "updated_at", "household_id",
+                ]
+                data = [payload.get(k) for k in cols]
+                self.conn.execute(
+                    f"INSERT INTO recipes ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+                    data,
+                )
+                ok = True
+            elif entity == "shopping_items":
+                payload.pop("id", None)
+                payload["cloud_id"] = None
+                payload["updated_at"] = now
+                cols = ["name", "quantity", "unit", "checked", "source", "added_at", "cloud_id", "updated_at", "household_id"]
+                data = [payload.get(k) for k in cols]
+                self.conn.execute(
+                    f"INSERT INTO shopping_items ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+                    data,
+                )
+                ok = True
+            elif entity == "pantry_items":
+                payload.pop("id", None)
+                payload["cloud_id"] = None
+                payload["updated_at"] = now
+                cols = ["name", "quantity", "unit", "storage", "expiry_date", "added_at", "cloud_id", "updated_at", "household_id"]
+                data = [payload.get(k) for k in cols]
+                self.conn.execute(
+                    f"INSERT INTO pantry_items ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+                    data,
+                )
+                ok = True
+            elif entity == "meal_plans":
+                wk = str(payload.get("week_start") or "").strip()
+                day = str(payload.get("day_of_week") or "").strip()
+                meal_type = str(payload.get("meal_type") or "").strip()
+                if wk and day and meal_type:
+                    self.conn.execute(
+                        "INSERT INTO meal_plans (week_start, day_of_week, meal_type, recipe_id, recipe_cloud_id,"
+                        " custom_name, notes, cloud_id, updated_at, household_id)"
+                        " VALUES (?,?,?,?,?,?,?,?,?,?)"
+                        " ON CONFLICT(week_start, day_of_week, meal_type)"
+                        " DO UPDATE SET recipe_id=excluded.recipe_id,"
+                        " recipe_cloud_id=excluded.recipe_cloud_id,"
+                        " custom_name=excluded.custom_name,"
+                        " notes=excluded.notes,"
+                        " updated_at=excluded.updated_at,"
+                        " household_id=excluded.household_id",
+                        (
+                            wk,
+                            day,
+                            meal_type,
+                            payload.get("recipe_id"),
+                            payload.get("recipe_cloud_id"),
+                            payload.get("custom_name"),
+                            payload.get("notes"),
+                            None,
+                            now,
+                            payload.get("household_id") or self._active_household_id(),
+                        ),
+                    )
+                    ok = True
+        except Exception:
+            ok = False
+
+        if ok:
+            self.conn.execute("DELETE FROM trash_bin WHERE id=?", (int(trash_id),))
+            self.conn.commit()
+            return True
+        return False
+
+    def record_recipe_source_event(
+        self,
+        source_host: str,
+        *,
+        event: str,
+        ok: bool,
+        latency_ms: float = 0.0,
+    ) -> None:
+        host = str(source_host or "").strip().lower()
+        if not host:
+            return
+        uid = self._active_user_id()
+        row = self.conn.execute(
+            "SELECT * FROM recipe_source_stats WHERE user_id=? AND source_host=?",
+            (uid, host),
+        ).fetchone()
+        if row is None:
+            self.conn.execute(
+                "INSERT INTO recipe_source_stats"
+                " (user_id, source_host, updated_at) VALUES (?, ?, ?)",
+                (uid, host, _utc_now_iso()),
+            )
+            row = self.conn.execute(
+                "SELECT * FROM recipe_source_stats WHERE user_id=? AND source_host=?",
+                (uid, host),
+            ).fetchone()
+        data = dict(row or {})
+        sample_count = int(data.get("sample_count", 0) or 0)
+        prev_avg = self._to_number(data.get("avg_latency_ms"))
+        latency = max(0.0, float(latency_ms or 0.0))
+        new_count = sample_count + 1
+        new_avg = ((prev_avg * sample_count) + latency) / max(1, new_count)
+
+        updates = {
+            "sample_count": new_count,
+            "avg_latency_ms": round(new_avg, 1),
+            "last_status": f"{event}:{'ok' if ok else 'fail'}",
+            "updated_at": _utc_now_iso(),
+        }
+        if event == "scrape":
+            key = "scrape_success_count" if ok else "scrape_fail_count"
+            updates[key] = int(data.get(key, 0) or 0) + 1
+        elif event == "nutrition":
+            key = "nutrition_success_count" if ok else "nutrition_fail_count"
+            updates[key] = int(data.get(key, 0) or 0) + 1
+
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        self.conn.execute(
+            f"UPDATE recipe_source_stats SET {set_clause} WHERE user_id=? AND source_host=?",
+            [*updates.values(), uid, host],
+        )
+        self.conn.commit()
+
+    def get_recipe_source_score(self, source_host: str) -> float:
+        host = str(source_host or "").strip().lower()
+        if not host:
+            return 50.0
+        row = self.conn.execute(
+            "SELECT * FROM recipe_source_stats WHERE user_id=? AND source_host=?",
+            (self._active_user_id(), host),
+        ).fetchone()
+        if not row:
+            return 50.0
+        d = dict(row)
+        scrape_ok = float(d.get("scrape_success_count", 0) or 0)
+        scrape_fail = float(d.get("scrape_fail_count", 0) or 0)
+        nutr_ok = float(d.get("nutrition_success_count", 0) or 0)
+        nutr_fail = float(d.get("nutrition_fail_count", 0) or 0)
+        scrape_total = max(1.0, scrape_ok + scrape_fail)
+        nutr_total = max(1.0, nutr_ok + nutr_fail)
+        scrape_rate = scrape_ok / scrape_total
+        nutr_rate = nutr_ok / nutr_total
+        latency = float(d.get("avg_latency_ms", 0) or 0)
+        latency_penalty = min(12.0, latency / 350.0)
+        score = (scrape_rate * 55.0) + (nutr_rate * 35.0) + 10.0 - latency_penalty
+        return max(0.0, min(100.0, round(score, 1)))
+
+    def get_pantry_waste_summary(self, *, days: int = 30) -> dict:
+        uid = self._active_user_id()
+        rows = self.conn.execute(
+            "SELECT estimated_value FROM pantry_waste_log"
+            " WHERE user_id=? AND datetime(logged_at) >= datetime('now', ?)",
+            (uid, f"-{max(1, int(days))} days"),
+        ).fetchall()
+        total = sum(self._to_number(r["estimated_value"]) for r in rows)
+        return {"entries": len(rows), "estimated_value": round(total, 2)}
+
+    def get_top_wasted_items(self, *, days: int = 30, limit: int = 3) -> list[dict]:
+        uid = self._active_user_id()
+        rows = self.conn.execute(
+            "SELECT item_name, COUNT(*) AS times, SUM(estimated_value) AS value_sum"
+            " FROM pantry_waste_log"
+            " WHERE user_id=? AND datetime(logged_at) >= datetime('now', ?)"
+            " GROUP BY item_name"
+            " ORDER BY value_sum DESC, times DESC, item_name ASC"
+            " LIMIT ?",
+            (uid, f"-{max(1, int(days))} days", max(1, int(limit))),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_expiry_risk_summary(self) -> dict:
+        rows = self.get_pantry_items()
+        from datetime import date as _date
+
+        today = _date.today()
+        expired = 0
+        expiring_soon = 0
+        est_value = 0.0
+        for row in rows:
+            exp = str(row.get("expiry_date") or "").strip()
+            if not exp:
+                continue
+            try:
+                d = _date.fromisoformat(exp)
+            except Exception:
+                continue
+            delta = (d - today).days
+            if delta < 0:
+                expired += 1
+                est_value += self._estimate_waste_value(row)
+            elif delta <= 3:
+                expiring_soon += 1
+                est_value += self._estimate_waste_value(row)
+        return {
+            "expired": expired,
+            "expiring_soon": expiring_soon,
+            "estimated_value_at_risk": round(est_value, 2),
+        }
+
+    def get_sync_integrity_report(self) -> dict:
+        last_push = self.get_setting("sync_last_push_at", "")
+        last_pull = self.get_setting("sync_last_pull_at", "")
+        pending_tombstones = len(self.get_pending_tombstones())
+        unsynced = {}
+        for table in ("recipes", "meal_plans", "shopping_items", "nutrition_logs", "pantry_items", "dishy_chat_history"):
+            try:
+                unsynced[table] = len(self.get_unsynced_rows(table))
+            except Exception:
+                unsynced[table] = 0
+        orphans = self.conn.execute(
+            "SELECT COUNT(*) AS c FROM meal_plans"
+            " WHERE recipe_id IS NOT NULL"
+            " AND recipe_id NOT IN (SELECT id FROM recipes)"
+        ).fetchone()
+        return {
+            "last_push": last_push,
+            "last_pull": last_pull,
+            "pending_tombstones": pending_tombstones,
+            "unsynced_rows": unsynced,
+            "orphan_meal_slots": int((orphans["c"] if orphans else 0) or 0),
+        }
+
+    def run_integrity_scan(self) -> dict:
+        """Return a readable data-integrity snapshot across user-facing tables."""
+        base = self.get_sync_integrity_report()
+        counts = {
+            "recipes_empty_title": int(
+                self.conn.execute(
+                    "SELECT COUNT(*) AS c FROM recipes WHERE TRIM(COALESCE(title,''))=''"
+                ).fetchone()["c"] or 0
+            ),
+            "shopping_empty_name": int(
+                self.conn.execute(
+                    "SELECT COUNT(*) AS c FROM shopping_items WHERE TRIM(COALESCE(name,''))=''"
+                ).fetchone()["c"] or 0
+            ),
+            "pantry_empty_name": int(
+                self.conn.execute(
+                    "SELECT COUNT(*) AS c FROM pantry_items WHERE TRIM(COALESCE(name,''))=''"
+                ).fetchone()["c"] or 0
+            ),
+            "nutrition_missing_core": int(
+                self.conn.execute(
+                    "SELECT COUNT(*) AS c FROM nutrition_logs "
+                    "WHERE TRIM(COALESCE(log_date,''))='' OR TRIM(COALESCE(food_name,''))=''"
+                ).fetchone()["c"] or 0
+            ),
+            "dishy_chat_missing_core": int(
+                self.conn.execute(
+                    "SELECT COUNT(*) AS c FROM dishy_chat_history "
+                    "WHERE TRIM(COALESCE(session_id,''))='' OR TRIM(COALESCE(role,''))='' "
+                    "OR TRIM(COALESCE(content,''))=''"
+                ).fetchone()["c"] or 0
+            ),
+            "meal_slots_invalid_shape": int(
+                self.conn.execute(
+                    "SELECT COUNT(*) AS c FROM meal_plans "
+                    "WHERE TRIM(COALESCE(week_start,''))='' "
+                    "OR COALESCE(day_of_week,'') NOT IN ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') "
+                    "OR LOWER(COALESCE(meal_type,'')) NOT IN ('breakfast','lunch','dinner','snack')"
+                ).fetchone()["c"] or 0
+            ),
+            "meal_slots_duplicate_keys": int(
+                self.conn.execute(
+                    "SELECT COUNT(*) AS c FROM ("
+                    "  SELECT week_start, day_of_week, meal_type, COUNT(*) AS n"
+                    "  FROM meal_plans"
+                    "  GROUP BY week_start, day_of_week, meal_type"
+                    "  HAVING n > 1"
+                    ")"
+                ).fetchone()["c"] or 0
+            ),
+        }
+        issues = int(base.get("orphan_meal_slots", 0) or 0) + int(base.get("pending_tombstones", 0) or 0)
+        issues += sum(int(v or 0) for v in counts.values())
+        return {
+            "sync": base,
+            "table_issues": counts,
+            "issue_count": issues,
+            "healthy": issues == 0,
+        }
+
+    def run_sync_integrity_repair(self) -> dict:
+        linked = self.reconcile_meal_plan_recipe_links()
+        removed_orphans = self.cleanup_orphan_meal_plans()
+        return {
+            "linked_slots": int(linked or 0),
+            "removed_orphans": int(removed_orphans or 0),
+        }
+
     def get_saved_recipes(self) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT * FROM recipes ORDER BY is_favourite DESC, saved_at DESC"
@@ -180,96 +782,131 @@ class Database:
                     image_url: str = "", summary: str = "",
                     servings: int = 0, ready_mins: int = 0,
                     data_json: str = "{}") -> int:
+        now = _utc_now_iso()
+        household_id = self._active_household_id()
         cursor = self.conn.execute(
             """INSERT INTO recipes
                (source_id, source, title, image_url, summary, servings, ready_mins,
-                data_json, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-            (source_id, source, title, image_url, summary, servings, ready_mins, data_json),
+                data_json, updated_at, household_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                source_id, source, title, image_url, summary, servings, ready_mins,
+                data_json, now, household_id,
+            ),
         )
         self.conn.commit()
         return cursor.lastrowid
 
     def toggle_favourite(self, recipe_id: int, is_fav: bool):
+        now = _utc_now_iso()
         self.conn.execute(
-            "UPDATE recipes SET is_favourite=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (int(is_fav), recipe_id),
+            "UPDATE recipes SET is_favourite=?, updated_at=? WHERE id=?",
+            (int(is_fav), now, recipe_id),
         )
         self.conn.commit()
 
     def delete_recipe(self, recipe_id: int):
         row = self.conn.execute(
-            "SELECT cloud_id FROM recipes WHERE id=?", (recipe_id,)
+            "SELECT * FROM recipes WHERE id=?", (recipe_id,)
         ).fetchone()
-        if row and row["cloud_id"]:
-            self.add_tombstone("recipes", row["cloud_id"])
+        if row:
+            data = dict(row)
+            self._stash_deleted_row("recipes", data, reason="delete_recipe")
+            if row["cloud_id"]:
+                self.add_tombstone("recipes", row["cloud_id"])
         self.conn.execute("DELETE FROM recipes WHERE id=?", (recipe_id,))
         self.conn.commit()
 
     def get_shopping_items(self) -> list[sqlite3.Row]:
         return self.conn.execute(
-            "SELECT * FROM shopping_items ORDER BY added_at ASC"
+            "SELECT * FROM shopping_items"
+            " WHERE trim(coalesce(name, '')) <> ''"
+            " ORDER BY added_at ASC"
         ).fetchall()
 
     def add_shopping_item(self, name: str, quantity: str = "", unit: str = "",
                           source: str = "manual") -> int:
+        clean_name = " ".join(str(name or "").split())
+        if not clean_name:
+            return 0
+        now = _utc_now_iso()
+        household_id = self._active_household_id()
         cursor = self.conn.execute(
-            "INSERT INTO shopping_items (name, quantity, unit, source, updated_at)"
-            " VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
-            (name, quantity, unit, source),
+            "INSERT INTO shopping_items (name, quantity, unit, source, updated_at, household_id)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (clean_name, quantity, unit, source or "manual", now, household_id),
         )
         self.conn.commit()
         return cursor.lastrowid
 
     def delete_shopping_item(self, item_id: int):
         row = self.conn.execute(
-            "SELECT cloud_id FROM shopping_items WHERE id=?", (item_id,)
+            "SELECT * FROM shopping_items WHERE id=?", (item_id,)
         ).fetchone()
-        if row and row["cloud_id"]:
-            self.add_tombstone("shopping_items", row["cloud_id"])
+        if row:
+            data = dict(row)
+            self._stash_deleted_row("shopping_items", data, reason="delete_shopping_item")
+            if row["cloud_id"]:
+                self.add_tombstone("shopping_items", row["cloud_id"])
         self.conn.execute("DELETE FROM shopping_items WHERE id=?", (item_id,))
         self.conn.commit()
 
     def toggle_shopping_item(self, item_id: int, checked: bool):
+        now = _utc_now_iso()
         self.conn.execute(
-            "UPDATE shopping_items SET checked=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (int(checked), item_id),
+            "UPDATE shopping_items SET checked=?, updated_at=? WHERE id=?",
+            (int(checked), now, item_id),
         )
         self.conn.commit()
 
     def clear_checked_shopping_items(self):
         rows = self.conn.execute(
-            "SELECT cloud_id FROM shopping_items WHERE checked=1 AND cloud_id IS NOT NULL"
+            "SELECT * FROM shopping_items WHERE checked=1"
         ).fetchall()
         for row in rows:
-            self.add_tombstone("shopping_items", row["cloud_id"])
+            data = dict(row)
+            self._stash_deleted_row("shopping_items", data, reason="clear_checked")
+            if row["cloud_id"]:
+                self.add_tombstone("shopping_items", row["cloud_id"])
         self.conn.execute("DELETE FROM shopping_items WHERE checked=1")
         self.conn.commit()
 
     def get_meal_plan(self, week_start: str) -> list:
         return self.conn.execute(
-            "SELECT * FROM meal_plans WHERE week_start=? ORDER BY meal_type",
+            "SELECT * FROM meal_plans"
+            " WHERE week_start=? AND recipe_id IS NOT NULL"
+            " ORDER BY meal_type",
             (week_start,)
         ).fetchall()
 
     def set_meal_slot(self, week_start: str, day: str, meal_type: str,
                       custom_name: str = "", recipe_id=None):
+        now = _utc_now_iso()
+        household_id = self._active_household_id()
+        recipe_cloud_id = None
+        if recipe_id:
+            row = self.conn.execute(
+                "SELECT cloud_id FROM recipes WHERE id=?",
+                (recipe_id,),
+            ).fetchone()
+            if row:
+                recipe_cloud_id = row["cloud_id"]
         existing = self.conn.execute(
             "SELECT id FROM meal_plans WHERE week_start=? AND day_of_week=? AND meal_type=?",
             (week_start, day, meal_type)
         ).fetchone()
         if existing:
             self.conn.execute(
-                "UPDATE meal_plans SET custom_name=?, recipe_id=?, updated_at=CURRENT_TIMESTAMP"
+                "UPDATE meal_plans SET custom_name=?, recipe_id=?, recipe_cloud_id=?, updated_at=?, household_id=?"
                 " WHERE id=?",
-                (custom_name, recipe_id, existing["id"])
+                (custom_name, recipe_id, recipe_cloud_id, now, household_id, existing["id"])
             )
         else:
             self.conn.execute(
                 "INSERT INTO meal_plans"
-                " (week_start, day_of_week, meal_type, custom_name, recipe_id, updated_at)"
-                " VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)",
-                (week_start, day, meal_type, custom_name, recipe_id)
+                " (week_start, day_of_week, meal_type, custom_name, recipe_id, recipe_cloud_id, updated_at, household_id)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (week_start, day, meal_type, custom_name, recipe_id, recipe_cloud_id, now, household_id)
             )
         self.conn.commit()
 
@@ -281,7 +918,7 @@ class Database:
         day_name   = today.strftime("%A")
         rows = self.conn.execute(
             "SELECT meal_type, custom_name, recipe_id FROM meal_plans"
-            " WHERE week_start=? AND day_of_week=?",
+            " WHERE week_start=? AND day_of_week=? AND recipe_id IS NOT NULL",
             (week_start, day_name),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -300,22 +937,25 @@ class Database:
             "SELECT mp.meal_type, mp.custom_name, mp.recipe_id, r.data_json"
             " FROM meal_plans mp"
             " LEFT JOIN recipes r ON mp.recipe_id = r.id"
-            " WHERE mp.week_start=? AND mp.day_of_week=?"
+            " WHERE mp.week_start=? AND mp.day_of_week=? AND mp.recipe_id IS NOT NULL"
             " ORDER BY CASE mp.meal_type"
             "   WHEN 'breakfast' THEN 1 WHEN 'lunch' THEN 2"
-            "   WHEN 'dinner' THEN 3 ELSE 4 END",
+            "   WHEN 'dinner' THEN 3 WHEN 'snack' THEN 4 ELSE 5 END",
             (week_start, day_name),
         ).fetchall()
         return [dict(r) for r in rows]
 
     def clear_meal_slot(self, week_start: str, day: str, meal_type: str):
         row = self.conn.execute(
-            "SELECT cloud_id FROM meal_plans"
+            "SELECT * FROM meal_plans"
             " WHERE week_start=? AND day_of_week=? AND meal_type=?",
             (week_start, day, meal_type)
         ).fetchone()
-        if row and row["cloud_id"]:
-            self.add_tombstone("meal_plans", row["cloud_id"])
+        if row:
+            data = dict(row)
+            self._stash_deleted_row("meal_plans", data, reason="clear_meal_slot")
+            if row["cloud_id"]:
+                self.add_tombstone("meal_plans", row["cloud_id"])
         self.conn.execute(
             "DELETE FROM meal_plans WHERE week_start=? AND day_of_week=? AND meal_type=?",
             (week_start, day, meal_type)
@@ -324,21 +964,27 @@ class Database:
 
     def clear_week_meal_plan(self, week_start: str):
         rows = self.conn.execute(
-            "SELECT cloud_id FROM meal_plans WHERE week_start=? AND cloud_id IS NOT NULL",
+            "SELECT * FROM meal_plans WHERE week_start=?",
             (week_start,)
         ).fetchall()
         for row in rows:
-            self.add_tombstone("meal_plans", row["cloud_id"])
+            data = dict(row)
+            self._stash_deleted_row("meal_plans", data, reason="clear_week_meal_plan")
+            if row["cloud_id"]:
+                self.add_tombstone("meal_plans", row["cloud_id"])
         self.conn.execute("DELETE FROM meal_plans WHERE week_start=?", (week_start,))
         self.conn.commit()
 
     def clear_all_meal_plans(self):
         """Delete every meal plan row across all weeks."""
         rows = self.conn.execute(
-            "SELECT cloud_id FROM meal_plans WHERE cloud_id IS NOT NULL"
+            "SELECT * FROM meal_plans"
         ).fetchall()
         for row in rows:
-            self.add_tombstone("meal_plans", row["cloud_id"])
+            data = dict(row)
+            self._stash_deleted_row("meal_plans", data, reason="clear_all_meal_plans")
+            if row["cloud_id"]:
+                self.add_tombstone("meal_plans", row["cloud_id"])
         self.conn.execute("DELETE FROM meal_plans")
         self.conn.commit()
 
@@ -354,10 +1000,11 @@ class Database:
 
         Returns the number of rows removed.
         """
+        # Preserve recipe_id NULL rows: they may represent unresolved cloud links.
         orphans = self.conn.execute(
             "SELECT mp.id, mp.cloud_id FROM meal_plans mp"
-            " WHERE mp.recipe_id IS NULL"
-            "    OR mp.recipe_id NOT IN (SELECT id FROM recipes)"
+            " WHERE mp.recipe_id IS NOT NULL"
+            "   AND mp.recipe_id NOT IN (SELECT id FROM recipes)"
         ).fetchall()
         for row in orphans:
             if row["cloud_id"]:
@@ -367,15 +1014,53 @@ class Database:
             self.conn.commit()
         return len(orphans)
 
+    def reconcile_meal_plan_recipe_links(self) -> int:
+        """Resolve meal_plans.recipe_id from recipe_cloud_id where possible."""
+        cursor = self.conn.execute(
+            "UPDATE meal_plans AS mp"
+            " SET recipe_id = (SELECT r.id FROM recipes r WHERE r.cloud_id = mp.recipe_cloud_id)"
+            " WHERE mp.recipe_cloud_id IS NOT NULL"
+            "   AND (mp.recipe_id IS NULL OR mp.recipe_id NOT IN (SELECT id FROM recipes))"
+            "   AND EXISTS (SELECT 1 FROM recipes r2 WHERE r2.cloud_id = mp.recipe_cloud_id)"
+        )
+        self.conn.commit()
+        return int(cursor.rowcount or 0)
+
+    def cleanup_unlinked_cloud_meal_plans(self) -> int:
+        """Delete cloud-linked meal rows that have no resolvable recipe link.
+
+        These are legacy/stale rows that can cause ghost meals to reappear on login.
+        Local-only rows (cloud_id IS NULL) are never touched here.
+        """
+        rows = self.conn.execute(
+            "SELECT id, cloud_id FROM meal_plans"
+            " WHERE cloud_id IS NOT NULL"
+            "   AND recipe_id IS NULL"
+            "   AND ("
+            "        recipe_cloud_id IS NULL"
+            "        OR recipe_cloud_id NOT IN (SELECT cloud_id FROM recipes WHERE cloud_id IS NOT NULL)"
+            "   )"
+        ).fetchall()
+        for row in rows:
+            if row["cloud_id"]:
+                self.add_tombstone("meal_plans", row["cloud_id"])
+            self.conn.execute("DELETE FROM meal_plans WHERE id=?", (row["id"],))
+        if rows:
+            self.conn.commit()
+        return len(rows)
+
     def clear_meal_day_slots(self, week_start: str, day: str):
         """Delete all meal slots (breakfast, lunch, dinner) for a specific day in a week."""
         rows = self.conn.execute(
-            "SELECT cloud_id FROM meal_plans"
-            " WHERE week_start=? AND day_of_week=? AND cloud_id IS NOT NULL",
+            "SELECT * FROM meal_plans"
+            " WHERE week_start=? AND day_of_week=?",
             (week_start, day)
         ).fetchall()
         for row in rows:
-            self.add_tombstone("meal_plans", row["cloud_id"])
+            data = dict(row)
+            self._stash_deleted_row("meal_plans", data, reason="clear_meal_day_slots")
+            if row["cloud_id"]:
+                self.add_tombstone("meal_plans", row["cloud_id"])
         self.conn.execute(
             "DELETE FROM meal_plans WHERE week_start=? AND day_of_week=?",
             (week_start, day)
@@ -384,29 +1069,37 @@ class Database:
 
     def clear_all_shopping_items(self):
         rows = self.conn.execute(
-            "SELECT cloud_id FROM shopping_items WHERE cloud_id IS NOT NULL"
+            "SELECT * FROM shopping_items"
         ).fetchall()
         for row in rows:
-            self.add_tombstone("shopping_items", row["cloud_id"])
+            data = dict(row)
+            self._stash_deleted_row("shopping_items", data, reason="clear_all_shopping_items")
+            if row["cloud_id"]:
+                self.add_tombstone("shopping_items", row["cloud_id"])
         self.conn.execute("DELETE FROM shopping_items")
         self.conn.commit()
 
     def delete_all_recipes(self):
         rows = self.conn.execute(
-            "SELECT cloud_id FROM recipes WHERE cloud_id IS NOT NULL"
+            "SELECT * FROM recipes"
         ).fetchall()
         for row in rows:
-            self.add_tombstone("recipes", row["cloud_id"])
+            data = dict(row)
+            self._stash_deleted_row("recipes", data, reason="delete_all_recipes")
+            if row["cloud_id"]:
+                self.add_tombstone("recipes", row["cloud_id"])
         self.conn.execute("DELETE FROM recipes")
         self.conn.commit()
 
     def delete_shopping_item_by_name(self, name: str) -> int:
         """Delete first matching item (case-insensitive). Returns deleted count."""
         row = self.conn.execute(
-            "SELECT id, cloud_id FROM shopping_items WHERE lower(name) = lower(?) LIMIT 1",
+            "SELECT * FROM shopping_items WHERE lower(name) = lower(?) LIMIT 1",
             (name,)
         ).fetchone()
         if row:
+            data = dict(row)
+            self._stash_deleted_row("shopping_items", data, reason="delete_by_name")
             if row["cloud_id"]:
                 self.add_tombstone("shopping_items", row["cloud_id"])
             self.conn.execute("DELETE FROM shopping_items WHERE id=?", (row["id"],))
@@ -417,9 +1110,11 @@ class Database:
     def delete_recipe_by_title(self, title: str) -> int:
         """Delete first recipe whose title matches (case-insensitive). Returns deleted count."""
         row = self.conn.execute(
-            "SELECT id, cloud_id FROM recipes WHERE lower(title) = lower(?) LIMIT 1", (title,)
+            "SELECT * FROM recipes WHERE lower(title) = lower(?) LIMIT 1", (title,)
         ).fetchone()
         if row:
+            data = dict(row)
+            self._stash_deleted_row("recipes", data, reason="delete_by_title")
             if row["cloud_id"]:
                 self.add_tombstone("recipes", row["cloud_id"])
             self.conn.execute("DELETE FROM recipes WHERE id=?", (row["id"],))
@@ -441,12 +1136,17 @@ class Database:
     def add_nutrition_log(self, date_str: str, food_name: str,
                           kcal: float, protein_g: float, carbs_g: float,
                           fat_g: float, fiber_g: float, sugar_g: float) -> int:
+        now = _utc_now_iso()
+        household_id = self._active_household_id()
         cursor = self.conn.execute(
             "INSERT INTO nutrition_logs"
             " (log_date, food_name, kcal, protein_g, carbs_g, fat_g, fiber_g, sugar_g,"
-            "  updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
-            (date_str, food_name, kcal, protein_g, carbs_g, fat_g, fiber_g, sugar_g),
+            "  updated_at, household_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                date_str, food_name, kcal, protein_g, carbs_g, fat_g, fiber_g, sugar_g,
+                now, household_id,
+            ),
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -526,11 +1226,12 @@ class Database:
 
     def save_dishy_message(self, session_id: str, role: str, content: str,
                            tool_names: str = "") -> int:
+        now = _utc_now_iso()
         cursor = self.conn.execute(
             "INSERT INTO dishy_chat_history"
             " (session_id, role, content, tool_names, updated_at)"
-            " VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
-            (session_id, role, content, tool_names),
+            " VALUES (?, ?, ?, ?, ?)",
+            (session_id, role, content, tool_names, now),
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -599,6 +1300,11 @@ class Database:
         "supabase_url",
         "supabase_anon_key",
         "active_user_id",   # needed so account-switch detection survives the wipe
+        "in_app_notifications_enabled",
+        "telemetry_enabled",
+        "posthog_enabled",
+        "sentry_enabled",
+        "dishy_daily_limit",
     })
 
     def clear_user_data(self) -> None:
@@ -615,24 +1321,64 @@ class Database:
             DELETE FROM dishy_chat_history;
             DELETE FROM sync_tombstones;
             DELETE FROM pantry_items;
+            DELETE FROM in_app_notifications;
+            DELETE FROM ai_usage_daily;
+            DELETE FROM workflow_jobs;
+            DELETE FROM telemetry_events;
+            DELETE FROM trash_bin;
+            DELETE FROM recipe_source_stats;
+            DELETE FROM pantry_waste_log;
         """)
         # Delete all user-specific settings (onboarding, sync timestamps,
         # macro goals, preferences, etc.) — keep only device-level keys.
         placeholders = ",".join("?" * len(self._DEVICE_SETTING_KEYS))
         self.conn.execute(
-            f"DELETE FROM settings WHERE key NOT IN ({placeholders})",
+            f"DELETE FROM settings"
+            f" WHERE key NOT IN ({placeholders})"
+            " AND key NOT LIKE 'ff.global.%'"
+            " AND key NOT LIKE 'cfg.global.%'",
             tuple(self._DEVICE_SETTING_KEYS),
         )
         self.conn.commit()
+
+    def ensure_active_user_scope(self, user_id: str) -> bool:
+        """Ensure local cache belongs to user_id; wipe stale cache when uncertain.
+
+        Returns True when a cache wipe was performed.
+        """
+        uid = str(user_id or "").strip()
+        if not uid:
+            return False
+
+        stored_user_id = str(self.get_setting("active_user_id", "") or "").strip()
+        should_wipe = False
+
+        if stored_user_id and stored_user_id != uid:
+            should_wipe = True
+        elif not stored_user_id:
+            # Legacy installs may have local data but no ownership marker.
+            for table in self._USER_DATA_TABLES:
+                row = self.conn.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()
+                if int((row["c"] if row else 0) or 0) > 0:
+                    should_wipe = True
+                    break
+
+        if should_wipe:
+            self.clear_user_data()
+
+        self.set_setting("active_user_id", uid)
+        return should_wipe
 
     # -- Pantry / fridge / freezer helpers --------------------------------
 
     def add_pantry_item(self, name: str, quantity=None, unit: str = "",
                         storage: str = "Pantry", expiry_date: str = None) -> int:
+        now = _utc_now_iso()
+        household_id = self._active_household_id()
         cursor = self.conn.execute(
-            "INSERT INTO pantry_items (name, quantity, unit, storage, expiry_date, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
-            (name, quantity, unit or "", storage or "Pantry", expiry_date),
+            "INSERT INTO pantry_items (name, quantity, unit, storage, expiry_date, updated_at, household_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, quantity, unit or "", storage or "Pantry", expiry_date, now, household_id),
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -650,37 +1396,50 @@ class Database:
 
     def update_pantry_item(self, item_id: int, quantity=None, unit: str = "",
                            expiry_date: str = None):
+        now = _utc_now_iso()
         self.conn.execute(
-            "UPDATE pantry_items SET quantity=?, unit=?, expiry_date=?, updated_at=CURRENT_TIMESTAMP"
+            "UPDATE pantry_items SET quantity=?, unit=?, expiry_date=?, updated_at=?"
             " WHERE id=?",
-            (quantity, unit or "", expiry_date, item_id),
+            (quantity, unit or "", expiry_date, now, item_id),
         )
         self.conn.commit()
 
     def delete_pantry_item(self, item_id: int):
         row = self.conn.execute(
-            "SELECT cloud_id FROM pantry_items WHERE id=?", (item_id,)
+            "SELECT * FROM pantry_items WHERE id=?", (item_id,)
         ).fetchone()
-        if row and row["cloud_id"]:
-            self.add_tombstone("pantry_items", row["cloud_id"])
+        if row:
+            data = dict(row)
+            self._stash_deleted_row("pantry_items", data, reason="delete_pantry_item")
+            self._log_pantry_waste(data, reason="manual_delete")
+            if row["cloud_id"]:
+                self.add_tombstone("pantry_items", row["cloud_id"])
         self.conn.execute("DELETE FROM pantry_items WHERE id=?", (item_id,))
         self.conn.commit()
 
     def clear_pantry(self, storage: str = None):
         if storage:
             rows = self.conn.execute(
-                "SELECT cloud_id FROM pantry_items WHERE storage=? AND cloud_id IS NOT NULL",
+                "SELECT * FROM pantry_items WHERE storage=?",
                 (storage,)
             ).fetchall()
             for row in rows:
-                self.add_tombstone("pantry_items", row["cloud_id"])
+                data = dict(row)
+                self._stash_deleted_row("pantry_items", data, reason=f"clear_pantry:{storage}")
+                self._log_pantry_waste(data, reason="clear_storage")
+                if row["cloud_id"]:
+                    self.add_tombstone("pantry_items", row["cloud_id"])
             self.conn.execute("DELETE FROM pantry_items WHERE storage=?", (storage,))
         else:
             rows = self.conn.execute(
-                "SELECT cloud_id FROM pantry_items WHERE cloud_id IS NOT NULL"
+                "SELECT * FROM pantry_items"
             ).fetchall()
             for row in rows:
-                self.add_tombstone("pantry_items", row["cloud_id"])
+                data = dict(row)
+                self._stash_deleted_row("pantry_items", data, reason="clear_pantry")
+                self._log_pantry_waste(data, reason="clear_all")
+                if row["cloud_id"]:
+                    self.add_tombstone("pantry_items", row["cloud_id"])
             self.conn.execute("DELETE FROM pantry_items")
         self.conn.commit()
 
@@ -715,21 +1474,313 @@ class Database:
                         self.conn.execute("DELETE FROM pantry_items WHERE id=?", (row["id"],))
                     else:
                         self.conn.execute(
-                            "UPDATE pantry_items SET quantity=?, updated_at=CURRENT_TIMESTAMP"
+                            "UPDATE pantry_items SET quantity=?, updated_at=?"
                             " WHERE id=?",
-                            (new_qty, row["id"]),
+                            (new_qty, _utc_now_iso(), row["id"]),
                         )
                     break
         self.conn.commit()
+
+    # -- In-app notifications ----------------------------------------------
+
+    def add_in_app_notification(
+        self,
+        user_id: str,
+        notif_type: str,
+        title: str,
+        message: str,
+        *,
+        severity: str = "info",
+        data_json: str = "{}",
+        dedupe_key: str | None = None,
+    ) -> int | None:
+        """Insert a notification. Returns row id, or None when deduped."""
+        now = _utc_now_iso()
+        try:
+            cursor = self.conn.execute(
+                "INSERT INTO in_app_notifications"
+                " (user_id, notif_type, title, message, severity, data_json, dedupe_key, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    user_id or "",
+                    notif_type or "general",
+                    title or "Notification",
+                    message or "",
+                    severity or "info",
+                    data_json or "{}",
+                    dedupe_key,
+                    now,
+                ),
+            )
+            self.conn.commit()
+            return int(cursor.lastrowid or 0)
+        except Exception:
+            return None
+
+    def get_in_app_notifications(
+        self,
+        user_id: str,
+        *,
+        limit: int = 100,
+        unread_only: bool = False,
+    ) -> list[dict]:
+        sql = (
+            "SELECT * FROM in_app_notifications"
+            " WHERE user_id=?"
+            + (" AND read_at IS NULL" if unread_only else "")
+            + " ORDER BY created_at DESC LIMIT ?"
+        )
+        rows = self.conn.execute(sql, (user_id or "", max(1, int(limit)))).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_unread_notification_count(self, user_id: str) -> int:
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS c FROM in_app_notifications"
+            " WHERE user_id=? AND read_at IS NULL",
+            (user_id or "",),
+        ).fetchone()
+        return int((row["c"] if row else 0) or 0)
+
+    def mark_in_app_notification_read(self, notification_id: int) -> None:
+        self.conn.execute(
+            "UPDATE in_app_notifications SET read_at=?, updated_at=? WHERE id=?",
+            (_utc_now_iso(), _utc_now_iso(), int(notification_id)),
+        )
+        self.conn.commit()
+
+    def mark_all_in_app_notifications_read(self, user_id: str) -> int:
+        cursor = self.conn.execute(
+            "UPDATE in_app_notifications"
+            " SET read_at=?, updated_at=?"
+            " WHERE user_id=? AND read_at IS NULL",
+            (_utc_now_iso(), _utc_now_iso(), user_id or ""),
+        )
+        self.conn.commit()
+        return int(cursor.rowcount or 0)
+
+    def delete_old_read_notifications(self, older_than_days: int = 30) -> int:
+        cursor = self.conn.execute(
+            "DELETE FROM in_app_notifications"
+            " WHERE read_at IS NOT NULL"
+            " AND datetime(read_at) <= datetime('now', ?)",
+            (f"-{max(1, int(older_than_days))} days",),
+        )
+        self.conn.commit()
+        return int(cursor.rowcount or 0)
+
+    # -- AI usage metering --------------------------------------------------
+
+    def get_ai_usage(self, user_id: str, usage_date: str) -> dict:
+        row = self.conn.execute(
+            "SELECT * FROM ai_usage_daily WHERE user_id=? AND usage_date=?",
+            (user_id or "", usage_date),
+        ).fetchone()
+        if not row:
+            return {
+                "user_id": user_id or "",
+                "usage_date": usage_date,
+                "request_count": 0,
+                "blocked_count": 0,
+            }
+        return dict(row)
+
+    def increment_ai_usage(self, user_id: str, usage_date: str, *, blocked: bool = False) -> dict:
+        """Increment request counter (and optionally blocked counter) for a day."""
+        now = _utc_now_iso()
+        self.conn.execute(
+            "INSERT INTO ai_usage_daily (user_id, usage_date, request_count, blocked_count, updated_at)"
+            " VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(user_id, usage_date) DO UPDATE SET"
+            " request_count = ai_usage_daily.request_count + 1,"
+            " blocked_count = ai_usage_daily.blocked_count + excluded.blocked_count,"
+            " updated_at = excluded.updated_at",
+            (user_id or "", usage_date, 1, 1 if blocked else 0, now),
+        )
+        self.conn.commit()
+        return self.get_ai_usage(user_id, usage_date)
+
+    def increment_ai_blocked(self, user_id: str, usage_date: str) -> dict:
+        now = _utc_now_iso()
+        self.conn.execute(
+            "INSERT INTO ai_usage_daily (user_id, usage_date, request_count, blocked_count, updated_at)"
+            " VALUES (?, ?, 0, 1, ?)"
+            " ON CONFLICT(user_id, usage_date) DO UPDATE SET"
+            " blocked_count = ai_usage_daily.blocked_count + 1,"
+            " updated_at = excluded.updated_at",
+            (user_id or "", usage_date, now),
+        )
+        self.conn.commit()
+        return self.get_ai_usage(user_id, usage_date)
+
+    def get_ai_usage_history(self, user_id: str, *, days: int = 14) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM ai_usage_daily"
+            " WHERE user_id=?"
+            " ORDER BY usage_date DESC LIMIT ?",
+            (user_id or "", max(1, int(days))),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # -- Workflow jobs ------------------------------------------------------
+
+    def upsert_workflow_job(
+        self,
+        job_key: str,
+        job_type: str,
+        *,
+        payload_json: str = "{}",
+        run_every_minutes: int = 60,
+        next_run_at: str | None = None,
+    ) -> None:
+        now = _utc_now_iso()
+        next_run = next_run_at or now
+        self.conn.execute(
+            "INSERT INTO workflow_jobs"
+            " (job_key, job_type, payload_json, status, run_every_minutes, next_run_at, updated_at)"
+            " VALUES (?, ?, ?, 'scheduled', ?, ?, ?)"
+            " ON CONFLICT(job_key) DO UPDATE SET"
+            " job_type=excluded.job_type,"
+            " payload_json=excluded.payload_json,"
+            " run_every_minutes=excluded.run_every_minutes,"
+            " next_run_at=CASE"
+            "   WHEN workflow_jobs.status='running' THEN workflow_jobs.next_run_at"
+            "   ELSE excluded.next_run_at"
+            " END,"
+            " updated_at=excluded.updated_at",
+            (
+                job_key,
+                job_type,
+                payload_json or "{}",
+                max(1, int(run_every_minutes)),
+                next_run,
+                now,
+            ),
+        )
+        self.conn.commit()
+
+    def get_due_workflow_jobs(self, now_iso: str, *, limit: int = 8) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM workflow_jobs"
+            " WHERE next_run_at <= ?"
+            "   AND status != 'running'"
+            " ORDER BY next_run_at ASC LIMIT ?",
+            (now_iso, max(1, int(limit))),
+        ).fetchall()
+        jobs = [dict(r) for r in rows]
+        for job in jobs:
+            self.conn.execute(
+                "UPDATE workflow_jobs SET status='running', updated_at=? WHERE id=?",
+                (_utc_now_iso(), job["id"]),
+            )
+        if jobs:
+            self.conn.commit()
+        return jobs
+
+    def mark_workflow_job_result(
+        self,
+        job_id: int,
+        *,
+        ok: bool,
+        next_run_at: str,
+        last_error: str = "",
+    ) -> None:
+        self.conn.execute(
+            "UPDATE workflow_jobs"
+            " SET status=?,"
+            "     next_run_at=?,"
+            "     last_run_at=?,"
+            "     last_error=?,"
+            "     attempt_count = CASE WHEN ? THEN 0 ELSE attempt_count + 1 END,"
+            "     updated_at=?"
+            " WHERE id=?",
+            (
+                "scheduled" if ok else "error",
+                next_run_at,
+                _utc_now_iso(),
+                (last_error or "")[:500],
+                1 if ok else 0,
+                _utc_now_iso(),
+                int(job_id),
+            ),
+        )
+        self.conn.commit()
+
+    def list_workflow_jobs(self, *, limit: int = 20) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM workflow_jobs"
+            " ORDER BY updated_at DESC, next_run_at ASC LIMIT ?",
+            (max(1, int(limit)),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def recover_stuck_workflow_jobs(self, *, older_than_minutes: int = 20) -> int:
+        """Recover jobs left in 'running' state after app crash/force quit."""
+        mins = max(1, int(older_than_minutes))
+        now = _utc_now_iso()
+        cursor = self.conn.execute(
+            "UPDATE workflow_jobs"
+            " SET status='scheduled',"
+            "     next_run_at=?,"
+            "     last_error=CASE"
+            "       WHEN COALESCE(last_error, '')='' THEN 'Recovered stale running job at startup'"
+            "       ELSE last_error"
+            "     END,"
+            "     updated_at=?"
+            " WHERE status='running'"
+            "   AND (updated_at IS NULL OR datetime(updated_at) <= datetime('now', ?))",
+            (now, now, f"-{mins} minutes"),
+        )
+        self.conn.commit()
+        return int(cursor.rowcount or 0)
+
+    # -- Telemetry events ---------------------------------------------------
+
+    def add_telemetry_event(self, user_id: str, event_name: str, properties_json: str = "{}") -> int:
+        cursor = self.conn.execute(
+            "INSERT INTO telemetry_events (user_id, event_name, properties_json)"
+            " VALUES (?, ?, ?)",
+            (user_id or "", event_name or "event", properties_json or "{}"),
+        )
+        self.conn.commit()
+        return int(cursor.lastrowid or 0)
+
+    def get_telemetry_events(self, user_id: str, *, limit: int = 100) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM telemetry_events WHERE user_id=?"
+            " ORDER BY created_at DESC LIMIT ?",
+            (user_id or "", max(1, int(limit))),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_latest_telemetry_event_at(self, user_id: str = "") -> str:
+        if user_id:
+            row = self.conn.execute(
+                "SELECT created_at FROM telemetry_events WHERE user_id=? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (user_id,),
+            ).fetchone()
+        else:
+            row = self.conn.execute(
+                "SELECT created_at FROM telemetry_events ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        return str(row["created_at"]) if row and row["created_at"] else ""
+
+    # -- Monitoring helpers -------------------------------------------------
+
+    def get_table_count(self, table_name: str) -> int:
+        row = self.conn.execute(f"SELECT COUNT(*) AS c FROM {table_name}").fetchone()
+        return int((row["c"] if row else 0) or 0)
 
     # -- Cloud sync helpers ------------------------------------------------
 
     def add_tombstone(self, table_name: str, cloud_id: str) -> None:
         """Record a cloud deletion that needs to be propagated during the next sync."""
         try:
+            household_id = self._active_household_id()
             self.conn.execute(
-                "INSERT INTO sync_tombstones (table_name, cloud_id) VALUES (?, ?)",
-                (table_name, cloud_id),
+                "INSERT INTO sync_tombstones (table_name, cloud_id, household_id)"
+                " VALUES (?, ?, ?)",
+                (table_name, cloud_id, household_id),
             )
             self.conn.commit()
         except Exception:
@@ -753,12 +1804,21 @@ class Database:
         ).fetchall()
 
     def get_modified_rows_since(self, table: str, since_iso: str) -> list:
-        """Return rows with cloud_id set and updated_at newer than since_iso."""
-        return self.conn.execute(
-            f"SELECT * FROM {table}"
-            f" WHERE cloud_id IS NOT NULL AND updated_at > ?",
-            (since_iso,)
+        """Return rows with cloud_id set and updated_at newer than since_iso.
+
+        Timestamp formats have changed over releases; we compare parsed datetimes
+        in Python so old SQLite rows don't get skipped due to string-format drift.
+        """
+        since_dt = _parse_sync_ts(since_iso) or datetime.fromtimestamp(0, tz=timezone.utc)
+        rows = self.conn.execute(
+            f"SELECT * FROM {table} WHERE cloud_id IS NOT NULL"
         ).fetchall()
+        changed = []
+        for row in rows:
+            updated_dt = _parse_sync_ts(row["updated_at"])
+            if updated_dt and updated_dt > since_dt:
+                changed.append(row)
+        return changed
 
     def set_cloud_id(self, table: str, local_id: int, cloud_id: str) -> None:
         """Write the Supabase UUID back to the local row after a successful push."""
@@ -777,7 +1837,7 @@ class Database:
         cloud_id = str(cloud_row.get("id", ""))
         # Check if row already exists locally by cloud_id
         existing = self.conn.execute(
-            f"SELECT id, updated_at FROM {table} WHERE cloud_id=?", (cloud_id,)
+            f"SELECT id, updated_at, cloud_id FROM {table} WHERE cloud_id=?", (cloud_id,)
         ).fetchone()
 
         # Build column dict, remapping keys as needed
@@ -786,19 +1846,41 @@ class Database:
             if k in ("id", "user_id"):
                 continue
             local_k = local_col_map.get(k, k)
-            data[local_k] = v
+            if local_k == "updated_at":
+                data[local_k] = _normalise_sync_ts(v) or v
+            else:
+                data[local_k] = v
         data["cloud_id"] = cloud_id
 
-        if existing:
-            local_updated  = existing["updated_at"] or ""
-            cloud_updated  = str(cloud_row.get("updated_at", ""))
-            if cloud_updated <= local_updated:
-                return  # local is newer or equal — keep it
-            set_clause = ", ".join(f"{k}=?" for k in data)
-            self.conn.execute(
-                f"UPDATE {table} SET {set_clause} WHERE id=?",
-                list(data.values()) + [existing["id"]],
-            )
+        target = existing
+
+        # meal_plans has a unique slot key; reconcile by slot if cloud_id differs.
+        if table == "meal_plans" and target is None:
+            wk = data.get("week_start")
+            day = data.get("day_of_week")
+            meal = data.get("meal_type")
+            if wk and day and meal:
+                target = self.conn.execute(
+                    "SELECT id, updated_at, cloud_id FROM meal_plans"
+                    " WHERE week_start=? AND day_of_week=? AND meal_type=?",
+                    (wk, day, meal),
+                ).fetchone()
+
+        if target:
+            cloud_newer = _cloud_is_newer(target["updated_at"], cloud_row.get("updated_at"))
+            if cloud_newer:
+                set_clause = ", ".join(f"{k}=?" for k in data)
+                self.conn.execute(
+                    f"UPDATE {table} SET {set_clause} WHERE id=?",
+                    list(data.values()) + [target["id"]],
+                )
+            else:
+                # Keep newer/equal local row, but attach cloud_id if missing so future pulls match.
+                if not target["cloud_id"] and cloud_id:
+                    self.conn.execute(
+                        f"UPDATE {table} SET cloud_id=? WHERE id=?",
+                        (cloud_id, target["id"]),
+                    )
         else:
             cols   = ", ".join(data.keys())
             placeholders = ", ".join("?" for _ in data)

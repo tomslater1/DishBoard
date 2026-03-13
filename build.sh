@@ -10,6 +10,14 @@ VERSION=$(python3 -c "from utils.version import APP_VERSION; print(APP_VERSION)"
 VERSION_CLEAN="${VERSION#v}"   # strip leading "v" → "0.44"
 echo "▶ Building DishBoard ${VERSION}"
 
+# ── Pre-release checks (can skip with SKIP_PRECHECKS=1) ─────────────────────
+if [ "${SKIP_PRECHECKS:-0}" != "1" ]; then
+    echo "▶ Running pre-release checks..."
+    ./scripts/pre_release_checks.sh
+else
+    echo "⚠  Skipping pre-release checks (SKIP_PRECHECKS=1)"
+fi
+
 # ── Safety: refuse to build if dev artifacts exist in the root ───────────────
 for f in dishboard.db config.json; do
     if [ -f "$f" ]; then

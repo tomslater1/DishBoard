@@ -2,6 +2,13 @@
 NutritionSyncService — background QTimer that continuously reconciles today's
 meal plan against the nutrition log, logging and analyzing macros automatically.
 
+DEPRECATED:
+This legacy service is no longer used by the app runtime. Nutrition behavior is
+now driven by:
+  - Meal planner + recipe nutrition data (planned intake views)
+  - Explicit nutrition log writes (consumed intake)
+  - Dishy tool actions and refresh wiring in MainWindow
+
 Runs on the main thread (QTimer), dispatches background workers only when a
 recipe needs macro analysis (network call). All DB reads/writes happen on
 their own connections so there is no cross-thread sqlite conflict.
@@ -10,7 +17,7 @@ their own connections so there is no cross-thread sqlite conflict.
 from __future__ import annotations
 
 import json
-import os
+import warnings
 from datetime import date
 
 from PySide6.QtCore import QObject, QTimer
@@ -33,6 +40,11 @@ class NutritionSyncService(QObject):
 
     def __init__(self, refresh_fn, parent: QObject | None = None):
         super().__init__(parent)
+        warnings.warn(
+            "NutritionSyncService is deprecated and should not be started in new code.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._refresh_fn = refresh_fn
         # Each sync cycle opens its own DB connection so there's no conflict
         # with the views' connections.

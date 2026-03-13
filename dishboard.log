@@ -1,0 +1,1610 @@
+2026-03-12 23:17:23,894 [INFO] dishboard.sync: Settings pushed (13 total, 3 local + 13 cloud)
+2026-03-12 23:17:23,894 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:17:24,084 [INFO] dishboard.sync: Pulled 45 rows from recipes
+2026-03-12 23:17:24,172 [INFO] dishboard.sync: Pulled 39 rows from meal_plans
+2026-03-12 23:17:24,187 [INFO] dishboard.sync: ERROR: meal_plans pull failed: UNIQUE constraint failed: meal_plans.week_start, meal_plans.day_of_week, meal_plans.meal_type
+2026-03-12 23:17:24,252 [INFO] dishboard.sync: Pulled 234 rows from shopping_items
+2026-03-12 23:17:24,392 [INFO] dishboard.sync: Pulled 21 rows from nutrition_logs
+2026-03-12 23:17:24,459 [INFO] dishboard.sync: Pulled 68 rows from dishy_chat_history
+2026-03-12 23:17:24,566 [INFO] dishboard.sync: Pulled 49 rows from pantry_items
+2026-03-12 23:17:24,647 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:17:24,648 [INFO] dishboard.sync: ERROR: meal_plans pull failed: UNIQUE constraint failed: meal_plans.week_start, meal_plans.day_of_week, meal_plans.meal_type
+2026-03-12 23:17:25,624 [INFO] dishboard.app: MealPlan cleanup removed 21 orphan slot(s)
+2026-03-12 23:18:13,615 [INFO] dishboard.sync: Settings pushed (16 total, 3 local + 16 cloud)
+2026-03-12 23:18:13,617 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:18:13,733 [INFO] dishboard.sync: Pulled 10 rows from recipes
+2026-03-12 23:18:13,793 [INFO] dishboard.sync: Pulled 3 rows from meal_plans
+2026-03-12 23:18:13,846 [INFO] dishboard.sync: Pulled 16 rows from shopping_items
+2026-03-12 23:18:13,962 [INFO] dishboard.sync: Pulled 10 rows from dishy_chat_history
+2026-03-12 23:18:14,024 [INFO] dishboard.sync: Pulled 16 rows from pantry_items
+2026-03-12 23:18:14,102 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:18:14,103 [INFO] dishboard.sync: OK — pushed=0 pulled=55
+2026-03-12 23:18:14,396 [INFO] dishboard.app: MealPlan cleanup removed 3 orphan slot(s)
+2026-03-12 23:18:50,604 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-12 23:18:51,147 [INFO] dishboard.sync: Settings pushed (16 total, 16 local + 16 cloud)
+2026-03-12 23:18:51,324 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-12 23:18:51,476 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-12 23:18:51,582 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:18:51,583 [INFO] dishboard.sync: OK — pushed=4 pulled=3
+2026-03-12 23:18:57,624 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-12 23:18:58,155 [INFO] dishboard.sync: Settings pushed (16 total, 16 local + 16 cloud)
+2026-03-12 23:18:58,332 [INFO] dishboard.sync: Pulled 2 rows from meal_plans
+2026-03-12 23:18:58,513 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-12 23:18:58,639 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:18:58,641 [INFO] dishboard.sync: OK — pushed=5 pulled=4
+2026-03-12 23:19:14,568 [INFO] dishboard.sync: Settings pushed (13 total, 3 local + 13 cloud)
+2026-03-12 23:19:14,569 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:19:14,730 [INFO] dishboard.sync: Pulled 45 rows from recipes
+2026-03-12 23:19:14,818 [INFO] dishboard.sync: Pulled 39 rows from meal_plans
+2026-03-12 23:19:14,829 [INFO] dishboard.sync: ERROR: meal_plans pull failed: UNIQUE constraint failed: meal_plans.week_start, meal_plans.day_of_week, meal_plans.meal_type
+2026-03-12 23:19:14,882 [INFO] dishboard.sync: Pulled 234 rows from shopping_items
+2026-03-12 23:19:15,011 [INFO] dishboard.sync: Pulled 21 rows from nutrition_logs
+2026-03-12 23:19:15,071 [INFO] dishboard.sync: Pulled 68 rows from dishy_chat_history
+2026-03-12 23:19:15,162 [INFO] dishboard.sync: Pulled 49 rows from pantry_items
+2026-03-12 23:19:15,228 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:19:15,229 [INFO] dishboard.sync: ERROR: meal_plans pull failed: UNIQUE constraint failed: meal_plans.week_start, meal_plans.day_of_week, meal_plans.meal_type
+2026-03-12 23:19:16,213 [INFO] dishboard.app: MealPlan cleanup removed 21 orphan slot(s)
+2026-03-12 23:24:20,890 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:24:21,491 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:24:21,626 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:24:21,735 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:24:21,805 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:24:21,972 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:24:21,975 [INFO] dishboard.sync: OK — pushed=42 pulled=42
+2026-03-12 23:29:17,030 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:29:17,196 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:29:17,319 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:29:17,419 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:29:17,481 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:29:17,613 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:29:17,615 [INFO] dishboard.sync: OK — pushed=42 pulled=42
+2026-03-12 23:32:19,455 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:32:19,605 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:32:19,724 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:32:19,798 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:32:19,857 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:32:19,973 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:32:19,974 [INFO] dishboard.sync: OK — pushed=42 pulled=42
+2026-03-12 23:32:32,593 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-12 23:32:34,637 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:32:34,776 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:32:34,840 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-12 23:32:34,891 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:32:34,955 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:32:35,004 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:32:35,101 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:32:35,102 [INFO] dishboard.sync: OK — pushed=44 pulled=43
+2026-03-12 23:32:54,546 [INFO] dishboard.sync: Settings pushed (16 total, 3 local + 16 cloud)
+2026-03-12 23:32:54,549 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:32:54,659 [INFO] dishboard.sync: Pulled 10 rows from recipes
+2026-03-12 23:32:54,716 [INFO] dishboard.sync: Pulled 5 rows from meal_plans
+2026-03-12 23:32:54,771 [INFO] dishboard.sync: Pulled 16 rows from shopping_items
+2026-03-12 23:32:54,886 [INFO] dishboard.sync: Pulled 10 rows from dishy_chat_history
+2026-03-12 23:32:54,947 [INFO] dishboard.sync: Pulled 16 rows from pantry_items
+2026-03-12 23:32:55,013 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:32:55,013 [INFO] dishboard.sync: OK — pushed=0 pulled=57
+2026-03-12 23:32:55,232 [INFO] dishboard.app: MealPlan cleanup removed 5 orphan slot(s)
+2026-03-12 23:33:00,433 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-12 23:33:01,066 [INFO] dishboard.sync: Settings pushed (16 total, 16 local + 16 cloud)
+2026-03-12 23:33:01,231 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-12 23:33:01,395 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-12 23:33:01,508 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:33:01,510 [INFO] dishboard.sync: OK — pushed=4 pulled=3
+2026-03-12 23:33:24,234 [INFO] dishboard.sync: Settings pushed (13 total, 3 local + 13 cloud)
+2026-03-12 23:33:24,236 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:33:24,398 [INFO] dishboard.sync: Pulled 45 rows from recipes
+2026-03-12 23:33:24,474 [INFO] dishboard.sync: Pulled 40 rows from meal_plans
+2026-03-12 23:33:24,557 [INFO] dishboard.sync: Pulled 234 rows from shopping_items
+2026-03-12 23:33:24,692 [INFO] dishboard.sync: Pulled 21 rows from nutrition_logs
+2026-03-12 23:33:24,761 [INFO] dishboard.sync: Pulled 68 rows from dishy_chat_history
+2026-03-12 23:33:24,849 [INFO] dishboard.sync: Pulled 49 rows from pantry_items
+2026-03-12 23:33:24,925 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:33:24,925 [INFO] dishboard.sync: OK — pushed=0 pulled=457
+2026-03-12 23:33:25,954 [INFO] dishboard.app: MealPlan cleanup removed 21 orphan slot(s)
+2026-03-12 23:38:28,655 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:38:29,309 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:38:29,466 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:38:29,563 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:38:29,625 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:38:29,788 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:38:29,792 [INFO] dishboard.sync: OK — pushed=42 pulled=42
+2026-03-12 23:43:08,754 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:43:08,915 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:43:09,031 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:43:09,096 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:43:09,155 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:43:09,274 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:43:09,276 [INFO] dishboard.sync: OK — pushed=42 pulled=42
+2026-03-12 23:43:15,526 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-12 23:43:17,819 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:43:17,975 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:43:18,048 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-12 23:43:18,113 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:43:18,186 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:43:18,243 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:43:18,362 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:43:18,365 [INFO] dishboard.sync: OK — pushed=44 pulled=43
+2026-03-12 23:43:27,210 [INFO] dishboard.sync: Settings pushed (16 total, 3 local + 16 cloud)
+2026-03-12 23:43:27,211 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:43:27,309 [INFO] dishboard.sync: Pulled 10 rows from recipes
+2026-03-12 23:43:27,374 [INFO] dishboard.sync: Pulled 6 rows from meal_plans
+2026-03-12 23:43:27,426 [INFO] dishboard.sync: Pulled 16 rows from shopping_items
+2026-03-12 23:43:27,539 [INFO] dishboard.sync: Pulled 10 rows from dishy_chat_history
+2026-03-12 23:43:27,603 [INFO] dishboard.sync: Pulled 16 rows from pantry_items
+2026-03-12 23:43:27,694 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:43:27,695 [INFO] dishboard.sync: OK — pushed=0 pulled=58
+2026-03-12 23:43:56,121 [INFO] dishboard.sync: Settings pushed (13 total, 3 local + 13 cloud)
+2026-03-12 23:43:56,124 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:43:56,262 [INFO] dishboard.sync: Pulled 45 rows from recipes
+2026-03-12 23:43:56,338 [INFO] dishboard.sync: Pulled 41 rows from meal_plans
+2026-03-12 23:43:56,416 [INFO] dishboard.sync: Pulled 234 rows from shopping_items
+2026-03-12 23:43:56,545 [INFO] dishboard.sync: Pulled 21 rows from nutrition_logs
+2026-03-12 23:43:56,605 [INFO] dishboard.sync: Pulled 68 rows from dishy_chat_history
+2026-03-12 23:43:56,678 [INFO] dishboard.sync: Pulled 49 rows from pantry_items
+2026-03-12 23:43:56,772 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:43:56,773 [INFO] dishboard.sync: OK — pushed=0 pulled=458
+2026-03-12 23:49:00,636 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:49:01,429 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:49:01,518 [INFO] dishboard.sync: Pulled 9 rows from meal_plans
+2026-03-12 23:49:01,619 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:49:01,729 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:49:01,797 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:49:01,948 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:49:01,954 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-12 23:54:00,019 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:54:00,213 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:54:00,293 [INFO] dishboard.sync: Pulled 9 rows from meal_plans
+2026-03-12 23:54:00,392 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:54:00,552 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:54:00,622 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:54:00,790 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:54:00,792 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-12 23:55:49,776 [INFO] dishboard.sync: Settings pushed (13 total, 13 local + 13 cloud)
+2026-03-12 23:55:49,918 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-12 23:55:49,970 [INFO] dishboard.sync: Pulled 9 rows from meal_plans
+2026-03-12 23:55:50,022 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-12 23:55:50,079 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-12 23:55:50,134 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-12 23:55:50,244 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:55:50,246 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-12 23:55:50,542 [INFO] dishboard.app: MealPlan cleanup removed 8 orphan slot(s)
+2026-03-12 23:56:17,926 [INFO] dishboard.sync: Settings pushed (16 total, 3 local + 16 cloud)
+2026-03-12 23:56:17,929 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:56:18,026 [INFO] dishboard.sync: Pulled 10 rows from recipes
+2026-03-12 23:56:18,272 [INFO] dishboard.sync: Pulled 6 rows from meal_plans
+2026-03-12 23:56:18,346 [INFO] dishboard.sync: Pulled 16 rows from shopping_items
+2026-03-12 23:56:18,472 [INFO] dishboard.sync: Pulled 10 rows from dishy_chat_history
+2026-03-12 23:56:18,544 [INFO] dishboard.sync: Pulled 16 rows from pantry_items
+2026-03-12 23:56:18,588 [INFO] dishboard.sync: Removed 6 stale cloud-linked meal-plan row(s)
+2026-03-12 23:56:18,801 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:56:18,802 [INFO] dishboard.sync: OK — pushed=0 pulled=58
+2026-03-12 23:56:25,153 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-12 23:56:25,939 [INFO] dishboard.sync: Settings pushed (16 total, 16 local + 16 cloud)
+2026-03-12 23:56:26,189 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-12 23:56:26,361 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-12 23:56:26,479 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:56:26,481 [INFO] dishboard.sync: OK — pushed=4 pulled=3
+2026-03-12 23:56:46,541 [INFO] dishboard.sync: Settings pushed (13 total, 3 local + 13 cloud)
+2026-03-12 23:56:46,543 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:56:46,705 [INFO] dishboard.sync: Pulled 45 rows from recipes
+2026-03-12 23:56:46,794 [INFO] dishboard.sync: Pulled 41 rows from meal_plans
+2026-03-12 23:56:46,881 [INFO] dishboard.sync: Pulled 234 rows from shopping_items
+2026-03-12 23:56:47,017 [INFO] dishboard.sync: Pulled 21 rows from nutrition_logs
+2026-03-12 23:56:47,088 [INFO] dishboard.sync: Pulled 68 rows from dishy_chat_history
+2026-03-12 23:56:47,191 [INFO] dishboard.sync: Pulled 49 rows from pantry_items
+2026-03-12 23:56:47,215 [INFO] dishboard.sync: Removed 20 stale cloud-linked meal-plan row(s)
+2026-03-12 23:56:47,271 [INFO] dishboard.sync: Settings pulled (13 keys, including onboarding_complete=1)
+2026-03-12 23:56:47,272 [INFO] dishboard.sync: OK — pushed=0 pulled=458
+2026-03-12 23:56:58,455 [INFO] dishboard.sync: Settings pushed (16 total, 3 local + 16 cloud)
+2026-03-12 23:56:58,456 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-12 23:56:58,642 [INFO] dishboard.sync: Pulled 10 rows from recipes
+2026-03-12 23:56:58,700 [INFO] dishboard.sync: Pulled 7 rows from meal_plans
+2026-03-12 23:56:58,837 [INFO] dishboard.sync: Pulled 16 rows from shopping_items
+2026-03-12 23:56:58,972 [INFO] dishboard.sync: Pulled 10 rows from dishy_chat_history
+2026-03-12 23:56:59,043 [INFO] dishboard.sync: Pulled 16 rows from pantry_items
+2026-03-12 23:56:59,065 [INFO] dishboard.sync: Removed 5 stale cloud-linked meal-plan row(s)
+2026-03-12 23:56:59,174 [INFO] dishboard.sync: Settings pulled (16 keys, including onboarding_complete=1)
+2026-03-12 23:56:59,175 [INFO] dishboard.sync: OK — pushed=0 pulled=59
+2026-03-13 00:02:00,132 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "53"'}
+2026-03-13 00:02:00,230 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "56"'}
+2026-03-13 00:02:00,430 [INFO] dishboard.sync: Settings pushed (17 total, 17 local + 16 cloud)
+2026-03-13 00:02:00,780 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 00:02:01,079 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:02:01,286 [INFO] dishboard.sync: Settings pulled (17 keys, including onboarding_complete=1)
+2026-03-13 00:02:01,287 [INFO] dishboard.sync: OK — pushed=3 pulled=3
+2026-03-13 00:06:58,771 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "53"'}
+2026-03-13 00:06:58,824 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "56"'}
+2026-03-13 00:06:58,926 [INFO] dishboard.sync: Settings pushed (17 total, 17 local + 17 cloud)
+2026-03-13 00:06:59,092 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 00:06:59,267 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:06:59,390 [INFO] dishboard.sync: Settings pulled (17 keys, including onboarding_complete=1)
+2026-03-13 00:06:59,393 [INFO] dishboard.sync: OK — pushed=3 pulled=3
+2026-03-13 00:11:58,762 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "53"'}
+2026-03-13 00:11:58,819 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "56"'}
+2026-03-13 00:11:58,937 [INFO] dishboard.sync: Settings pushed (17 total, 17 local + 17 cloud)
+2026-03-13 00:11:59,122 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 00:11:59,297 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:11:59,431 [INFO] dishboard.sync: Settings pulled (17 keys, including onboarding_complete=1)
+2026-03-13 00:11:59,435 [INFO] dishboard.sync: OK — pushed=3 pulled=3
+2026-03-13 00:16:59,125 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "53"'}
+2026-03-13 00:16:59,196 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "56"'}
+2026-03-13 00:16:59,359 [INFO] dishboard.sync: Settings pushed (17 total, 17 local + 17 cloud)
+2026-03-13 00:16:59,634 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 00:16:59,868 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:17:00,024 [INFO] dishboard.sync: Settings pulled (17 keys, including onboarding_complete=1)
+2026-03-13 00:17:00,025 [INFO] dishboard.sync: OK — pushed=3 pulled=3
+2026-03-13 00:45:55,894 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "53"'}
+2026-03-13 00:45:55,960 [INFO] dishboard.sync: ERROR: tombstone push failed: {'code': '22P02', 'details': None, 'hint': None, 'message': 'invalid input syntax for type uuid: "56"'}
+2026-03-13 00:45:56,091 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 17 cloud)
+2026-03-13 00:45:56,304 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 00:45:56,503 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:45:56,617 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 00:45:56,618 [INFO] dishboard.sync: OK — pushed=3 pulled=3
+2026-03-13 00:45:56,790 [INFO] dishboard.app: MealPlan cleanup removed 1 orphan slot(s)
+2026-03-13 00:46:55,269 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 00:47:45,729 [INFO] dishboard.sync: WARN: Dropping legacy tombstone with non-UUID cloud_id: table=pantry_items cloud_id='53'
+2026-03-13 00:47:45,729 [INFO] dishboard.sync: WARN: Dropping legacy tombstone with non-UUID cloud_id: table=pantry_items cloud_id='56'
+2026-03-13 00:47:45,942 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 00:47:46,301 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:47:46,415 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 00:47:46,416 [INFO] dishboard.sync: OK — pushed=2 pulled=2
+2026-03-13 00:48:19,257 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 00:48:19,625 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:48:19,755 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 00:48:19,757 [INFO] dishboard.sync: OK — pushed=2 pulled=2
+2026-03-13 00:48:45,234 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 00:49:45,468 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 00:52:45,659 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 00:52:45,998 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:52:46,105 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 00:52:46,106 [INFO] dishboard.sync: OK — pushed=2 pulled=2
+2026-03-13 00:54:35,753 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 00:54:36,117 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:54:36,227 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 00:54:36,228 [INFO] dishboard.sync: OK — pushed=2 pulled=2
+2026-03-13 00:55:35,243 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 00:56:35,761 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 00:59:35,797 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 00:59:36,221 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 00:59:36,357 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 00:59:36,357 [INFO] dishboard.sync: OK — pushed=2 pulled=2
+2026-03-13 01:04:35,317 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 01:04:36,015 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 01:04:36,704 [INFO] dishboard.sync: Pulled 2 rows from dishy_chat_history
+2026-03-13 01:04:36,916 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 01:04:36,916 [INFO] dishboard.sync: OK — pushed=2 pulled=2
+2026-03-13 01:09:29,300 [INFO] dishboard.sync: Settings pushed (26 total, 16 local + 13 cloud)
+2026-03-13 01:09:29,301 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-13 01:09:29,485 [INFO] dishboard.sync: Pulled 45 rows from recipes
+2026-03-13 01:09:29,574 [INFO] dishboard.sync: Pulled 41 rows from meal_plans
+2026-03-13 01:09:29,664 [INFO] dishboard.sync: Pulled 234 rows from shopping_items
+2026-03-13 01:09:29,821 [INFO] dishboard.sync: Pulled 21 rows from nutrition_logs
+2026-03-13 01:09:29,921 [INFO] dishboard.sync: Pulled 68 rows from dishy_chat_history
+2026-03-13 01:09:30,030 [INFO] dishboard.sync: Pulled 49 rows from pantry_items
+2026-03-13 01:09:30,062 [INFO] dishboard.sync: Removed 20 stale cloud-linked meal-plan row(s)
+2026-03-13 01:09:30,126 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:09:30,126 [INFO] dishboard.sync: OK — pushed=0 pulled=458
+2026-03-13 01:10:32,119 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 01:11:29,651 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 01:14:33,763 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:14:34,034 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:14:34,098 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:14:34,154 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:14:34,211 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:14:34,267 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-13 01:14:34,380 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:14:34,381 [INFO] dishboard.sync: OK — pushed=43 pulled=43
+2026-03-13 01:19:29,319 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 01:19:31,682 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:19:31,818 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:19:31,875 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:19:31,928 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:19:31,983 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:19:32,031 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-13 01:19:32,135 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:19:32,136 [INFO] dishboard.sync: OK — pushed=43 pulled=43
+2026-03-13 01:24:32,933 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:24:33,129 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:24:33,200 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:24:33,252 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:24:33,344 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:24:33,401 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-13 01:24:33,541 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:24:33,543 [INFO] dishboard.sync: OK — pushed=43 pulled=43
+2026-03-13 01:28:02,356 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:28:02,523 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:28:02,578 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:28:02,628 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:28:02,688 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:28:02,742 [INFO] dishboard.sync: Pulled 12 rows from dishy_chat_history
+2026-03-13 01:28:02,849 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:28:02,850 [INFO] dishboard.sync: OK — pushed=43 pulled=43
+2026-03-13 01:29:00,225 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 01:29:06,537 [INFO] anthropic._base_client: Retrying request to /v1/messages in 0.455887 seconds
+2026-03-13 01:29:06,924 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:29:07,894 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:29:08,046 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:29:08,113 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:29:08,169 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:29:08,228 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:29:08,283 [INFO] dishboard.sync: Pulled 13 rows from dishy_chat_history
+2026-03-13 01:29:08,398 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:29:08,399 [INFO] dishboard.sync: OK — pushed=45 pulled=44
+2026-03-13 01:29:08,453 [INFO] anthropic._base_client: Retrying request to /v1/messages in 0.889420 seconds
+2026-03-13 01:30:01,327 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 01:33:03,650 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:33:03,812 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:33:03,863 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:33:03,912 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:33:03,974 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:33:04,028 [INFO] dishboard.sync: Pulled 13 rows from dishy_chat_history
+2026-03-13 01:33:04,142 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:33:04,142 [INFO] dishboard.sync: OK — pushed=44 pulled=44
+2026-03-13 01:34:22,683 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:34:22,826 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:34:22,883 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:34:22,934 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:34:22,997 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:34:23,051 [INFO] dishboard.sync: Pulled 13 rows from dishy_chat_history
+2026-03-13 01:34:23,162 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:34:23,162 [INFO] dishboard.sync: OK — pushed=44 pulled=44
+2026-03-13 01:34:27,722 [INFO] anthropic._base_client: Retrying request to /v1/messages in 0.384444 seconds
+2026-03-13 01:34:28,486 [INFO] anthropic._base_client: Retrying request to /v1/messages in 0.904691 seconds
+2026-03-13 01:34:28,931 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:34:29,973 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:34:30,126 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:34:30,189 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:34:30,243 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:34:30,325 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:34:30,379 [INFO] dishboard.sync: Pulled 14 rows from dishy_chat_history
+2026-03-13 01:34:30,496 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:34:30,498 [INFO] dishboard.sync: OK — pushed=46 pulled=45
+2026-03-13 01:35:20,217 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 01:36:20,411 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 01:39:23,005 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:39:23,150 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:39:23,206 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:39:23,260 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:39:23,319 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:39:23,373 [INFO] dishboard.sync: Pulled 14 rows from dishy_chat_history
+2026-03-13 01:39:23,477 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:39:23,478 [INFO] dishboard.sync: OK — pushed=45 pulled=45
+2026-03-13 01:45:53,071 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:45:53,244 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:45:53,306 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:45:53,360 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:45:53,428 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:45:53,484 [INFO] dishboard.sync: Pulled 14 rows from dishy_chat_history
+2026-03-13 01:45:53,596 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:45:53,598 [INFO] dishboard.sync: OK — pushed=45 pulled=45
+2026-03-13 01:46:24,992 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:46:25,954 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:46:26,095 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:46:26,160 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:46:26,211 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:46:26,277 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:46:26,328 [INFO] dishboard.sync: Pulled 15 rows from dishy_chat_history
+2026-03-13 01:46:26,438 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:46:26,441 [INFO] dishboard.sync: OK — pushed=47 pulled=46
+2026-03-13 01:46:34,442 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:46:35,634 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:46:35,807 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:46:35,884 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:46:35,950 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:46:36,030 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:46:36,094 [INFO] dishboard.sync: Pulled 16 rows from dishy_chat_history
+2026-03-13 01:46:36,229 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:46:36,230 [INFO] dishboard.sync: OK — pushed=48 pulled=47
+2026-03-13 01:46:50,217 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 01:47:50,459 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 01:50:53,257 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:50:53,408 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:50:53,474 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:50:53,535 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:50:53,606 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:50:53,667 [INFO] dishboard.sync: Pulled 16 rows from dishy_chat_history
+2026-03-13 01:50:53,776 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:50:53,778 [INFO] dishboard.sync: OK — pushed=47 pulled=47
+2026-03-13 01:53:17,652 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:53:17,812 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:53:17,870 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:53:17,922 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:53:17,981 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:53:18,034 [INFO] dishboard.sync: Pulled 16 rows from dishy_chat_history
+2026-03-13 01:53:18,148 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:53:18,149 [INFO] dishboard.sync: OK — pushed=47 pulled=47
+2026-03-13 01:53:36,071 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:53:37,204 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:53:37,342 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:53:37,406 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:53:37,462 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:53:37,521 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:53:37,575 [INFO] dishboard.sync: Pulled 17 rows from dishy_chat_history
+2026-03-13 01:53:37,685 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:53:37,688 [INFO] dishboard.sync: OK — pushed=49 pulled=48
+2026-03-13 01:53:44,926 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:53:46,213 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:53:46,358 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:53:46,417 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:53:46,471 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:53:46,536 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:53:46,593 [INFO] dishboard.sync: Pulled 18 rows from dishy_chat_history
+2026-03-13 01:53:46,719 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:53:46,722 [INFO] dishboard.sync: OK — pushed=50 pulled=49
+2026-03-13 01:54:14,212 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 01:55:14,442 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 01:58:17,227 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:58:17,377 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:58:17,439 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:58:17,494 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:58:17,560 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:58:17,614 [INFO] dishboard.sync: Pulled 18 rows from dishy_chat_history
+2026-03-13 01:58:17,730 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:58:17,733 [INFO] dishboard.sync: OK — pushed=49 pulled=49
+2026-03-13 01:58:50,099 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:58:50,232 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:58:50,284 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:58:50,334 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:58:50,391 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:58:50,443 [INFO] dishboard.sync: Pulled 18 rows from dishy_chat_history
+2026-03-13 01:58:50,544 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:58:50,545 [INFO] dishboard.sync: OK — pushed=49 pulled=49
+2026-03-13 01:59:02,309 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:59:03,473 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:59:03,611 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:59:03,674 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:59:03,721 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:59:03,778 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:59:03,829 [INFO] dishboard.sync: Pulled 19 rows from dishy_chat_history
+2026-03-13 01:59:03,940 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:59:03,942 [INFO] dishboard.sync: OK — pushed=51 pulled=50
+2026-03-13 01:59:09,661 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 01:59:11,001 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 01:59:11,140 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 01:59:11,215 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 01:59:11,262 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 01:59:11,322 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 01:59:11,376 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 01:59:11,489 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 01:59:11,491 [INFO] dishboard.sync: OK — pushed=52 pulled=51
+2026-03-13 01:59:47,206 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 02:00:47,439 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 02:03:50,753 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:03:50,966 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:03:51,030 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:03:51,086 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:03:51,161 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:03:51,229 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:03:51,353 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:03:51,356 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:08:47,314 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 02:08:50,869 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:08:51,029 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:08:51,094 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:08:51,149 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:08:51,215 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:08:51,273 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:08:51,404 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:08:51,406 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:13:50,893 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:13:51,060 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:13:51,125 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:13:51,183 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:13:51,253 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:13:51,309 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:13:51,426 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:13:51,429 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:14:47,213 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 02:18:50,799 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:18:50,956 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:18:51,022 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:18:51,075 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:18:51,142 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:18:51,197 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:18:51,314 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:18:51,315 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:21:12,000 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20lasagne%20recipe 200
+2026-03-13 02:21:12,110 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+lasagne+recipe&limit=1 200
+2026-03-13 02:21:12,810 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 02:21:13,021 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=lasagne%20recipe 200
+2026-03-13 02:21:13,245 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=lasagne+recipe&limit=1 200
+2026-03-13 02:21:13,459 [INFO] primp: response: https://yandex.com/search/site/?text=lasagne+recipe&web=1&searchid=9991893 200
+2026-03-13 02:21:13,477 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 02:21:13,584 [INFO] primp: response: https://search.brave.com/search?q=lasagne+recipe&source=web 200
+2026-03-13 02:21:14,113 [INFO] primp: response: https://www.mojeek.com/search?q=lasagne+recipe 200
+2026-03-13 02:21:14,346 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dlasagne%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=0&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 02:23:50,506 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:23:50,652 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:23:50,710 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:23:50,761 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:23:50,821 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:23:50,875 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:23:51,003 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:23:51,006 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:28:51,005 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:28:51,184 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:28:51,244 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:28:51,302 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:28:51,379 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:28:51,438 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:28:51,559 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:28:51,560 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:29:47,202 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 02:33:50,260 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:33:50,409 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:33:50,463 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:33:50,513 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:33:50,575 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:33:50,645 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:33:50,755 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:33:50,755 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:38:07,141 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:38:07,282 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:38:07,332 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:38:07,381 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:38:07,438 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:38:07,495 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:38:07,619 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:38:07,622 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:38:17,700 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20lasagne%20recipe 200
+2026-03-13 02:38:18,094 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+lasagne+recipe&limit=1 200
+2026-03-13 02:38:18,365 [INFO] primp: response: https://search.yahoo.com/search;_ylt=c8CYXHVs4gNce1qCMRxtPGWV;_ylu=sAZa35Ff1BAWuWeUioqCs3xOP_otOsQ1nZ_ZdMyc3yFBMFc?p=site%3Abbcgoodfood.com+lasagne+recipe 200
+2026-03-13 02:38:19,102 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dsite%253Abbcgoodfood.com%2Blasagne%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=0&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 02:38:19,855 [INFO] primp: response: https://search.brave.com/search?q=site%3Abbcgoodfood.com+lasagne+recipe&source=web 200
+2026-03-13 02:38:19,890 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=lasagne+recipe&limit=1 200
+2026-03-13 02:38:19,895 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=lasagne%20recipe 200
+2026-03-13 02:38:20,301 [INFO] primp: response: https://search.brave.com/search?q=lasagne+recipe&source=web 200
+2026-03-13 02:38:20,486 [INFO] primp: response: https://yandex.com/search/site/?text=lasagne+recipe&web=1&searchid=3531738 200
+2026-03-13 02:38:20,561 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 02:38:21,040 [INFO] primp: response: https://www.mojeek.com/search?q=lasagne+recipe 200
+2026-03-13 02:38:21,131 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dlasagne%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=0&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 02:39:02,199 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 02:42:15,783 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:42:15,945 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:42:15,999 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:42:16,047 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:42:16,103 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:42:16,155 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:42:16,257 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:42:16,258 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:42:22,569 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20lasagne%20recipe 200
+2026-03-13 02:42:22,945 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+lasagne+recipe&limit=1 200
+2026-03-13 02:42:23,463 [INFO] primp: response: https://yandex.com/search/site/?text=site%3Abbcgoodfood.com+lasagne+recipe&web=1&searchid=9477808 200
+2026-03-13 02:42:23,660 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dsite%253Abbcgoodfood.com%2Blasagne%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=0&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 02:42:23,872 [INFO] primp: response: https://search.yahoo.com/search;_ylt=2g6cyLde9w5TX_g7tzQI0es8;_ylu=LO2NtLQr_cQqNqPcDnZaCO68lb2YF0J4bdOkRntrJ58oQOY?p=site%3Abbcgoodfood.com+lasagne+recipe 200
+2026-03-13 02:42:24,520 [INFO] primp: response: https://www.mojeek.com/search?q=site%3Abbcgoodfood.com+lasagne+recipe 200
+2026-03-13 02:42:24,551 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=lasagne+recipe&limit=1 200
+2026-03-13 02:42:24,553 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=lasagne%20recipe 200
+2026-03-13 02:42:24,900 [INFO] primp: response: https://search.brave.com/search?q=lasagne+recipe&source=web 200
+2026-03-13 02:42:24,912 [INFO] primp: response: https://yandex.com/search/site/?text=lasagne+recipe&web=1&searchid=4873035 200
+2026-03-13 02:42:25,203 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 02:42:25,624 [INFO] primp: response: https://www.mojeek.com/search?q=lasagne+recipe 200
+2026-03-13 02:42:25,719 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dlasagne%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=0&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 02:45:50,409 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:45:50,570 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:45:50,639 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:45:50,697 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:45:50,777 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:45:50,837 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:45:50,960 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:45:50,965 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:46:29,477 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20sausage%20pasta%20recipe 200
+2026-03-13 02:46:29,715 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+sausage+pasta+recipe&limit=1 200
+2026-03-13 02:46:30,351 [INFO] primp: response: https://yandex.com/search/site/?text=site%3Abbcgoodfood.com+sausage+pasta+recipe&web=1&searchid=3736116 200
+2026-03-13 02:46:30,716 [INFO] primp: response: https://consent.yahoo.com/v2/collectConsent?sessionId=3_cc-session_9ce6c2bd-d0a0-4f29-a5a1-65222122423f 200
+2026-03-13 02:46:31,172 [INFO] primp: response: https://www.mojeek.com/search?q=site%3Abbcgoodfood.com+sausage+pasta+recipe 200
+2026-03-13 02:46:31,293 [INFO] primp: response: https://consent.yahoo.com/v2/collectConsent?sessionId=3_cc-session_55c883a0-7768-4a5a-a505-650ef99e11f5 200
+2026-03-13 02:46:31,390 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=sausage%20pasta%20recipe 200
+2026-03-13 02:46:31,409 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dsausage%2Bpasta%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=0&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 02:46:31,618 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=sausage+pasta+recipe&limit=1 200
+2026-03-13 02:46:32,092 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 02:46:32,297 [INFO] primp: response: https://www.mojeek.com/search?q=sausage+pasta+recipe 200
+2026-03-13 02:46:32,734 [INFO] primp: response: https://yandex.com/search/site/?text=sausage+pasta+recipe&web=1&searchid=3121909 200
+2026-03-13 02:46:33,322 [INFO] primp: response: https://search.brave.com/search?q=sausage+pasta+recipe&source=web 200
+2026-03-13 02:46:47,193 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 02:47:47,318 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 02:50:51,593 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:50:51,770 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:50:51,880 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:50:51,929 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:50:51,981 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:50:52,032 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:50:52,127 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:50:52,127 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 02:55:47,541 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 02:55:50,731 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 02:55:50,894 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 02:55:50,983 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 02:55:51,037 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 02:55:51,158 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 02:55:51,233 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 02:55:51,383 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 02:55:51,385 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 03:00:50,496 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 03:00:50,658 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 03:00:50,721 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 03:00:50,772 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 03:00:50,868 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 03:00:50,937 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 03:00:51,078 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 03:00:51,081 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 03:01:47,204 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 03:05:50,681 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 03:05:50,844 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 03:05:50,919 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 03:05:50,974 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 03:05:51,094 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 03:05:51,170 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 03:05:51,346 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 03:05:51,351 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 03:10:50,960 [INFO] dishboard.sync: Settings pushed (26 total, 26 local + 26 cloud)
+2026-03-13 03:10:51,124 [INFO] dishboard.sync: Pulled 7 rows from recipes
+2026-03-13 03:10:51,195 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 03:10:51,255 [INFO] dishboard.sync: Pulled 20 rows from shopping_items
+2026-03-13 03:10:51,353 [INFO] dishboard.sync: Pulled 3 rows from nutrition_logs
+2026-03-13 03:10:51,414 [INFO] dishboard.sync: Pulled 20 rows from dishy_chat_history
+2026-03-13 03:10:51,548 [INFO] dishboard.sync: Settings pulled (26 keys, including onboarding_complete=1)
+2026-03-13 03:10:51,550 [INFO] dishboard.sync: OK — pushed=51 pulled=51
+2026-03-13 03:32:00,885 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 03:47:04,568 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 03:47:17,037 [INFO] dishboard.sync: ERROR: shopping_items update failed: [Errno 54] Connection reset by peer
+2026-03-13 03:47:17,664 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:17,731 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:17,801 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:17,862 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:17,998 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,070 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,151 [INFO] dishboard.sync: ERROR: nutrition_logs update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,221 [INFO] dishboard.sync: ERROR: nutrition_logs update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,283 [INFO] dishboard.sync: ERROR: nutrition_logs update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,355 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,416 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,477 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,537 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,635 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,701 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,763 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,828 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,887 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:18,947 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,009 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,073 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,132 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,195 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,258 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,323 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,385 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 03:47:19,445 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:02:57,345 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 04:33:53,391 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 04:42:15,976 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: The read operation timed out
+2026-03-13 04:42:16,270 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,390 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,451 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,507 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,562 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,618 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,674 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,729 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,786 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,841 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,856 [INFO] dishboard.sync: ERROR: shopping_items update failed: [Errno 54] Connection reset by peer
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: shopping_items update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: nutrition_logs update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: nutrition_logs update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: nutrition_logs update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,857 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: The read operation timed out
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history update failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 04:42:16,858 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 05:00:45,468 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 05:26:30,650 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 06:01:56,790 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 06:42:40,686 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=feature_flags_unavailable:[Errno 60] Operation timed out
+2026-03-13 06:42:40,690 [INFO] dishboard.sync: ERROR: settings push failed: [Errno 60] Operation timed out
+2026-03-13 06:42:40,935 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:40,987 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,034 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,086 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,137 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,181 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,234 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,284 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,287 [INFO] dishboard.sync: ERROR: settings push failed: [Errno 60] Operation timed out
+2026-03-13 06:42:41,288 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,288 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,289 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,290 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,290 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,290 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,290 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,435 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 06:42:41,557 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,603 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,686 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,834 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,884 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,935 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:41,983 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,028 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,180 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,183 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,184 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,184 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,184 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,184 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,185 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,185 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 06:42:42,185 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:04,648 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 07:00:05,678 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:05,779 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:05,833 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:05,896 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:05,945 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:05,995 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,066 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,312 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,364 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,366 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,366 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,366 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,367 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,367 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,367 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,367 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:00:06,367 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,196 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,263 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,325 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,383 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,432 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,484 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,539 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,594 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,654 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:10:55,657 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:33,518 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 07:42:33,898 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:33,963 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,026 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,082 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,144 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,205 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,263 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,316 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,378 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,382 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,382 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,383 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,383 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,383 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,383 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,383 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 07:42:34,383 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:41,844 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 08:13:42,289 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,343 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,397 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,453 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,510 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,571 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,625 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,683 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,737 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,740 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,740 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,741 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,741 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,741 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,741 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,741 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:13:42,741 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:18,518 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 08:31:19,418 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:19,594 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:19,700 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:19,881 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,058 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,241 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,423 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,666 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,736 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,785 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,786 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,786 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,787 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,787 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,787 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,787 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 08:31:20,789 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:15,891 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 09:08:16,322 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=feature_flags_unavailable:{'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,376 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,447 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,505 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,573 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,630 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,688 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,750 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,817 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,872 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,878 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,879 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,880 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,880 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,881 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,881 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,881 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:08:16,881 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:30:10,265 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 09:45:50,059 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 09:45:50,434 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,498 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,561 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,620 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,681 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,745 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,803 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,866 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,928 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,932 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,932 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,932 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,932 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,932 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,933 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,933 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 09:45:50,933 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:52,016 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 10:04:53,280 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,355 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,427 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,496 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,558 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,626 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,693 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,759 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,822 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,826 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,827 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,828 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,830 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,830 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,830 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,831 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:04:53,831 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,256 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,389 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,471 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,539 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,607 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,685 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,760 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:13:54,837 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 10:51:04,176 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 11:08:31,633 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 11:34:08,069 [INFO] dishboard.sync: ERROR: settings pull failed: The read operation timed out
+2026-03-13 11:34:08,148 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:08,148 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:08,148 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:08,149 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:08,149 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:08,149 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:08,149 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:08,149 [INFO] dishboard.sync: ERROR: settings pull failed: The read operation timed out
+2026-03-13 11:34:15,799 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 11:34:17,956 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:18,131 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:18,309 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:18,484 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:18,592 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:18,769 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:18,945 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,125 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,240 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,244 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,244 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,244 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,244 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,244 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,245 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,245 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:34:19,245 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:38,487 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:38,715 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:38,863 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:39,327 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:39,507 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:39,748 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:39,912 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,089 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,266 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,273 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,273 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,273 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,274 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,275 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,276 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,276 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:43:40,276 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:04,718 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:04,897 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:05,074 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:05,251 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:05,360 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:05,539 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:05,717 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:05,895 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,008 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,012 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,013 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,013 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,013 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,013 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,014 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,014 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:45:06,014 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:39,672 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 11:52:40,114 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,214 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,267 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,326 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,374 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,427 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,484 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,536 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,588 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,591 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,592 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,592 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,592 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,592 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,592 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,593 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:52:40,593 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,069 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,247 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,425 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,538 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,664 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,797 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,883 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:33,951 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,033 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,036 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,036 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,037 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,037 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,037 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,038 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,038 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 11:57:34,038 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:09,378 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 12:14:09,618 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=feature_flags_unavailable:{'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:09,676 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:09,745 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:09,810 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:09,865 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:09,920 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:09,979 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,051 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,108 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,173 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:14:10,175 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:09,760 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:09,988 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,086 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,180 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,283 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,365 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,563 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,741 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,877 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,881 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,881 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,881 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,881 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,881 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,881 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,881 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:19:10,882 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:24,272 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:24,400 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:24,579 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:24,754 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:24,934 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,052 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,179 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,304 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,375 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,376 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,377 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,377 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,377 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,377 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,377 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,377 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:26:25,377 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:17,547 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 12:29:17,934 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,009 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,065 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,176 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,233 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,291 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,348 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,403 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,462 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,464 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,464 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,464 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,464 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,465 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,465 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,465 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:29:18,465 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:21,632 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:21,707 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:21,779 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:21,838 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:21,892 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:21,947 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,008 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,064 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,128 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,139 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,140 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,140 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,140 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,140 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,140 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,141 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:35:22,141 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:15,992 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,131 [INFO] dishboard.sync: WARN: tombstone fetch failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,227 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,290 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,355 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,425 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,510 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,574 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,643 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: settings push failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: recipes pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: meal_plans pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: shopping_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: nutrition_logs pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: dishy_chat_history pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: pantry_items pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:39:16,646 [INFO] dishboard.sync: ERROR: settings pull failed: {'code': 'PGRST303', 'details': None, 'hint': None, 'message': 'JWT expired'}
+2026-03-13 12:43:27,446 [INFO] dishboard.sync: Settings pushed (30 total, 16 local + 30 cloud)
+2026-03-13 12:43:27,448 [INFO] dishboard.sync: Full pull (no previous sync timestamp) — fetching all rows
+2026-03-13 12:43:27,697 [INFO] dishboard.sync: Pulled 10 rows from recipes
+2026-03-13 12:43:27,774 [INFO] dishboard.sync: Pulled 7 rows from meal_plans
+2026-03-13 12:43:27,866 [INFO] dishboard.sync: Pulled 16 rows from shopping_items
+2026-03-13 12:43:28,044 [INFO] dishboard.sync: Pulled 10 rows from dishy_chat_history
+2026-03-13 12:43:28,141 [INFO] dishboard.sync: Pulled 16 rows from pantry_items
+2026-03-13 12:43:28,149 [INFO] dishboard.sync: Removed 5 stale cloud-linked meal-plan row(s)
+2026-03-13 12:43:28,210 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:43:28,210 [INFO] dishboard.sync: OK — pushed=0 pulled=59
+2026-03-13 12:43:48,363 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 12:43:49,144 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 12:43:49,379 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 12:43:49,577 [INFO] dishboard.sync: Pulled 3 rows from dishy_chat_history
+2026-03-13 12:43:49,740 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:43:49,742 [INFO] dishboard.sync: OK — pushed=5 pulled=4
+2026-03-13 12:43:55,445 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 12:43:56,084 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 12:43:56,334 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 12:43:56,519 [INFO] dishboard.sync: Pulled 4 rows from dishy_chat_history
+2026-03-13 12:43:56,810 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:43:56,814 [INFO] dishboard.sync: OK — pushed=6 pulled=5
+2026-03-13 12:44:16,787 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20chicken%20wrap%20recipe 200
+2026-03-13 12:44:17,053 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+chicken+wrap+recipe&limit=1 200
+2026-03-13 12:44:17,595 [INFO] primp: response: https://yandex.com/search/site/?text=site%3Abbcgoodfood.com+chicken+wrap+recipe&web=1&searchid=4042588 200
+2026-03-13 12:44:18,378 [INFO] primp: response: https://search.brave.com/search?q=site%3Abbcgoodfood.com+chicken+wrap+recipe&source=web 200
+2026-03-13 12:44:18,627 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=chicken%20wrap%20recipe 200
+2026-03-13 12:44:18,692 [INFO] primp: response: https://www.google.com/search?q=chicken+wrap+recipe&filter=1&start=0&hl=en-US&lr=lang_en&cr=countryUS 403
+2026-03-13 12:44:18,808 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=chicken+wrap+recipe&limit=1 200
+2026-03-13 12:44:18,860 [INFO] primp: response: https://yandex.com/search/site/?text=chicken+wrap+recipe&web=1&searchid=6450022 200
+2026-03-13 12:44:18,879 [INFO] primp: response: https://search.brave.com/search?q=chicken+wrap+recipe&source=web 200
+2026-03-13 12:44:19,247 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 12:44:20,409 [INFO] primp: response: https://www.mojeek.com/search?q=chicken+wrap+recipe 200
+2026-03-13 12:44:26,278 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 12:45:26,401 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 12:48:27,870 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 12:48:28,054 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 12:48:28,221 [INFO] dishboard.sync: Pulled 4 rows from dishy_chat_history
+2026-03-13 12:48:28,350 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:48:28,351 [INFO] dishboard.sync: OK — pushed=5 pulled=5
+2026-03-13 12:51:37,879 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 12:51:38,124 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 12:51:38,271 [INFO] dishboard.sync: Pulled 4 rows from dishy_chat_history
+2026-03-13 12:51:38,370 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:51:38,371 [INFO] dishboard.sync: OK — pushed=5 pulled=5
+2026-03-13 12:51:38,537 [INFO] dishboard.app: MealPlan cleanup removed 1 orphan slot(s)
+2026-03-13 12:52:02,040 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 12:52:02,665 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 12:52:03,049 [INFO] dishboard.sync: Pulled 5 rows from dishy_chat_history
+2026-03-13 12:52:03,179 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:52:03,180 [INFO] dishboard.sync: OK — pushed=6 pulled=5
+2026-03-13 12:52:19,006 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 12:52:19,681 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 12:52:20,123 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 12:52:20,259 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:52:20,260 [INFO] dishboard.sync: OK — pushed=7 pulled=6
+2026-03-13 12:52:37,277 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 12:53:37,841 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 12:53:48,462 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20chicken%20wrap%20recipe 200
+2026-03-13 12:53:48,888 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+chicken+wrap+recipe&limit=1 200
+2026-03-13 12:53:49,124 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dsite%253Abbcgoodfood.com%2Bchicken%2Bwrap%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=1&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 12:53:49,425 [INFO] primp: response: https://www.mojeek.com/search?q=site%3Abbcgoodfood.com+chicken+wrap+recipe 200
+2026-03-13 12:53:49,459 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=chicken%20wrap%20recipe 200
+2026-03-13 12:53:49,461 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=chicken+wrap+recipe&limit=1 200
+2026-03-13 12:53:49,532 [INFO] primp: response: https://consent.google.com/ml?continue=https://www.google.com/search%3Fq%3Dchicken%2Bwrap%2Brecipe%26filter%3D1%26start%3D0%26hl%3Den-US%26lr%3Dlang_en%26cr%3DcountryUS&gl=GB&m=1&pc=srp&uxe=none&cm=2&hl=en&src=1 200
+2026-03-13 12:53:50,308 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 12:53:50,308 [INFO] primp: response: https://search.brave.com/search?q=chicken+wrap+recipe&source=web 200
+2026-03-13 12:53:50,615 [INFO] primp: response: https://www.mojeek.com/search?q=chicken+wrap+recipe 200
+2026-03-13 12:53:51,332 [INFO] primp: response: https://yandex.com/search/site/?text=chicken+wrap+recipe&web=1&searchid=4562178 200
+2026-03-13 12:56:38,166 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 12:56:38,600 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 12:56:38,743 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 12:56:38,747 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:00:48,793 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:00:49,242 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:00:49,383 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:00:49,384 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:01:03,068 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20sausage%20recipe 200
+2026-03-13 13:01:03,326 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+sausage+recipe&limit=1 200
+2026-03-13 13:01:04,126 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 13:01:04,313 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=sausage%20recipe 200
+2026-03-13 13:01:04,598 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=sausage+recipe&limit=1 200
+2026-03-13 13:01:04,734 [INFO] primp: response: https://consent.yahoo.com/v2/collectConsent?sessionId=3_cc-session_959cb0b7-cf77-433d-bd0f-ff01a763d125 200
+2026-03-13 13:01:04,880 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 13:01:05,012 [INFO] primp: response: https://search.brave.com/search?q=sausage+recipe&source=web 200
+2026-03-13 13:01:05,288 [INFO] primp: response: https://www.mojeek.com/search?q=sausage+recipe 200
+2026-03-13 13:01:05,818 [INFO] primp: response: https://www.google.com/search?q=sausage+recipe&filter=1&start=0&hl=en-US&lr=lang_en&cr=countryUS 403
+2026-03-13 13:01:06,443 [INFO] primp: response: https://yandex.com/search/site/?text=sausage+recipe&web=1&searchid=5711643 200
+2026-03-13 13:01:48,274 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 13:02:48,398 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 13:02:55,006 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=site%3Abbcgoodfood.com%20sausage%20pasta%20recipe 200
+2026-03-13 13:02:55,282 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=site%3Abbcgoodfood.com+sausage+pasta+recipe&limit=1 200
+2026-03-13 13:02:55,489 [INFO] primp: response: https://search.yahoo.com/search;_ylt=gT0dozmzI-M1Gmuy4q1Nk9tg;_ylu=OiD7iyLey0cuP4zHpKZ-ZPVnGzEUXhTlQgC0TMlqxyPHC-o?p=site%3Abbcgoodfood.com+sausage+pasta+recipe 200
+2026-03-13 13:02:56,303 [INFO] primp: response: https://www.google.com/search?q=site%3Abbcgoodfood.com+sausage+pasta+recipe&filter=1&start=0&hl=en-US&lr=lang_en&cr=countryUS 403
+2026-03-13 13:02:56,528 [INFO] primp: response: https://www.mojeek.com/search?q=site%3Abbcgoodfood.com+sausage+pasta+recipe 200
+2026-03-13 13:02:56,673 [INFO] primp: response: https://search.yahoo.com/search;_ylt=V1IbLaAqtk1eqgzgHgdx62Zj;_ylu=TWxsnb7GfSppH6Oa3ju9QWkluyngVRdRpkAPAHg4EYtPhVA?p=sausage+pasta+recipe 200
+2026-03-13 13:02:56,741 [INFO] primp: response: https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&limit=1&search=sausage%20pasta%20recipe 200
+2026-03-13 13:02:56,840 [INFO] primp: response: https://www.google.com/search?q=sausage+pasta+recipe&filter=1&start=0&hl=en-US&lr=lang_en&cr=countryUS 403
+2026-03-13 13:02:56,948 [INFO] primp: response: https://grokipedia.com/api/typeahead?query=sausage+pasta+recipe&limit=1 200
+2026-03-13 13:02:57,022 [INFO] primp: response: https://search.brave.com/search?q=sausage+pasta+recipe&source=web 200
+2026-03-13 13:02:57,540 [INFO] primp: response: https://html.duckduckgo.com/html/ 200
+2026-03-13 13:02:58,662 [INFO] primp: response: https://www.mojeek.com/search?q=sausage+pasta+recipe 200
+2026-03-13 13:02:59,381 [INFO] primp: response: https://yandex.com/search/site/?text=sausage+pasta+recipe&web=1&searchid=1892932 200
+2026-03-13 13:05:48,964 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:05:49,324 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:05:49,452 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:05:49,455 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:10:48,371 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 13:10:49,085 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:10:49,502 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:10:49,643 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:10:49,645 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:15:49,323 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:15:49,796 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:15:49,964 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:15:49,966 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:16:48,272 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 13:20:49,005 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:20:49,370 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:20:49,500 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:20:49,503 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:25:49,300 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:25:49,658 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:25:49,782 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:25:49,784 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:30:48,862 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:30:49,202 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:30:49,299 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:30:49,300 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:31:48,260 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 13:35:49,592 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:35:50,280 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:35:50,454 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:35:50,455 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:40:49,236 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:40:49,708 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:40:49,821 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:40:49,821 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:45:49,329 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:45:49,727 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:45:49,870 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:45:49,873 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:46:48,255 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 13:50:49,270 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:50:49,703 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:50:49,849 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:50:49,851 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:53:55,169 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:53:55,637 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:53:55,754 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:53:55,755 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 13:54:54,259 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 13:55:54,530 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 13:58:54,964 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 13:58:55,342 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 13:58:55,468 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 13:58:55,470 [INFO] dishboard.sync: OK — pushed=6 pulled=6
+2026-03-13 14:02:17,491 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-13 14:02:18,205 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 14:02:18,381 [INFO] dishboard.sync: Pulled 1 rows from meal_plans
+2026-03-13 14:02:18,571 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:02:18,700 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 14:02:18,701 [INFO] dishboard.sync: OK — pushed=8 pulled=7
+2026-03-13 14:02:23,988 [INFO] dishboard.sync: Pushing 1 new rows to meal_plans
+2026-03-13 14:02:24,633 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 14:02:24,809 [INFO] dishboard.sync: Pulled 2 rows from meal_plans
+2026-03-13 14:02:24,985 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:02:25,096 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 14:02:25,097 [INFO] dishboard.sync: OK — pushed=9 pulled=8
+2026-03-13 14:03:54,317 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 14:03:55,469 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 14:03:55,741 [INFO] dishboard.sync: Pulled 2 rows from meal_plans
+2026-03-13 14:03:55,976 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:03:56,160 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 14:03:56,161 [INFO] dishboard.sync: OK — pushed=8 pulled=8
+2026-03-13 14:06:24,935 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 14:06:25,103 [INFO] dishboard.sync: Pulled 2 rows from meal_plans
+2026-03-13 14:06:25,255 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:06:25,378 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 14:06:25,382 [INFO] dishboard.sync: OK — pushed=8 pulled=8
+2026-03-13 14:06:53,401 [INFO] dishboard.sync: Pushing 19 new rows to meal_plans
+2026-03-13 14:06:57,052 [INFO] dishboard.sync: Settings pushed (30 total, 30 local + 30 cloud)
+2026-03-13 14:06:57,327 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:06:57,531 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:06:57,654 [INFO] dishboard.sync: Settings pulled (30 keys, including onboarding_complete=1)
+2026-03-13 14:06:57,656 [INFO] dishboard.sync: OK — pushed=46 pulled=27
+2026-03-13 14:07:24,274 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:08:24,455 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 14:11:25,932 [INFO] dishboard.sync: WARN: Dropping legacy tombstone with non-UUID cloud_id: table=pantry_items cloud_id='64'
+2026-03-13 14:11:25,933 [INFO] dishboard.sync: WARN: Dropping legacy tombstone with non-UUID cloud_id: table=pantry_items cloud_id='50'
+2026-03-13 14:11:25,933 [INFO] dishboard.sync: WARN: Dropping legacy tombstone with non-UUID cloud_id: table=pantry_items cloud_id='53'
+2026-03-13 14:11:25,933 [INFO] dishboard.sync: WARN: Dropping legacy tombstone with non-UUID cloud_id: table=pantry_items cloud_id='63'
+2026-03-13 14:11:26,050 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 30 cloud)
+2026-03-13 14:11:26,216 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:11:26,386 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:11:26,493 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:11:26,494 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:13:42,391 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:13:42,582 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:13:42,795 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:13:42,948 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:13:42,950 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:14:39,257 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:15:39,592 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 14:17:46,585 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:17:46,772 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:17:47,027 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:17:47,141 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:17:47,142 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:18:44,264 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:19:44,625 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 14:22:11,775 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:22:11,968 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:22:12,160 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:22:12,290 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:22:12,293 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:22:37,895 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:22:38,208 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:22:38,477 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:22:38,683 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:22:38,687 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:23:35,255 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:24:35,567 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 14:27:37,353 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:27:37,544 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:27:37,775 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:27:37,887 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:27:37,887 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:28:55,059 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:28:55,234 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:28:55,413 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:28:55,529 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:28:55,530 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:29:53,251 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:30:53,524 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 14:31:35,494 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:31:35,796 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:31:36,028 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:31:36,174 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:31:36,178 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:32:33,244 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:33:33,471 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 14:36:35,302 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:36:35,579 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:36:35,779 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:36:35,919 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:36:35,922 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:41:33,316 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 14:41:35,285 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:41:35,489 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:41:35,685 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:41:35,865 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:41:35,867 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:46:35,263 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:46:35,466 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:46:35,671 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:46:35,796 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:46:35,796 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:47:33,235 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:49:17,485 [INFO] dishboard.sync: Settings pushed (32 total, 32 local + 32 cloud)
+2026-03-13 14:49:17,710 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:49:17,887 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:49:18,007 [INFO] dishboard.sync: Settings pulled (32 keys, including onboarding_complete=1)
+2026-03-13 14:49:18,007 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:49:32,651 [INFO] dishboard.sync: Settings pushed (33 total, 33 local + 32 cloud)
+2026-03-13 14:49:32,855 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:49:33,068 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:49:33,205 [INFO] dishboard.sync: Settings pulled (33 keys, including onboarding_complete=1)
+2026-03-13 14:49:33,207 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:49:35,699 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 33 cloud)
+2026-03-13 14:49:35,900 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:49:36,088 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:49:36,210 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 14:49:36,211 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:49:49,303 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 14:49:49,493 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:49:49,661 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:49:49,786 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 14:49:49,788 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:49:53,834 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 14:49:54,008 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:49:54,186 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:49:54,313 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 14:49:54,315 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:50:15,245 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 14:51:15,638 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 14:54:18,715 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 14:54:18,905 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:54:19,088 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:54:19,219 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 14:54:19,220 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 14:59:16,046 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 14:59:18,403 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 14:59:18,601 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 14:59:18,817 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 14:59:18,968 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 14:59:18,970 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 15:04:18,824 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 15:04:19,005 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:04:19,247 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 15:04:19,383 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 15:04:19,386 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 15:05:15,236 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 15:09:17,165 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 15:09:17,331 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:09:17,485 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 15:09:17,589 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 15:09:17,590 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 15:14:17,146 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 15:14:17,348 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:14:17,519 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 15:14:17,633 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 15:14:17,634 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 15:19:17,224 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 15:19:17,388 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:19:17,580 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 15:19:17,698 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 15:19:17,701 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 15:20:15,231 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 15:24:18,357 [INFO] dishboard.sync: Settings pushed (36 total, 36 local + 36 cloud)
+2026-03-13 15:24:18,532 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:24:18,712 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 15:24:18,839 [INFO] dishboard.sync: Settings pulled (36 keys, including onboarding_complete=1)
+2026-03-13 15:24:18,841 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 15:28:49,937 [INFO] dishboard.app: Startup health check: tombstones_removed=0 linked_slots=0 removed_orphans=0 recovered_jobs=0
+2026-03-13 15:29:06,800 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 36 cloud)
+2026-03-13 15:29:06,984 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:29:07,155 [INFO] dishboard.sync: Pulled 6 rows from dishy_chat_history
+2026-03-13 15:29:07,262 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:29:07,264 [INFO] dishboard.sync: OK — pushed=27 pulled=27
+2026-03-13 15:30:05,266 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 15:30:57,586 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 15:30:58,262 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:30:58,460 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:30:58,660 [INFO] dishboard.sync: Pulled 7 rows from dishy_chat_history
+2026-03-13 15:30:58,771 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:30:58,771 [INFO] dishboard.sync: OK — pushed=29 pulled=28
+2026-03-13 15:31:05,358 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 15:31:07,408 [INFO] dishboard.sync: Pushing 1 new rows to dishy_chat_history
+2026-03-13 15:31:08,075 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:31:08,252 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:31:08,421 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 15:31:08,539 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:31:08,540 [INFO] dishboard.sync: OK — pushed=30 pulled=29
+2026-03-13 15:34:07,486 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:34:07,645 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:34:07,822 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 15:34:07,939 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:34:07,940 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 15:39:05,332 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 15:39:07,456 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:39:07,724 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:39:07,902 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 15:39:08,020 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:39:08,022 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 15:44:08,368 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:44:08,573 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:44:08,794 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 15:44:08,933 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:44:08,936 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 15:45:05,269 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 15:49:08,381 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:49:08,641 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:49:08,977 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 15:49:09,213 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:49:09,216 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 15:54:08,508 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:54:08,807 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:54:09,025 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 15:54:09,161 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:54:09,162 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 15:59:08,249 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 15:59:08,440 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 15:59:08,688 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 15:59:08,829 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 15:59:08,831 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:00:05,278 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 16:04:09,491 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:04:09,729 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:04:09,974 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:04:10,134 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:04:10,140 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:09:07,999 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:09:08,309 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:09:08,574 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:09:08,741 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:09:08,744 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:14:08,478 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:14:08,715 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:14:08,986 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:14:09,192 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:14:09,195 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:15:05,270 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 16:19:08,121 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:19:08,353 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:19:08,608 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:19:08,758 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:19:08,760 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:24:08,016 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:24:08,236 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:24:08,470 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:24:08,622 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:24:08,623 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:29:08,332 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:29:08,555 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:29:08,823 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:29:08,961 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:29:08,963 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:30:05,281 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 16:34:08,462 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:34:08,700 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:34:08,969 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:34:09,166 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:34:09,277 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:37:02,654 [INFO] dishboard.app: Startup health check: tombstones_removed=0 linked_slots=0 removed_orphans=0 recovered_jobs=0
+2026-03-13 16:37:19,714 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:37:19,965 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:37:20,180 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:37:20,353 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:37:20,356 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:38:16,270 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 16:39:16,560 [INFO] dishboard.workflows: workflow flags.refresh cached=0 reason=ok
+2026-03-13 16:42:20,625 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:42:20,850 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:42:21,148 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:42:21,317 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:42:21,319 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:47:16,283 [INFO] dishboard.workflows: workflow notifications.cleanup removed=0
+2026-03-13 16:47:20,139 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:47:20,335 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:47:20,573 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:47:20,711 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:47:20,713 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:52:19,945 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:52:20,160 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:52:20,387 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:52:20,568 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:52:20,569 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 16:53:16,264 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 16:57:19,699 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 16:57:19,896 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 16:57:20,119 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 16:57:20,304 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 16:57:20,305 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:02:19,613 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:02:19,803 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:02:20,051 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:02:20,208 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:02:20,210 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:07:19,849 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:07:20,053 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:07:20,295 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:07:20,469 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:07:20,471 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:08:16,269 [INFO] dishboard.workflows: workflow notifications.scan created=1
+2026-03-13 17:12:19,390 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:12:19,586 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:12:19,851 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:12:19,988 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:12:19,995 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:17:19,898 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:17:20,116 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:17:20,347 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:17:20,497 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:17:20,507 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:22:19,670 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:22:19,904 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:22:20,129 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:22:20,292 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:22:20,295 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:23:16,259 [INFO] dishboard.workflows: workflow notifications.scan created=0
+2026-03-13 17:27:19,705 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:27:19,913 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:27:20,159 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:27:20,330 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:27:20,332 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:32:19,623 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:32:19,920 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:32:20,149 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:32:20,308 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:32:20,310 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:37:20,322 [INFO] dishboard.sync: Settings pushed (37 total, 37 local + 37 cloud)
+2026-03-13 17:37:20,530 [INFO] dishboard.sync: Pulled 21 rows from meal_plans
+2026-03-13 17:37:20,812 [INFO] dishboard.sync: Pulled 8 rows from dishy_chat_history
+2026-03-13 17:37:21,069 [INFO] dishboard.sync: Settings pulled (37 keys, including onboarding_complete=1)
+2026-03-13 17:37:21,072 [INFO] dishboard.sync: OK — pushed=29 pulled=29
+2026-03-13 17:38:16,259 [INFO] dishboard.workflows: workflow notifications.scan created=0

@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -12,7 +13,13 @@ os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
 from utils.paths import get_data_dir, get_resource_path
 
 from models.database import Database
+from utils.data_service import get_db, close_db
+from utils.logging_config import setup_logging
+from utils.service_hub import bus as service_bus, registry as service_registry
+from utils.platform_ops import preferred_ui_font_family
+from utils.startup_health import run_startup_health_check
 from utils.theme import manager as theme_manager
+from utils.version import APP_VERSION
 from qt_material import apply_stylesheet
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QFont, QIcon
@@ -57,9 +64,72 @@ _main_window      = None
 _login_view       = None
 _root_stack       = None
 _sync_service     = None
+_workflow_engine  = None
 _db               = None
 _onboarding_view  = None
 _app_tour         = None   # AppTourOverlay — kept alive during tour
+_log              = logging.getLogger("dishboard.app")
+
+
+def _ensure_runtime_defaults(db: Database) -> None:
+    """Seed baseline runtime settings once (idempotent)."""
+    defaults = {
+        "in_app_notifications_enabled": "1",
+        "telemetry_enabled": "1",
+        "posthog_enabled": "1",
+        "sentry_enabled": "1",
+        "dishy_daily_limit": "50",
+    }
+    for key, value in defaults.items():
+        if db.get_setting(key, "") == "":
+            db.set_setting(key, value)
+
+    try:
+        from utils.feature_flags import FeatureFlagService
+
+        FeatureFlagService(db).ensure_defaults()
+    except Exception:
+        pass
+
+
+def _start_user_runtime_services(user: dict) -> None:
+    """Start runtime services that are scoped to the signed-in account."""
+    global _workflow_engine
+
+    user_id = str(user.get("id", "") or "")
+    if not user_id:
+        return
+
+    # Telemetry and optional external providers
+    try:
+        from utils.telemetry import init_telemetry, set_user, track_event
+
+        init_telemetry(_db, user_id)
+        set_user(user_id)
+        track_event("app.user_session_started", {"email": user.get("email", "")}, user_id=user_id)
+    except Exception:
+        pass
+
+    # In-app workflow runner (notifications + remote flags refresh)
+    try:
+        from utils.workflow_engine import WorkflowEngine, ensure_default_jobs
+        from utils.notifications import generate_scheduled_notifications
+
+        ensure_default_jobs(_db)
+        generate_scheduled_notifications(_db, user_id)
+
+        if _workflow_engine is not None:
+            try:
+                _workflow_engine.stop()
+            except Exception:
+                pass
+            _workflow_engine = None
+
+        _workflow_engine = WorkflowEngine(_db.path, user_id, parent=_main_window)
+        service_registry.register("workflow_engine", _workflow_engine)
+        service_bus.publish("workflow.started", {"user_id": user_id})
+    except Exception as exc:
+        _log.warning("Runtime service init failed: %s", exc)
 
 
 def _start_cloud_sync(user: dict) -> None:
@@ -68,6 +138,8 @@ def _start_cloud_sync(user: dict) -> None:
     from utils.cloud_sync_service import CloudSyncBackgroundService
     _sync_service = CloudSyncBackgroundService(user["id"], parent=_main_window)
     _main_window.set_sync_service(_sync_service)
+    service_registry.register("cloud_sync", _sync_service)
+    service_bus.publish("sync.started", {"user_id": str(user.get("id", ""))})
 
     def _on_initial_sync_done(_pushed: int, _pulled: int) -> None:
         # Disconnect so this only fires once (not on every subsequent sync)
@@ -80,8 +152,10 @@ def _start_cloud_sync(user: dict) -> None:
         # Remove any meal plan entries that have no valid recipe attached.
         # Runs after sync so locally-cached recipes are up to date before we check.
         removed = _db.cleanup_orphan_meal_plans()
+        removed_unlinked = _db.cleanup_unlinked_cloud_meal_plans()
+        removed += removed_unlinked
         if removed:
-            print(f"[MealPlan] Removed {removed} orphan slot(s) with no recipe")
+            _log.info("MealPlan cleanup removed %s orphan slot(s)", removed)
             _main_window.refresh_all_views()
         # Check onboarding now that user_settings have been pulled from cloud.
         # onboarding_complete will be "1" for returning users (pulled from Supabase),
@@ -128,11 +202,9 @@ def _on_login_success(user: dict) -> None:
     # Only wipe local data when a DIFFERENT user is logging in.
     # Same user → their cached data is still valid; sync will update anything stale.
     # Different user → clear everything so their data is never visible to someone else.
-    stored_user_id = _db.get_setting("active_user_id", "")
-    if stored_user_id != user["id"]:
-        _db.clear_user_data()
+    if _db.ensure_active_user_scope(user["id"]):
         _main_window.refresh_all_views()
-    _db.set_setting("active_user_id", user["id"])
+    _start_user_runtime_services(user)
 
     _root_stack.setCurrentIndex(1)
     _main_window.go_home()     # always land on Home, not wherever the user last was
@@ -142,7 +214,7 @@ def _on_login_success(user: dict) -> None:
 
 def _on_sign_out() -> None:
     """Navigate back to login screen without restarting the app."""
-    global _root_stack, _login_view, _sync_service
+    global _root_stack, _login_view, _sync_service, _workflow_engine
     # Stop sync service so it doesn't keep firing with a dead session
     if _sync_service is not None:
         try:
@@ -150,6 +222,15 @@ def _on_sign_out() -> None:
         except Exception:
             pass
         _sync_service = None
+    service_registry.unregister("cloud_sync")
+    if _workflow_engine is not None:
+        try:
+            _workflow_engine.stop()
+        except Exception:
+            pass
+        _workflow_engine = None
+    service_registry.unregister("workflow_engine")
+    service_bus.publish("session.signed_out", {})
     # Reset login view to a clean state (clear fields, go to sign-in tab)
     if _login_view is not None:
         _login_view.reset()
@@ -195,6 +276,8 @@ def _on_onboarding_finished() -> None:
 def main():
     global _main_window, _login_view, _root_stack, _db
 
+    setup_logging()
+    os.environ.setdefault("APP_VERSION", APP_VERSION)
     app = QApplication(sys.argv)
     app.setStyle(QStyleFactory.create("Fusion"))
     app.setApplicationName("DishBoard")
@@ -217,17 +300,25 @@ def main():
             with open(QSS_PATH) as f:
                 app.setStyleSheet(app.styleSheet() + "\n" + f.read())
 
-    # System font
-    font = QFont("SF Pro Display", 13)
+    # Cross-platform UI font defaults
+    font = QFont(preferred_ui_font_family(), 13)
     if not font.exactMatch():
-        font = QFont(".AppleSystemUIFont", 13)
+        font = QFont("Arial", 13)
     font.setStyleHint(QFont.StyleHint.SansSerif)
     app.setFont(font)
 
     # Initialise local database (used as a local cache / offline buffer)
-    _db = Database()
-    _db.connect()
-    _db.init_db()
+    _db = get_db(init=True)
+    _ensure_runtime_defaults(_db)
+    health_report = run_startup_health_check(_db)
+    _log.info(
+        "Startup health check: tombstones_removed=%s linked_slots=%s removed_orphans=%s recovered_jobs=%s",
+        health_report.get("invalid_tombstones_removed", 0),
+        health_report.get("linked_meal_slots", 0),
+        int(health_report.get("removed_orphan_slots", 0) or 0)
+        + int(health_report.get("removed_stale_unlinked_slots", 0) or 0),
+        health_report.get("recovered_workflow_jobs", 0),
+    )
 
     # Ensure Supabase credentials are in os.environ before creating the client
     _load_supabase_credentials(_db)
@@ -279,11 +370,14 @@ def main():
     user = get_current_user()
 
     if user:
+        if _db.ensure_active_user_scope(user["id"]):
+            _main_window.refresh_all_views()
         # Valid session restored from keychain — go straight to the app.
         # The local SQLite cache may already have this user's data from the
         # previous session, so we show it immediately without wiping.
         # Sync runs in the background and refreshes any stale views.
         _root_stack.setCurrentIndex(1)
+        _start_user_runtime_services(user)
         if not user.get("_network_unavailable"):
             _start_cloud_sync(user)
         else:
@@ -308,7 +402,8 @@ def main():
     run_async(check_for_update, on_result=_on_update_result, on_error=lambda _: None)
 
     exit_code = app.exec()
-    _db.close()
+    service_registry.clear()
+    close_db()
     sys.exit(exit_code)
 
 

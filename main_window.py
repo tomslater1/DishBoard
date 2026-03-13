@@ -9,13 +9,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import (
     Qt, QSize, QPropertyAnimation, QParallelAnimationGroup,
-    QEasingCurve, QAbstractAnimation, Signal,
+    QEasingCurve, QAbstractAnimation, Signal, Property,
 )
 from PySide6.QtGui import QGuiApplication, QPixmap
 
 from models.database import Database
-from api.claude_ai import ClaudeAI
-from utils.workers import run_async
+from utils.data_service import get_db
 
 _BASE_DIR  = os.path.dirname(__file__)
 _ICON_PATH = os.path.join(_BASE_DIR, "assets", "icons", "DishBoard-darkicon.png")
@@ -32,12 +31,16 @@ from views.settings import SettingsView
 from widgets.dishy_bubble import DishyBubble
 from widgets.sync_indicator import SyncIndicator
 from api.dishy_tools import DishyActions
+from utils.animation import slide_in_widget
 from utils.theme import manager as theme_manager
 
 SIDEBAR_EXPANDED = 220
 SIDEBAR_COLLAPSED = 64
 ACCENT = "#ff6b35"
-ICON_COLOUR = "#555555"
+
+
+def _inactive_icon_color() -> str:
+    return theme_manager.c("#8d96a5", "#5f7088")
 
 NAV_ITEMS = [
     ("fa5s.home",          "Home",           "#ff6b35"),
@@ -55,6 +58,8 @@ class NavButton(QPushButton):
         self._label = label
         self._icon_name = icon_name
         self._active_color = active_color or ACCENT
+        self._icon_px = 16
+        self._icon_anim: QPropertyAnimation | None = None
         self.setObjectName("nav-btn")
         self.setCheckable(True)
         self.setFixedHeight(48)
@@ -66,17 +71,57 @@ class NavButton(QPushButton):
             f"QPushButton#nav-btn:checked {{"
             f" background-color: rgba({r},{g},{b},0.12);"
             f" color: {c}; font-weight: 600;"
-            f" border-left: 2px solid {c}; padding-left: 12px;"
+            f" border-left: 2px solid {c}; padding-left: 14px;"
             f"}}"
         )
         self._refresh_icon()
         self.set_expanded(True)
-        self.toggled.connect(lambda _: self._refresh_icon())
+        self.toggled.connect(self._on_toggled)
+
+    def _on_toggled(self, checked: bool):
+        self._refresh_icon()
+        self._animate_icon_size(17 if checked else 16)
+
+    def _get_icon_px(self) -> int:
+        return int(self._icon_px)
+
+    def _set_icon_px(self, px: int):
+        self._icon_px = max(14, min(20, int(px)))
+        self.setIconSize(QSize(self._icon_px, self._icon_px))
+
+    iconPx = Property(int, _get_icon_px, _set_icon_px)
+
+    def _animate_icon_size(self, target: int):
+        start = self._get_icon_px()
+        target = int(target)
+        if start == target:
+            return
+        if self._icon_anim is not None:
+            try:
+                self._icon_anim.stop()
+            except Exception:
+                pass
+        anim = QPropertyAnimation(self, b"iconPx", self)
+        anim.setDuration(130)
+        anim.setStartValue(start)
+        anim.setEndValue(target)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._icon_anim = anim
+        anim.finished.connect(lambda: setattr(self, "_icon_anim", None))
+        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
 
     def _refresh_icon(self):
-        color = self._active_color if self.isChecked() else ICON_COLOUR
+        color = self._active_color if self.isChecked() else _inactive_icon_color()
         self.setIcon(qta.icon(self._icon_name, color=color))
-        self.setIconSize(QSize(17, 17))
+        self.setIconSize(QSize(self._icon_px, self._icon_px))
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._animate_icon_size(18 if self.isChecked() else 17)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._animate_icon_size(17 if self.isChecked() else 16)
 
     def set_expanded(self, expanded: bool):
         self.setText(f"   {self._label}" if expanded else "")
@@ -92,17 +137,17 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("DishBoard")
         self.resize(1200, 800)
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(780, 520)
         self._sidebar_expanded = True
+        self._auto_collapsed = False      # True when sidebar was collapsed by window resize
+        self._in_resize_toggle = False    # guard against re-entrant toggle during resize
         self._nav_history: list[int] = []
         self._cloud_sync_service = None   # set by set_sync_service() after login
         self._meal_deduction_service = None
-        self._db = Database()
-        self._db.connect()
-        self._claude = ClaudeAI()
+        self._page_anim = None
+        self._db = get_db()
         self._centre_on_screen()
         self._build_ui()
-        # Daily tip is loaded in set_account_user() after login so the JWT is available
 
     def _centre_on_screen(self):
         screen = QGuiApplication.primaryScreen().availableGeometry()
@@ -135,11 +180,14 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 16)
         layout.setSpacing(0)
 
-        # Header: toggle row + large centred logo + app name
+        # Store icon path for use during collapse/expand
+        self._icon_src_path = os.path.join(_BASE_DIR, "assets", "icons", "Dishboard-orange.png")
+
+        # Header: toggle row + logo + app name
         header = QWidget()
         header.setStyleSheet("background: transparent;")
         h_vlay = QVBoxLayout(header)
-        h_vlay.setContentsMargins(0, 8, 0, 8)
+        h_vlay.setContentsMargins(0, 6, 0, 6)
         h_vlay.setSpacing(0)
 
         # Top row: toggle button aligned right
@@ -147,25 +195,24 @@ class MainWindow(QMainWindow):
         toggle_row.setContentsMargins(0, 0, 10, 0)
         toggle_row.setSpacing(0)
         toggle_row.addStretch()
-        toggle_btn = QPushButton()
-        toggle_btn.setObjectName("toggle-btn")
-        toggle_btn.setIcon(qta.icon("fa5s.bars", color=ICON_COLOUR))
-        toggle_btn.setIconSize(QSize(15, 15))
-        toggle_btn.setFixedSize(32, 32)
-        toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        toggle_btn.clicked.connect(self._toggle_sidebar)
-        toggle_row.addWidget(toggle_btn)
+        self._toggle_btn = QPushButton()
+        self._toggle_btn.setObjectName("toggle-btn")
+        self._toggle_btn.setIcon(qta.icon("fa5s.bars", color=_inactive_icon_color()))
+        self._toggle_btn.setIconSize(QSize(15, 15))
+        self._toggle_btn.setFixedSize(32, 32)
+        self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._toggle_btn.clicked.connect(self._toggle_sidebar)
+        toggle_row.addWidget(self._toggle_btn)
         h_vlay.addLayout(toggle_row)
 
-        h_vlay.addSpacing(6)
+        h_vlay.addSpacing(4)
 
-        # Large logo — centred in its own row
+        # Logo icon — always visible; scaled down when collapsed
         self._logo_icon_lbl = QLabel()
         self._logo_icon_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-        _icon_src = os.path.join(_BASE_DIR, "assets", "icons", "Dishboard-orange.png")
-        if os.path.exists(_icon_src):
-            px = QPixmap(_icon_src).scaled(
-                72, 72,
+        if os.path.exists(self._icon_src_path):
+            px = QPixmap(self._icon_src_path).scaled(
+                52, 52,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
@@ -175,7 +222,7 @@ class MainWindow(QMainWindow):
         self._logo_icon_lbl.mousePressEvent = lambda _e: self._on_nav_clicked(0)
         h_vlay.addWidget(self._logo_icon_lbl)
 
-        h_vlay.addSpacing(8)
+        h_vlay.addSpacing(5)
 
         # App name below the logo, centred
         self._logo_lbl = QLabel("DishBoard")
@@ -185,7 +232,7 @@ class MainWindow(QMainWindow):
         self._logo_lbl.mousePressEvent = lambda _e: self._on_nav_clicked(0)
         h_vlay.addWidget(self._logo_lbl)
 
-        h_vlay.addSpacing(10)
+        h_vlay.addSpacing(8)
         layout.addWidget(header)
 
         accent_line = QWidget()
@@ -193,18 +240,13 @@ class MainWindow(QMainWindow):
         accent_line.setFixedHeight(2)
         layout.addSpacing(2)
         layout.addWidget(accent_line)
-        layout.addSpacing(10)
+        layout.addSpacing(8)
 
         div = QWidget()
         div.setObjectName("sidebar-divider")
         div.setFixedHeight(1)
         layout.addWidget(div)
-        layout.addSpacing(10)
-
-        nav_lbl = QLabel("NAVIGATE")
-        nav_lbl.setObjectName("sidebar-section-label")
-        layout.addWidget(nav_lbl)
-        layout.addSpacing(6)
+        layout.addSpacing(8)
 
         self._nav_buttons: list[NavButton] = []
         for i, (icon_name, label, active_color) in enumerate(NAV_ITEMS):
@@ -214,18 +256,7 @@ class MainWindow(QMainWindow):
             layout.addSpacing(4)
             self._nav_buttons.append(btn)
 
-        layout.addSpacing(12)
-
-        # ── Sidebar extras (tip + recent recipes) ────────────────────────────
-        extras_div = QWidget()
-        extras_div.setObjectName("sidebar-divider")
-        extras_div.setFixedHeight(1)
-        layout.addWidget(extras_div)
         layout.addSpacing(8)
-
-        self._sidebar_extras = self._build_sidebar_extras()
-        layout.addWidget(self._sidebar_extras)
-
         layout.addStretch()
 
         # Sync status indicator — hidden until user is logged in
@@ -284,75 +315,6 @@ class MainWindow(QMainWindow):
         self._nav_buttons[0].setChecked(True)
         return sidebar
 
-    # --------------------------------------------------------- sidebar extras
-
-    def _build_sidebar_extras(self) -> QWidget:
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        vl = QVBoxLayout(container)
-        vl.setContentsMargins(10, 0, 10, 0)
-        vl.setSpacing(10)
-
-        # ── Dishy's Tip card ──────────────────────────────────────────────
-        tip_card = QWidget()
-        tip_card.setStyleSheet(
-            "background-color: rgba(52,211,153,0.06); border-radius: 8px;"
-            " border: 1px solid rgba(52,211,153,0.15);"
-        )
-        tip_layout = QVBoxLayout(tip_card)
-        tip_layout.setContentsMargins(10, 8, 10, 8)
-        tip_layout.setSpacing(4)
-
-        tip_hdr = QHBoxLayout()
-        tip_hdr.setSpacing(5)
-        robot_lbl = QLabel()
-        robot_lbl.setPixmap(qta.icon("fa5s.robot", color="#34d399").pixmap(QSize(11, 11)))
-        robot_lbl.setStyleSheet("background: transparent; border: none;")
-        tip_title = QLabel("Dishy's Tip")
-        tip_title.setStyleSheet(
-            "background: transparent; border: none; color: #34d399;"
-            " font-size: 10px; font-weight: 700; letter-spacing: 0.5px;"
-        )
-        tip_hdr.addWidget(robot_lbl)
-        tip_hdr.addWidget(tip_title)
-        tip_hdr.addStretch()
-        tip_layout.addLayout(tip_hdr)
-
-        self._tip_lbl = QLabel("")
-        self._tip_lbl.setWordWrap(True)
-        self._tip_lbl.setStyleSheet(
-            f"background: transparent; border: none;"
-            f" color: {theme_manager.c('#888888', '#666666')}; font-size: 13px; line-height: 1.4;"
-        )
-        tip_layout.addWidget(self._tip_lbl)
-        vl.addWidget(tip_card)
-
-        return container
-
-    def _refresh_daily_tip(self):
-        today = datetime.now().strftime("%Y-%m-%d")
-        if (self._db.get_setting("daily_tip_date") == today
-                and self._db.get_setting("daily_tip")):
-            self._tip_lbl.setText(self._db.get_setting("daily_tip"))
-            return
-        self._tip_lbl.setText("Loading tip…")
-        run_async(
-            self._claude.daily_tip,
-            on_result=self._on_tip_result,
-            on_error=self._on_tip_error,
-        )
-
-    def _on_tip_error(self, err: str):
-        if "credit balance" in err.lower() or "too low" in err.lower():
-            self._tip_lbl.setText("Add Anthropic credits to get daily tips.")
-        else:
-            self._tip_lbl.setText("Tip unavailable.")
-
-    def _on_tip_result(self, tip: str):
-        today = datetime.now().strftime("%Y-%m-%d")
-        self._db.set_setting("daily_tip", tip)
-        self._db.set_setting("daily_tip_date", today)
-        self._tip_lbl.setText(tip)
 
 
     # ------------------------------------------------------------- content
@@ -392,15 +354,16 @@ class MainWindow(QMainWindow):
 
         # Pages
         self._stack = QStackedWidget()
-        self._shopping_view      = ShoppingListView()
-        self._settings_view      = SettingsView()
-        self._recipes_view       = RecipesView()
+        self._shopping_view      = ShoppingListView(db=self._db)
+        self._settings_view      = SettingsView(db=self._db)
+        self._recipes_view       = RecipesView(db=self._db)
         self._meal_planner_view  = MealPlannerView(
             navigate_to=self._on_nav_clicked,
             shopping_view=self._shopping_view,
+            db=self._db,
         )
         self._dishy_view     = DishyView(db=self._db)
-        self._nutrition_view = NutritionView(navigate_to=self._on_nav_clicked)
+        self._nutrition_view = NutritionView(navigate_to=self._on_nav_clicked, db=self._db)
         self._my_kitchen_storage_view = MyKitchenStorageView(
             db=self._db,
             trigger_sync=self._trigger_cloud_sync,
@@ -408,7 +371,8 @@ class MainWindow(QMainWindow):
             navigate_to=self._on_nav_clicked,
         )
         views = [
-            MyKitchenView(navigate_to=self._on_nav_clicked,
+            MyKitchenView(db=self._db,
+                          navigate_to=self._on_nav_clicked,
                           trigger_dishy=self._trigger_dishy_prompt),  # 0
             self._recipes_view,                                  # 1
             self._meal_planner_view,                             # 2
@@ -453,9 +417,7 @@ class MainWindow(QMainWindow):
         self._dishy_bubble.raise_()
 
         # Wire Dishy tool-calling: actions executor + cross-view refresh
-        _db = Database()
-        _db.connect()
-        _actions = DishyActions(_db)
+        _actions = DishyActions(self._db)
         self._dishy_bubble.setup_actions(_actions, self._on_dishy_refresh)
         self._dishy_view.setup_actions(_actions, self._on_dishy_refresh)
 
@@ -492,6 +454,7 @@ class MainWindow(QMainWindow):
         self._settings_btn.setChecked(False)
         self._stack.setCurrentIndex(index)
         self._dishy_bubble.set_page(self._PAGE_NAMES[index])
+        self._animate_current_page()
         # Refresh the view being shown so it always has up-to-date data
         view = self._stack.widget(index)
         if hasattr(view, "refresh"):
@@ -511,6 +474,7 @@ class MainWindow(QMainWindow):
         self._settings_btn.setChecked(False)
         self._stack.setCurrentIndex(7)
         self._dishy_bubble.set_page("How to use")
+        self._animate_current_page()
 
     def _on_settings_clicked(self):
         current = self._stack.currentIndex()
@@ -523,6 +487,7 @@ class MainWindow(QMainWindow):
         self._settings_btn.setChecked(True)
         self._stack.setCurrentIndex(8)
         self._dishy_bubble.set_page("Settings")
+        self._animate_current_page()
 
     def _go_back(self):
         if not self._nav_history:
@@ -535,6 +500,14 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(prev)
         self._back_bar.setVisible(bool(self._nav_history))
         self._dishy_bubble.set_page(self._PAGE_NAMES[prev])
+        self._animate_current_page()
+
+    def _animate_current_page(self):
+        """Slide-in transition without QGraphics effects (paint-stable)."""
+        view = self._stack.currentWidget()
+        if view is None:
+            return
+        self._page_anim = slide_in_widget(view, offset_px=18, duration_ms=170)
 
     def _toggle_sidebar(self):
         expanded = self._sidebar_expanded
@@ -542,18 +515,24 @@ class MainWindow(QMainWindow):
         end_w   = SIDEBAR_COLLAPSED if expanded else SIDEBAR_EXPANDED
 
         if expanded:
-            # Collapsing — hide expanded labels, show compact date
+            # Collapsing — hide labels, show small logo icon + compact date
             for btn in self._nav_buttons:
                 btn.set_expanded(False)
             self._guide_btn.set_expanded(False)
             self._settings_btn.set_expanded(False)
             self._logo_lbl.setVisible(False)
-            self._logo_icon_lbl.setVisible(False)
+            # Shrink logo icon to fit the collapsed 64px sidebar
+            if os.path.exists(self._icon_src_path):
+                px_small = QPixmap(self._icon_src_path).scaled(
+                    30, 30,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self._logo_icon_lbl.setPixmap(px_small)
             self._sidebar_date_lbl.setVisible(False)
             self._version_lbl.setVisible(False)
             self._ver_num_lbl.setVisible(False)
             self._sidebar_date_compact.setVisible(True)
-            self._sidebar_extras.setVisible(False)
             self._sync_indicator.set_expanded(False)
         grp = QParallelAnimationGroup(self)
         for prop in (b"minimumWidth", b"maximumWidth"):
@@ -571,17 +550,40 @@ class MainWindow(QMainWindow):
                 self._guide_btn.set_expanded(True)
                 self._settings_btn.set_expanded(True)
                 self._logo_lbl.setVisible(True)
-                self._logo_icon_lbl.setVisible(True)
+                # Restore full logo icon size
+                if os.path.exists(self._icon_src_path):
+                    px_big = QPixmap(self._icon_src_path).scaled(
+                        52, 52,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    self._logo_icon_lbl.setPixmap(px_big)
                 self._sidebar_date_lbl.setVisible(True)
                 self._version_lbl.setVisible(True)
                 self._ver_num_lbl.setVisible(True)
                 self._sidebar_date_compact.setVisible(False)
-                self._sidebar_extras.setVisible(True)
                 self._sync_indicator.set_expanded(True)
             grp.finished.connect(_on_expand_done)
 
         grp.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
         self._sidebar_expanded = not expanded
+
+    def resizeEvent(self, event):
+        """Auto-collapse sidebar when window is narrow; re-expand when wide again."""
+        super().resizeEvent(event)
+        if self._in_resize_toggle:
+            return
+        w = event.size().width()
+        if w < 940 and self._sidebar_expanded:
+            self._in_resize_toggle = True
+            self._auto_collapsed = True
+            self._toggle_sidebar()
+            self._in_resize_toggle = False
+        elif w >= 1060 and not self._sidebar_expanded and self._auto_collapsed:
+            self._in_resize_toggle = True
+            self._auto_collapsed = False
+            self._toggle_sidebar()
+            self._in_resize_toggle = False
 
     def _trigger_dishy_prompt(self, text: str):
         """Navigate to DishyView and auto-send a prompt (called from Home)."""
@@ -639,10 +641,9 @@ class MainWindow(QMainWindow):
             f"font-size: 10px; font-weight: 700; color: {theme_manager.c('#888888', '#666666')};"
             " line-height: 1.3; background: transparent; padding: 0;"
         )
-        self._tip_lbl.setStyleSheet(
-            f"background: transparent; border: none;"
-            f" color: {theme_manager.c('#888888', '#666666')}; font-size: 13px; line-height: 1.4;"
-        )
+        self._toggle_btn.setIcon(qta.icon("fa5s.bars", color=_inactive_icon_color()))
+        for btn in [*self._nav_buttons, self._guide_btn, self._settings_btn]:
+            btn._refresh_icon()
         for i in range(self._stack.count()):
             view = self._stack.widget(i)
             if hasattr(view, "apply_theme"):
@@ -673,7 +674,9 @@ class MainWindow(QMainWindow):
         )
         service.sync_error.connect(self._sync_indicator.set_error)
         # Allow the user to manually retry a failed sync by clicking the indicator
-        self._sync_indicator.retry_requested.connect(service.sync_now)
+        self._sync_indicator.retry_requested.connect(
+            getattr(service, "retry_now", service.sync_now)
+        )
         service.realtime_connected.connect(self._on_realtime_connected)
         service.realtime_disconnected.connect(self._on_realtime_disconnected)
         service.remote_change_received.connect(self._on_remote_change_received)
@@ -748,9 +751,7 @@ class MainWindow(QMainWindow):
         self._sync_indicator.set_state("offline")
 
     def set_account_user(self, user: dict | None, sync_service) -> None:
-        """Pass account info to the Settings > Account page. Also loads the daily tip
-        now that a valid session (JWT) is available for the Dishy proxy."""
-        self._refresh_daily_tip()
+        """Pass account info to the Settings > Account page."""
         self._settings_view.set_account_info(user, sync_service)
         # Start meal deduction service after login
         if not hasattr(self, "_meal_deduction_service") or self._meal_deduction_service is None:

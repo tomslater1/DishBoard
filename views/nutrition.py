@@ -11,6 +11,7 @@ from PySide6.QtGui import QPainter, QColor, QPen, QFont
 
 from api.claude_ai import ClaudeAI
 from models.database import Database
+from utils.data_service import get_db
 from utils.workers import run_async
 from utils.macro_goals import MACRO_SPECS, get_macro_goals, get_broadcaster
 
@@ -101,12 +102,11 @@ class MacroRing(QWidget):
 # ------------------------------------------------------------------ view
 
 class NutritionView(QWidget):
-    def __init__(self, navigate_to=None, parent=None):
+    def __init__(self, navigate_to=None, db: Database | None = None, parent=None):
         super().__init__(parent)
         self.setObjectName("view-container")
         self._navigate_to   = navigate_to or (lambda i: None)
-        self._db = Database()
-        self._db.connect()
+        self._db = db or get_db()
 
         # Instance refs to dynamic widgets (refreshed on each _rebuild_content)
         self._rings:            dict[str, MacroRing] = {}
@@ -231,21 +231,22 @@ class NutritionView(QWidget):
 
     def _build_stat_row(self) -> QHBoxLayout:
         today_str = datetime.now().strftime("%Y-%m-%d")
-        # Totals for today come from the meal plan (same source as Today's Log)
+        # Planned totals come from today's meal plan (same source as Planned Meals).
         slots  = self._db.get_today_meal_plan_with_nutrition()
         goals  = get_macro_goals(self._db)
-        totals = {k: 0.0 for k in goals}
+        planned_totals = {k: 0.0 for k in goals}
         for slot in slots:
             per_s = json.loads(slot.get("data_json") or "{}").get("nutrition_per_serving", {})
-            for k in totals:
-                totals[k] += float(per_s.get(k, 0) or 0)
+            for k in planned_totals:
+                planned_totals[k] += float(per_s.get(k, 0) or 0)
+
+        # Logged totals come from nutrition_logs (consumed tracking).
+        logged_rows = self._db.get_nutrition_logs(today_str)
+        logged_kcal = sum(float(r["kcal"] or 0) for r in logged_rows)
 
         week_data   = self._db.get_nutrition_totals_for_range(_week_start(), today_str)
         week_days   = max(week_data["days"], 1)
         week_avg    = week_data["kcal"] / week_days
-
-        month_start = datetime.now().strftime("%Y-%m-01")
-        month_data  = self._db.get_nutrition_totals_for_range(month_start, today_str)
 
         def _tile(icon_name: str, value: str, label: str, colour: str) -> QWidget:
             tile = QWidget()
@@ -275,27 +276,26 @@ class NutritionView(QWidget):
         hl.setSpacing(12)
         hl.addWidget(_tile(
             "fa5s.fire",
-            f"{int(totals['kcal'])} / {int(goals['kcal'])} kcal",
-            "Calories today",
+            f"{int(planned_totals['kcal'])} / {int(goals['kcal'])} kcal",
+            "Planned calories today",
             "#ff6b35",
         ))
         hl.addWidget(_tile(
             "fa5s.dumbbell",
-            f"{totals['protein_g']:.0f}g / {int(goals['protein_g'])}g",
-            "Protein today",
+            f"{planned_totals['protein_g']:.0f}g / {int(goals['protein_g'])}g",
+            "Planned protein today",
             "#4fc3f7",
+        ))
+        hl.addWidget(_tile(
+            "fa5s.clipboard-check",
+            f"{int(logged_kcal)} kcal",
+            "Logged today (consumed)",
+            "#34d399",
         ))
         hl.addWidget(_tile(
             "fa5s.chart-line",
             f"{int(week_avg)} kcal / day",
-            "This week average",
-            "#aed581",
-        ))
-        days_lbl = month_data["days"]
-        hl.addWidget(_tile(
-            "fa5s.calendar-check",
-            f"{days_lbl} day{'s' if days_lbl != 1 else ''}",
-            "Logged this month",
+            "Week avg (logged)",
             "#c084fc",
         ))
         return hl
@@ -314,7 +314,7 @@ class NutritionView(QWidget):
         ic = QLabel()
         ic.setPixmap(qta.icon("fa5s.chart-pie", color=_SECTION_COLOUR).pixmap(QSize(14, 14)))
         ic.setStyleSheet("background: transparent;")
-        hdr_lbl = QLabel("TODAY'S INTAKE")
+        hdr_lbl = QLabel("TODAY'S PLANNED INTAKE")
         hdr_lbl.setStyleSheet(
             f"background: transparent; color: {theme_manager.c('#888888', '#666666')};"
             " font-size: 13px; font-weight: 700; letter-spacing: 1px;"
@@ -418,6 +418,7 @@ class NutritionView(QWidget):
             ("breakfast", "fa5s.egg",            "Breakfast", "#ff9a5c"),
             ("lunch",     "fa5s.utensils",       "Lunch",     "#34d399"),
             ("dinner",    "fa5s.concierge-bell", "Dinner",    "#60a5fa"),
+            ("snack",     "fa5s.apple-alt",      "Snack",     "#f0a500"),
         ]
 
         total_plan_kcal = 0.0
@@ -536,7 +537,7 @@ class NutritionView(QWidget):
         ic = QLabel()
         ic.setPixmap(qta.icon("fa5s.clipboard-list", color=_SECTION_COLOUR).pixmap(QSize(14, 14)))
         ic.setStyleSheet("background: transparent;")
-        hdr_lbl = QLabel("TODAY'S LOG")
+        hdr_lbl = QLabel("TODAY'S PLANNED MEALS")
         hdr_lbl.setStyleSheet(
             f"background: transparent; color: {theme_manager.c('#888888', '#666666')};"
             " font-size: 13px; font-weight: 700; letter-spacing: 1px;"
@@ -569,7 +570,9 @@ class NutritionView(QWidget):
         scroll.setWidget(self._log_rows_container)
         layout.addWidget(scroll, 1)
 
-        self._empty_log_lbl = QLabel("Nothing planned for today — edit your meal plan to see nutrition here →")
+        self._empty_log_lbl = QLabel(
+            "Nothing planned for today — edit your meal plan to populate planned nutrition here →"
+        )
         self._empty_log_lbl.setObjectName("card-body")
         self._empty_log_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_log_lbl.setWordWrap(True)
@@ -611,26 +614,14 @@ class NutritionView(QWidget):
         for i in range(7):
             d     = monday + timedelta(days=i)
             d_str = d.isoformat()
-            if d == today:
-                # Today: sum from meal plan (mirrors Today's Log)
-                try:
-                    plan_slots = self._db.get_today_meal_plan_with_nutrition()
-                    kcal = sum(
-                        float(json.loads(s.get("data_json") or "{}").get(
-                            "nutrition_per_serving", {}).get("kcal", 0) or 0)
-                        for s in plan_slots
-                    )
-                except Exception:
-                    kcal = 0.0
-            else:
-                # Past / future days: use nutrition_logs history
-                try:
-                    db_row = self._db.conn.execute(
-                        "SELECT SUM(kcal) AS total FROM nutrition_logs WHERE log_date=?", (d_str,)
-                    ).fetchone()
-                    kcal = float(db_row["total"] or 0)
-                except Exception:
-                    kcal = 0.0
+            # Weekly chart tracks consumed calories from nutrition logs only.
+            try:
+                db_row = self._db.conn.execute(
+                    "SELECT SUM(kcal) AS total FROM nutrition_logs WHERE log_date=?", (d_str,)
+                ).fetchone()
+                kcal = float(db_row["total"] or 0)
+            except Exception:
+                kcal = 0.0
             days_data.append((d.strftime("%a"), d.day, kcal, d == today))
             if kcal > max_kcal:
                 max_kcal = kcal

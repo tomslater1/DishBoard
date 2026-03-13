@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -22,6 +24,7 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
+          Get-Content requirements.txt | Select-String -Pattern "^ddgs=="
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 

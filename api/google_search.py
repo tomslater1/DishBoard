@@ -1,10 +1,20 @@
-from ddgs import DDGS
+try:
+    # Preferred backend (stable package name on PyPI)
+    from duckduckgo_search import DDGS  # type: ignore
+except Exception:
+    try:
+        # Backwards compatibility for environments that still use `ddgs`
+        from ddgs import DDGS  # type: ignore
+    except Exception:
+        DDGS = None  # type: ignore
 
 
 class GoogleSearchAPI:
     def search_recipes(self, query: str, num: int = 50) -> list[dict]:
         """Search for recipes via DuckDuckGo. Returns list of {title, url, snippet} dicts.
         BBC Good Food results are fetched first and prioritised at the top."""
+        if DDGS is None:
+            return []
         ddgs = DDGS()
 
         def _parse(results):

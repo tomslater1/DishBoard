@@ -19,13 +19,13 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - name: Install dependencies
         shell: pwsh
         run: |
-          Get-Content requirements.txt | Select-String -Pattern "^ddgs=="
-          Get-Content requirements.txt | Select-String -Pattern "^primp=="
+          git rev-parse HEAD
+          Get-Content requirements.txt
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 

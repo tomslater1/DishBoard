@@ -33,7 +33,7 @@ MarkupSafe==3.0.3
 mf2py==2.0.1
 packaging==26.0
 pillow==12.1.1
-primp==1.1.2
+primp==1.0
 pydantic==2.12.5
 pydantic_core==2.41.5
 pyinstaller==6.19.0

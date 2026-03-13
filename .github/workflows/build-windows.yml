@@ -25,6 +25,7 @@ jobs:
         shell: pwsh
         run: |
           Get-Content requirements.txt | Select-String -Pattern "^ddgs=="
+          Get-Content requirements.txt | Select-String -Pattern "^primp=="
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 

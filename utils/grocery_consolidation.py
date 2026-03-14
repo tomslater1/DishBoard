@@ -90,3 +90,45 @@ def consolidate_rows(rows: list[dict]) -> tuple[list[dict], dict]:
         "merged_rows": merged_count,
     }
     return consolidated, stats
+
+
+def build_shopping_overview(rows: list[dict], pantry_items: list[dict] | None = None) -> dict:
+    pantry_names = {_norm_name(str(item.get("name") or "")) for item in (pantry_items or []) if str(item.get("name") or "").strip()}
+    aisle_groups: dict[str, int] = {}
+    estimated_cost = 0.0
+    pantry_overlap = 0
+
+    price_table = {
+        "produce": 1.8,
+        "meat fish": 4.6,
+        "dairy egg": 2.2,
+        "bakery": 1.7,
+        "pantry": 1.3,
+        "frozen": 2.4,
+        "drink": 1.5,
+        "snack": 1.4,
+        "other": 1.2,
+    }
+
+    for row in rows or []:
+        raw_name = str(row.get("name") or "").strip()
+        if not raw_name:
+            continue
+        norm = _norm_name(raw_name)
+        if norm in pantry_names:
+            pantry_overlap += 1
+        aisle = "other"
+        lowered = norm.replace("&", " ")
+        for key in price_table:
+            if key in lowered:
+                aisle = key
+                break
+        aisle_groups[aisle] = aisle_groups.get(aisle, 0) + 1
+        qty = _parse_qty(row.get("quantity"))
+        estimated_cost += price_table.get(aisle, 1.2) * (qty if qty and qty > 0 else 1.0)
+
+    return {
+        "aisle_count": len(aisle_groups),
+        "pantry_overlap_count": pantry_overlap,
+        "estimated_cost": round(estimated_cost, 2),
+    }

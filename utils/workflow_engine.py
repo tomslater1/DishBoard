@@ -49,6 +49,7 @@ class WorkflowEngine(QObject):
     """Runs due jobs from workflow_jobs table on a timer."""
 
     job_finished = Signal(str, bool, str)  # job_key, ok, message
+    runtime_status_changed = Signal(dict)
 
     INTERVAL_MS = 60_000
 
@@ -57,6 +58,8 @@ class WorkflowEngine(QObject):
         self._db_path = db_path
         self._user_id = user_id or ""
         self._running = False
+        self._last_results: list[tuple[str, bool, str]] = []
+        self._last_error = ""
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.run_due_jobs)
@@ -67,23 +70,40 @@ class WorkflowEngine(QObject):
 
     def stop(self) -> None:
         self._timer.stop()
+        self._running = False
+        self.runtime_status_changed.emit(self.runtime_status())
+
+    def runtime_status(self) -> dict:
+        return {
+            "is_running": bool(self._running),
+            "last_error": self._last_error,
+            "last_results": list(self._last_results),
+            "detail": "Scheduled maintenance is running." if self._running else "",
+        }
 
     def run_due_jobs(self) -> None:
         if self._running:
             return
 
         self._running = True
+        self.runtime_status_changed.emit(self.runtime_status())
 
         def _work():
             return self._run_due_jobs_sync()
 
         def _done(results: list[tuple[str, bool, str]]):
             self._running = False
+            self._last_results = list(results or [])
+            failures = [msg for _key, ok, msg in results if not ok]
+            self._last_error = failures[0] if failures else ""
+            self.runtime_status_changed.emit(self.runtime_status())
             for job_key, ok, msg in results:
                 self.job_finished.emit(job_key, ok, msg)
 
         def _error(err: str):
             self._running = False
+            self._last_error = str(err or "")
+            self.runtime_status_changed.emit(self.runtime_status())
             _LOG.warning("workflow runner failed: %s", err)
 
         run_async(_work, on_result=_done, on_error=_error)
@@ -116,6 +136,20 @@ class WorkflowEngine(QObject):
 
                 db.mark_workflow_job_result(job["id"], ok=ok, next_run_at=next_run, last_error=("" if ok else msg))
                 results.append((key, ok, msg))
+                try:
+                    from utils.telemetry import track_event
+
+                    track_event(
+                        "workflow.job_succeeded" if ok else "workflow.job_failed",
+                        {
+                            "job_key": key,
+                            "job_type": str(job.get("job_type") or ""),
+                            "message": msg,
+                        },
+                        user_id=self._user_id,
+                    )
+                except Exception:
+                    pass
         finally:
             db.close()
         return results

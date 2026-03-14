@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 from utils.paths import get_data_dir
 
 
+_UNSET = object()
+
+
 def default_db_path() -> str:
     return os.path.join(get_data_dir(), "dishboard.db")
 
@@ -87,8 +90,19 @@ class Database:
         self._conn: sqlite3.Connection | None = None
 
     def connect(self):
-        self._conn = sqlite3.connect(self.path)
+        # Multiple connections are used by design (UI + background sync workers).
+        # Use WAL + busy timeout and autocommit so brief write contention does
+        # not surface as "database is locked" during normal sync/message bursts.
+        # Autocommit keeps implicit transactions short across the app's many
+        # timers/workers and is safer here than holding a deferred transaction
+        # open until some later commit.
+        self._conn = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
+        try:
+            self._conn.execute("PRAGMA journal_mode = WAL")
+        except Exception:
+            pass
+        self._conn.execute("PRAGMA busy_timeout = 30000")
         self._conn.execute("PRAGMA foreign_keys = ON")
 
     def close(self):
@@ -707,6 +721,410 @@ class Database:
             "orphan_meal_slots": int((orphans["c"] if orphans else 0) or 0),
         }
 
+    def get_visibility_module_updates(self) -> dict[str, dict]:
+        """Return the latest meaningful local update for each visibility module."""
+        last_push = self.get_setting("sync_last_push_at", "")
+        last_pull = self.get_setting("sync_last_pull_at", "")
+        results: dict[str, dict] = {
+            "recipes": {"updated_at": "", "label": "Recipes", "detail": "", "source": "", "target": ""},
+            "planner": {"updated_at": "", "label": "Meal Planner", "detail": "", "source": "", "target": ""},
+            "shopping": {"updated_at": "", "label": "Shopping List", "detail": "", "source": "", "target": ""},
+            "pantry": {"updated_at": "", "label": "My Kitchen", "detail": "", "source": "", "target": ""},
+            "nutrition": {"updated_at": "", "label": "Nutrition", "detail": "", "source": "", "target": ""},
+            "dishy": {"updated_at": "", "label": "Dishy", "detail": "", "source": "", "target": ""},
+            "system": {"updated_at": "", "label": "System", "detail": "", "source": "", "target": ""},
+        }
+
+        def _row_time(row: dict | sqlite3.Row, *keys: str) -> tuple[datetime | None, str]:
+            for key in keys:
+                raw = str((row or {}).get(key) or "").strip() if isinstance(row, dict) else str(row[key] or "").strip()
+                dt = _parse_sync_ts(raw)
+                if dt:
+                    return dt, raw
+            return None, ""
+
+        def _pick_latest(rows, *time_keys: str):
+            best_row = None
+            best_dt = None
+            best_raw = ""
+            for row in rows or []:
+                dt, raw = _row_time(row, *time_keys)
+                if dt is None:
+                    continue
+                if best_dt is None or dt > best_dt:
+                    best_row = row
+                    best_dt = dt
+                    best_raw = raw
+            return best_row, best_raw
+
+        recipe_rows = self.conn.execute(
+            "SELECT id, title, source, updated_at, saved_at FROM recipes "
+            "ORDER BY id DESC LIMIT 80"
+        ).fetchall()
+        row, raw = _pick_latest(recipe_rows, "updated_at", "saved_at")
+        if row is not None:
+            results["recipes"] = {
+                "updated_at": raw,
+                "label": "Recipes",
+                "detail": str(row["title"] or "Recipe updated"),
+                "source": str(row["source"] or "recipes"),
+                "target": str(row["id"] or ""),
+            }
+
+        planner_rows = self.conn.execute(
+            "SELECT mp.id, mp.day_of_week, mp.meal_type, mp.custom_name, mp.updated_at, r.title AS recipe_title "
+            "FROM meal_plans mp "
+            "LEFT JOIN recipes r ON r.id = mp.recipe_id "
+            "ORDER BY mp.id DESC LIMIT 80"
+        ).fetchall()
+        row, raw = _pick_latest(planner_rows, "updated_at")
+        if row is not None:
+            meal_name = str(row["custom_name"] or row["recipe_title"] or "Meal slot").strip()
+            results["planner"] = {
+                "updated_at": raw,
+                "label": "Meal Planner",
+                "detail": f"{str(row['day_of_week'] or '').strip()} {str(row['meal_type'] or '').strip()}: {meal_name}".strip(": "),
+                "source": "meal_plans",
+                "target": str(row["id"] or ""),
+            }
+
+        shopping_rows = self.conn.execute(
+            "SELECT id, name, checked, source, updated_at, added_at FROM shopping_items "
+            "ORDER BY id DESC LIMIT 80"
+        ).fetchall()
+        row, raw = _pick_latest(shopping_rows, "updated_at", "added_at")
+        if row is not None:
+            action = "Checked off" if int(row["checked"] or 0) else "Updated"
+            results["shopping"] = {
+                "updated_at": raw,
+                "label": "Shopping List",
+                "detail": f"{action} {str(row['name'] or 'shopping item').strip()}",
+                "source": str(row["source"] or "shopping_items"),
+                "target": str(row["id"] or ""),
+            }
+
+        pantry_rows = self.conn.execute(
+            "SELECT id, name, storage, quantity, unit, updated_at, added_at FROM pantry_items "
+            "ORDER BY id DESC LIMIT 80"
+        ).fetchall()
+        row, raw = _pick_latest(pantry_rows, "updated_at", "added_at")
+        if row is not None:
+            results["pantry"] = {
+                "updated_at": raw,
+                "label": "My Kitchen",
+                "detail": f"{str(row['name'] or 'Kitchen item').strip()} · {str(row['storage'] or 'Pantry').strip()}",
+                "source": "pantry_items",
+                "target": str(row["id"] or ""),
+            }
+
+        nutrition_rows = self.conn.execute(
+            "SELECT id, food_name, log_date, updated_at, logged_at FROM nutrition_logs "
+            "ORDER BY id DESC LIMIT 80"
+        ).fetchall()
+        row, raw = _pick_latest(nutrition_rows, "updated_at", "logged_at")
+        if row is not None:
+            results["nutrition"] = {
+                "updated_at": raw,
+                "label": "Nutrition",
+                "detail": f"{str(row['food_name'] or 'Nutrition entry').strip()} · {str(row['log_date'] or '').strip()}".strip(" ·"),
+                "source": "nutrition_logs",
+                "target": str(row["id"] or ""),
+            }
+
+        dishy_rows = self.conn.execute(
+            "SELECT id, session_id, role, content, tool_names, updated_at, timestamp FROM dishy_chat_history "
+            "ORDER BY id DESC LIMIT 120"
+        ).fetchall()
+        row, raw = _pick_latest(dishy_rows, "updated_at", "timestamp")
+        if row is not None:
+            body = str(row["content"] or "").strip().replace("\n", " ")
+            detail = body[:80] + ("…" if len(body) > 80 else "")
+            if str(row["role"] or "") == "assistant":
+                detail = detail or "Dishy replied"
+            else:
+                detail = detail or "Asked Dishy"
+            results["dishy"] = {
+                "updated_at": raw,
+                "label": "Dishy",
+                "detail": detail,
+                "source": str(row["session_id"] or "dishy_chat_history"),
+                "target": str(row["id"] or ""),
+            }
+
+        system_candidates: list[dict] = []
+        for raw, label, detail, source in [
+            (last_push, "Cloud sync", "Last push completed", "sync_last_push_at"),
+            (last_pull, "Cloud sync", "Last pull completed", "sync_last_pull_at"),
+        ]:
+            if _parse_sync_ts(raw):
+                system_candidates.append(
+                    {"updated_at": raw, "label": "System", "detail": detail, "source": source, "target": ""}
+                )
+        for row in self.conn.execute(
+            "SELECT event_name, created_at FROM telemetry_events ORDER BY created_at DESC LIMIT 20"
+        ).fetchall():
+            if _parse_sync_ts(row["created_at"]):
+                system_candidates.append(
+                    {
+                        "updated_at": str(row["created_at"] or ""),
+                        "label": "System",
+                        "detail": str(row["event_name"] or "Telemetry event").replace(".", " "),
+                        "source": "telemetry_events",
+                        "target": str(row["event_name"] or ""),
+                    }
+                )
+        for row in self.conn.execute(
+            "SELECT job_key, updated_at, status FROM workflow_jobs ORDER BY updated_at DESC LIMIT 20"
+        ).fetchall():
+            if _parse_sync_ts(row["updated_at"]):
+                system_candidates.append(
+                    {
+                        "updated_at": str(row["updated_at"] or ""),
+                        "label": "System",
+                        "detail": f"{str(row['job_key'] or 'job').strip()} · {str(row['status'] or 'scheduled').strip()}",
+                        "source": "workflow_jobs",
+                        "target": str(row["job_key"] or ""),
+                    }
+                )
+        system_candidates.sort(
+            key=lambda item: _parse_sync_ts(item.get("updated_at")) or datetime.fromtimestamp(0, tz=timezone.utc),
+            reverse=True,
+        )
+        if system_candidates:
+            results["system"] = dict(system_candidates[0])
+
+        return results
+
+    def get_visibility_recent_changes(self, *, limit: int = 30) -> list[dict]:
+        """Return a merged, time-ordered recent activity feed for visibility surfaces."""
+        changes: list[dict] = []
+        per_table = max(4, min(20, int(limit)))
+
+        def _append(item: dict) -> None:
+            ts = str(item.get("occurred_at") or "").strip()
+            if not _parse_sync_ts(ts):
+                return
+            changes.append(
+                {
+                    "kind": str(item.get("kind") or "change"),
+                    "module": str(item.get("module") or "system"),
+                    "title": str(item.get("title") or "").strip(),
+                    "detail": str(item.get("detail") or "").strip(),
+                    "occurred_at": ts,
+                    "source": str(item.get("source") or "").strip(),
+                    "target": str(item.get("target") or "").strip(),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT id, title, source, COALESCE(updated_at, saved_at) AS ts FROM recipes "
+            "WHERE COALESCE(updated_at, saved_at) IS NOT NULL ORDER BY ts DESC LIMIT ?",
+            (per_table,),
+        ).fetchall():
+            _append(
+                {
+                    "kind": "recipe",
+                    "module": "recipes",
+                    "title": f"Saved recipe: {str(row['title'] or 'Untitled recipe').strip()}",
+                    "detail": str(row["source"] or "recipe").strip(),
+                    "occurred_at": str(row["ts"] or ""),
+                    "source": "recipes",
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT mp.id, mp.day_of_week, mp.meal_type, mp.custom_name, mp.updated_at, r.title AS recipe_title "
+            "FROM meal_plans mp LEFT JOIN recipes r ON r.id = mp.recipe_id "
+            "WHERE mp.updated_at IS NOT NULL ORDER BY mp.updated_at DESC LIMIT ?",
+            (per_table,),
+        ).fetchall():
+            meal_name = str(row["custom_name"] or row["recipe_title"] or "Meal slot").strip()
+            _append(
+                {
+                    "kind": "planner",
+                    "module": "planner",
+                    "title": f"Updated {str(row['meal_type'] or 'meal').strip()} plan",
+                    "detail": f"{str(row['day_of_week'] or '').strip()} · {meal_name}".strip(" ·"),
+                    "occurred_at": str(row["updated_at"] or ""),
+                    "source": "meal_plans",
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT id, name, checked, updated_at, added_at FROM shopping_items "
+            "WHERE COALESCE(updated_at, added_at) IS NOT NULL ORDER BY COALESCE(updated_at, added_at) DESC LIMIT ?",
+            (per_table,),
+        ).fetchall():
+            checked = int(row["checked"] or 0) == 1
+            _append(
+                {
+                    "kind": "shopping",
+                    "module": "shopping",
+                    "title": "Checked off shopping item" if checked else "Updated shopping item",
+                    "detail": str(row["name"] or "Shopping item").strip(),
+                    "occurred_at": str(row["updated_at"] or row["added_at"] or ""),
+                    "source": "shopping_items",
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT id, name, storage, updated_at, added_at FROM pantry_items "
+            "WHERE COALESCE(updated_at, added_at) IS NOT NULL ORDER BY COALESCE(updated_at, added_at) DESC LIMIT ?",
+            (per_table,),
+        ).fetchall():
+            _append(
+                {
+                    "kind": "pantry",
+                    "module": "pantry",
+                    "title": "Updated kitchen item",
+                    "detail": f"{str(row['name'] or 'Item').strip()} · {str(row['storage'] or 'Pantry').strip()}",
+                    "occurred_at": str(row["updated_at"] or row["added_at"] or ""),
+                    "source": "pantry_items",
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT id, food_name, log_date, updated_at, logged_at FROM nutrition_logs "
+            "WHERE COALESCE(updated_at, logged_at) IS NOT NULL ORDER BY COALESCE(updated_at, logged_at) DESC LIMIT ?",
+            (per_table,),
+        ).fetchall():
+            _append(
+                {
+                    "kind": "nutrition",
+                    "module": "nutrition",
+                    "title": "Logged nutrition entry",
+                    "detail": f"{str(row['food_name'] or 'Entry').strip()} · {str(row['log_date'] or '').strip()}".strip(" ·"),
+                    "occurred_at": str(row["updated_at"] or row["logged_at"] or ""),
+                    "source": "nutrition_logs",
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT id, session_id, role, content, tool_names, updated_at, timestamp FROM dishy_chat_history "
+            "WHERE COALESCE(updated_at, timestamp) IS NOT NULL "
+            "ORDER BY COALESCE(updated_at, timestamp) DESC LIMIT ?",
+            (max(per_table, 8),),
+        ).fetchall():
+            role = str(row["role"] or "").strip()
+            body = str(row["content"] or "").strip().replace("\n", " ")
+            _append(
+                {
+                    "kind": "ai",
+                    "module": "dishy",
+                    "title": "Dishy replied" if role == "assistant" else "Asked Dishy",
+                    "detail": (body[:100] + ("…" if len(body) > 100 else "")) or "Dishy activity",
+                    "occurred_at": str(row["updated_at"] or row["timestamp"] or ""),
+                    "source": str(row["session_id"] or "dishy_chat_history"),
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT id, notif_type, title, message, severity, created_at FROM in_app_notifications "
+            "ORDER BY created_at DESC LIMIT ?",
+            (per_table,),
+        ).fetchall():
+            module = "system"
+            notif_type = str(row["notif_type"] or "").strip()
+            if notif_type.startswith("pantry_"):
+                module = "pantry"
+            _append(
+                {
+                    "kind": "notification",
+                    "module": module,
+                    "title": str(row["title"] or "Notification").strip(),
+                    "detail": str(row["message"] or "").strip(),
+                    "occurred_at": str(row["created_at"] or ""),
+                    "source": notif_type or "in_app_notifications",
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        for row in self.conn.execute(
+            "SELECT id, entity_type, reason, deleted_at FROM trash_bin ORDER BY deleted_at DESC LIMIT ?",
+            (per_table,),
+        ).fetchall():
+            entity_type = str(row["entity_type"] or "item").replace("_", " ").strip()
+            _append(
+                {
+                    "kind": "trash",
+                    "module": "system",
+                    "title": f"Deleted {entity_type}",
+                    "detail": str(row["reason"] or "deleted").strip(),
+                    "occurred_at": str(row["deleted_at"] or ""),
+                    "source": "trash_bin",
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        telemetry_rows = self.conn.execute(
+            "SELECT id, event_name, properties_json, created_at FROM telemetry_events "
+            "WHERE event_name IN ("
+            "'sync.completed','sync.failed','ai.request_succeeded','ai.request_failed',"
+            "'ai.request_blocked','app.user_session_started','workflow.job_succeeded','workflow.job_failed'"
+            ") ORDER BY created_at DESC LIMIT ?",
+            (max(per_table, 10),),
+        ).fetchall()
+        for row in telemetry_rows:
+            event_name = str(row["event_name"] or "").strip()
+            try:
+                props = json.loads(row["properties_json"] or "{}")
+            except Exception:
+                props = {}
+            title = event_name.replace(".", " ").strip().title()
+            detail = ""
+            module = "system"
+            kind = "system"
+            if event_name == "sync.completed":
+                kind = "sync"
+                title = "Cloud sync completed"
+                detail = f"pushed={int(props.get('pushed', 0) or 0)} · pulled={int(props.get('pulled', 0) or 0)}"
+            elif event_name == "sync.failed":
+                kind = "sync"
+                module = "system"
+                title = "Cloud sync failed"
+                errors = props.get("errors") or []
+                detail = "; ".join(str(e) for e in errors[:2]) if isinstance(errors, list) else str(errors)
+            elif event_name.startswith("ai.request_"):
+                kind = "ai"
+                module = "dishy"
+                title = {
+                    "ai.request_succeeded": "Dishy request completed",
+                    "ai.request_failed": "Dishy request failed",
+                    "ai.request_blocked": "Dishy request blocked",
+                }.get(event_name, title)
+                detail = str(props.get("surface") or props.get("error") or "").strip()
+            elif event_name.startswith("workflow.job_"):
+                kind = "workflow"
+                title = "Background job completed" if event_name.endswith("succeeded") else "Background job failed"
+                detail = str(props.get("job_key") or props.get("job_type") or "").strip()
+            elif event_name == "app.user_session_started":
+                kind = "session"
+                title = "Signed in"
+                detail = str(props.get("email") or "").strip()
+            _append(
+                {
+                    "kind": kind,
+                    "module": module,
+                    "title": title,
+                    "detail": detail,
+                    "occurred_at": str(row["created_at"] or ""),
+                    "source": event_name,
+                    "target": str(row["id"] or ""),
+                }
+            )
+
+        changes.sort(
+            key=lambda item: _parse_sync_ts(item.get("occurred_at")) or datetime.fromtimestamp(0, tz=timezone.utc),
+            reverse=True,
+        )
+        return changes[: max(1, int(limit))]
+
     def run_integrity_scan(self) -> dict:
         """Return a readable data-integrity snapshot across user-facing tables."""
         base = self.get_sync_integrity_report()
@@ -882,7 +1300,7 @@ class Database:
         ).fetchall()
 
     def set_meal_slot(self, week_start: str, day: str, meal_type: str,
-                      custom_name: str = "", recipe_id=None):
+                      custom_name: str = "", recipe_id=None, notes=_UNSET):
         now = _utc_now_iso()
         household_id = self._active_household_id()
         recipe_cloud_id = None
@@ -898,17 +1316,36 @@ class Database:
             (week_start, day, meal_type)
         ).fetchone()
         if existing:
+            current_notes = self.conn.execute(
+                "SELECT notes FROM meal_plans WHERE id=?",
+                (existing["id"],),
+            ).fetchone()
+            next_notes = (
+                current_notes["notes"]
+                if notes is _UNSET and current_notes is not None
+                else (notes or None)
+            )
             self.conn.execute(
-                "UPDATE meal_plans SET custom_name=?, recipe_id=?, recipe_cloud_id=?, updated_at=?, household_id=?"
+                "UPDATE meal_plans SET custom_name=?, recipe_id=?, recipe_cloud_id=?, notes=?, updated_at=?, household_id=?"
                 " WHERE id=?",
-                (custom_name, recipe_id, recipe_cloud_id, now, household_id, existing["id"])
+                (custom_name, recipe_id, recipe_cloud_id, next_notes, now, household_id, existing["id"])
             )
         else:
             self.conn.execute(
                 "INSERT INTO meal_plans"
-                " (week_start, day_of_week, meal_type, custom_name, recipe_id, recipe_cloud_id, updated_at, household_id)"
-                " VALUES (?,?,?,?,?,?,?,?)",
-                (week_start, day, meal_type, custom_name, recipe_id, recipe_cloud_id, now, household_id)
+                " (week_start, day_of_week, meal_type, custom_name, recipe_id, recipe_cloud_id, notes, updated_at, household_id)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    week_start,
+                    day,
+                    meal_type,
+                    custom_name,
+                    recipe_id,
+                    recipe_cloud_id,
+                    None if notes is _UNSET else (notes or None),
+                    now,
+                    household_id,
+                )
             )
         self.conn.commit()
 
@@ -1455,7 +1892,7 @@ class Database:
             m = pattern.match(ingredient.strip())
             if not m:
                 continue
-            qty_str, unit, name = m.group(1), m.group(2), m.group(3).strip()
+            qty_str, _unit, name = m.group(1), m.group(2), m.group(3).strip()
             try:
                 qty = float(qty_str)
             except ValueError:

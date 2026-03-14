@@ -1,53 +1,36 @@
-import json
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
 from utils.theme import manager as theme_manager
-from utils.themed_dialog import ThemedMessageBox
 
 import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QScrollArea, QSizePolicy, QStackedWidget,
-    QDialog, QGridLayout, QComboBox,
-    QFrame, QFileDialog,
+    QSizePolicy, QDialog, QComboBox,
 )
-from PySide6.QtGui import QPixmap, QPainter, QPainterPath
-from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtCore import QTimer
 
-from api.claude_ai import ClaudeAI
-from api.recipe_scraper import scrape_recipe
 from models.database import Database
-from utils.data_service import get_db
-from utils.recipe_search import filter_and_rank_saved_recipes
-from utils.recipe_health import validate_recipe, health_label
-from utils.workers import run_async
 from views.recipe_catalog import (
-    RECIPE_ICONS,
-    RECIPE_COLOURS,
-    RECIPE_TAGS,
     DAYS,
     MEAL_TYPES,
 )
-from widgets.ingredient_row import NutritionIngredientList
-from widgets.primary_button import PrimaryButton
 
 # ── Small helpers ────────────────────────────────────────────────────────────
 
 def _meta_chip(icon_name: str, text: str) -> QWidget:
     w = QWidget()
     w.setStyleSheet(
-        f"background-color: {theme_manager.c('#111111', '#f0f0f0')};"
-        f" border-radius: 6px; border: 1px solid {theme_manager.c('#1c1c1c', '#dddddd')};"
+        f"background-color: {theme_manager.c('#14181c', '#f2ebe2')};"
+        f" border-radius: 12px; border: 1px solid {theme_manager.c('#2a3037', '#ddd1c4')};"
     )
     row = QHBoxLayout(w)
     row.setContentsMargins(10, 5, 10, 5)
     row.setSpacing(6)
     ic = QLabel()
-    ic.setPixmap(qta.icon(icon_name, color=theme_manager.c("#555555", "#777777")).pixmap(QSize(11, 11)))
+    ic.setPixmap(qta.icon(icon_name, color=theme_manager.c("#8d867d", "#756d63")).pixmap(QSize(11, 11)))
     ic.setStyleSheet("background: transparent;")
     lbl = QLabel(text)
-    lbl.setStyleSheet(f"background: transparent; color: {theme_manager.c('#666666', '#555555')}; font-size: 12px;")
+    lbl.setStyleSheet(f"background: transparent; color: {theme_manager.c('#a39c93', '#7c7368')}; font-size: 12px;")
     row.addWidget(ic)
     row.addWidget(lbl)
     return w
@@ -67,24 +50,19 @@ def _section_label(text: str) -> QLabel:
 
 
 def _nutrition_summary_card(per_serving: dict, servings, on_log_today=None) -> QWidget:
-    """Full-width nutrition card — powered by Dishy."""
+    """Full-width nutrition card with restrained metadata styling."""
     card = QWidget()
     card.setObjectName("stat-card")
     vl = QVBoxLayout(card)
     vl.setContentsMargins(20, 16, 20, 18)
     vl.setSpacing(14)
 
-    # ── Header: "Powered by Dishy" left, serving context right ───────────────
+    # ── Header ──────────────────────────────────────────────────────────────
     hdr_row = QHBoxLayout()
-    robot_ic = QLabel()
-    robot_ic.setPixmap(qta.icon("fa5s.robot", color="#34d399").pixmap(QSize(13, 13)))
-    robot_ic.setStyleSheet("background: transparent;")
-    powered_lbl = QLabel("Powered by Dishy")
+    powered_lbl = QLabel("Nutrition Summary")
     powered_lbl.setStyleSheet(
-        "background: transparent; color: #34d399; font-size: 12px; font-weight: 700;"
+        f"background: transparent; color: {theme_manager.c('#f1ece5', '#181510')}; font-size: 13px; font-weight: 700;"
     )
-    hdr_row.addWidget(robot_ic)
-    hdr_row.addSpacing(7)
     hdr_row.addWidget(powered_lbl)
     hdr_row.addStretch()
     is_per_serving = int(servings or 1) > 1
@@ -96,7 +74,7 @@ def _nutrition_summary_card(per_serving: dict, servings, on_log_today=None) -> Q
     hdr_row.addWidget(ctx_lbl)
     vl.addLayout(hdr_row)
 
-    # ── Macro tiles — fill full width, no borders, coloured tints ────────────
+    # ── Macro tiles — fill full width with restrained, mostly neutral chrome ─
     macros_row = QHBoxLayout()
     macros_row.setSpacing(6)
 
@@ -124,19 +102,20 @@ def _nutrition_summary_card(per_serving: dict, servings, on_log_today=None) -> Q
         tile.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         tile.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         tile.setStyleSheet(
-            f"background: {theme_manager.c(bg_d, bg_l)}; border-radius: 10px; border: none;"
+            f"background: {theme_manager.c('#14181c', '#f2ebe2')};"
+            f" border: 1px solid {theme_manager.c('#2a3037', '#ddd1c4')}; border-radius: 10px;"
         )
         tl = QVBoxLayout(tile)
         tl.setContentsMargins(6, 14, 6, 14)
         tl.setSpacing(5)
         num_lbl = QLabel(f"{round(val)}" if label == "kcal" else f"{round(val, 1)}")
         num_lbl.setStyleSheet(
-            f"color: {colour}; font-size: 26px; font-weight: 800;"
+            f"color: {theme_manager.c('#f1ece5', '#181510')}; font-size: 26px; font-weight: 800;"
             " background: transparent; border: none;"
         )
         lbl_lbl = QLabel(label)
         lbl_lbl.setStyleSheet(
-            f"color: {theme_manager.c('#666666', '#888888')}; font-size: 10px; font-weight: 600;"
+            f"color: {theme_manager.c('#8d867d', '#756d63')}; font-size: 10px; font-weight: 600;"
             " letter-spacing: 0.5px; background: transparent; border: none;"
         )
         tl.addWidget(num_lbl, 0, Qt.AlignmentFlag.AlignCenter)
@@ -150,7 +129,7 @@ def _nutrition_summary_card(per_serving: dict, servings, on_log_today=None) -> Q
         log_row.addStretch()
         log_btn = QPushButton("  Log to Today")
         log_btn.setObjectName("ghost-btn")
-        log_btn.setIcon(qta.icon("fa5s.plus-circle", color="#34d399"))
+        log_btn.setIcon(qta.icon("fa5s.plus-circle", color="#ff6b35"))
         log_btn.setIconSize(QSize(12, 12))
         log_btn.setFixedHeight(34)
         log_btn.setToolTip("Log this meal to today's nutrition tracker")
@@ -361,35 +340,35 @@ class DishyNutritionLoadingDialog(QDialog):
         card.setFixedWidth(410)
         card.setStyleSheet(
             f"QWidget#dishy-nutrition-loading {{"
-            f" background: {tm.c('#161616', '#ffffff')};"
-            f" border: 1px solid {tm.c('#2a2a2a', '#e0e0e0')};"
-            f" border-radius: 14px;"
+            f" background: {tm.c('#101417', '#fbf6ef')};"
+            f" border: 1px solid {tm.c('#20262d', '#e2d7ca')};"
+            f" border-radius: 16px;"
             f"}}"
         )
 
         vl = QVBoxLayout(card)
-        vl.setContentsMargins(26, 24, 26, 24)
-        vl.setSpacing(10)
+        vl.setContentsMargins(28, 24, 28, 24)
+        vl.setSpacing(12)
 
         icon = QLabel()
-        icon.setPixmap(qta.icon("fa5s.robot", color="#34d399").pixmap(QSize(32, 32)))
+        icon.setPixmap(qta.icon("fa5s.robot", color="#ff6b35").pixmap(QSize(30, 30)))
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setStyleSheet("background: transparent;")
         vl.addWidget(icon)
 
-        title = QLabel("Dishy is gathering nutrition data")
+        title = QLabel("Dishy Is Gathering Nutrition")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
-            f"background: transparent; color: {tm.c('#f0f0f0', '#1a1a1a')};"
-            "font-size: 15px; font-weight: 700;"
+            f"background: transparent; color: {tm.c('#f1ece5', '#1a140f')};"
+            "font-size: 16px; font-weight: 700;"
         )
         vl.addWidget(title)
 
-        sub = QLabel(f"Fetching and analyzing this recipe from {self._host}")
+        sub = QLabel(f"Pulling the recipe from {self._host} and building a cleaner nutrition summary.")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sub.setWordWrap(True)
         sub.setStyleSheet(
-            f"background: transparent; color: {tm.c('#999999', '#666666')};"
+            f"background: transparent; color: {tm.c('#a39c93', '#6f6459')};"
             "font-size: 12px;"
         )
         vl.addWidget(sub)
@@ -397,17 +376,18 @@ class DishyNutritionLoadingDialog(QDialog):
         self._status = QLabel(f"{self._SPIN[0]}  Working...")
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status.setStyleSheet(
-            "background: rgba(52,211,153,0.10); color: #34d399;"
-            "border: 1px solid rgba(52,211,153,0.30); border-radius: 8px;"
-            "font-size: 12px; font-weight: 700; padding: 8px 10px;"
+            f"background: {tm.c('rgba(255,107,53,0.10)', 'rgba(255,107,53,0.08)')};"
+            "color: #ff6b35;"
+            "border: none; border-radius: 10px;"
+            "font-size: 12px; font-weight: 700; padding: 9px 12px;"
         )
         vl.addWidget(self._status)
 
-        note = QLabel("Please wait — this window will close automatically when ready.")
+        note = QLabel("This closes automatically as soon as the nutrition is ready.")
         note.setAlignment(Qt.AlignmentFlag.AlignCenter)
         note.setWordWrap(True)
         note.setStyleSheet(
-            f"background: transparent; color: {tm.c('#777777', '#888888')};"
+            f"background: transparent; color: {tm.c('#7e776f', '#8a8075')};"
             "font-size: 11px;"
         )
         vl.addWidget(note)
@@ -440,5 +420,3 @@ class DishyNutritionLoadingDialog(QDialog):
         except Exception:
             pass
         self._can_close = True
-
-

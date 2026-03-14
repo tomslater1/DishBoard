@@ -1,29 +1,20 @@
-import json
-import warnings
 import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QLineEdit, QCheckBox,
-    QFrame, QFileDialog, QStackedWidget,
+    QPushButton, QLineEdit,
 )
 from PySide6.QtCore import Qt, QSize, Signal
 
-from models.database import Database
 from utils.data_service import get_db
-from utils.data_validators import sanitize_import_row
+from utils.system_visibility import describe_sync_runtime
 from utils.theme import manager
 from utils.themed_dialog import ThemedMessageBox
-from utils.version import APP_VERSION, VERSION_HISTORY
-from utils.recipe_health import validate_recipe
 from utils.ui_tokens import (
-    checkbox_style as _checkbox_style,
     primary_button_style as _primary_button_style,
     secondary_button_style as _secondary_button_style,
-    subtle_surface_style as _subtle_surface_style,
 )
 from views.settings_helpers import (
     make_sep as _make_sep,
-    selector_style as _selector_style,
     card_widget as _card_widget,
 )
 
@@ -53,9 +44,23 @@ class _AccountPage(QWidget):
         self._user: dict | None = None
         self._sync_service = None
         self._bound_sync_service = None
+        self._visibility_service = None
         self._household_controls_enabled = False
         self._db = get_db()
         self._build()
+
+    def set_visibility_service(self, service) -> None:
+        if self._visibility_service is service:
+            return
+        if self._visibility_service is not None:
+            try:
+                self._visibility_service.snapshot_changed.disconnect(self._on_visibility_changed)
+            except Exception:
+                pass
+        self._visibility_service = service
+        if service is not None:
+            service.snapshot_changed.connect(self._on_visibility_changed)
+        self._refresh_sync_status_card()
 
     def _build(self):
         outer = QVBoxLayout(self)
@@ -410,7 +415,11 @@ class _AccountPage(QWidget):
             self._set_household_enabled(False)
 
         self._refresh_session_diagnostics()
+        self._refresh_sync_status_card()
         self._refresh_household_ui()
+
+    def _on_visibility_changed(self, _snapshot) -> None:
+        self._refresh_sync_status_card()
 
     def _refresh_session_diagnostics(self) -> None:
         try:
@@ -448,23 +457,58 @@ class _AccountPage(QWidget):
                 self._bound_sync_service.sync_error.disconnect(self._on_sync_error)
             except Exception:
                 pass
+            try:
+                self._bound_sync_service.runtime_status_changed.disconnect(self._on_sync_runtime_changed)
+            except Exception:
+                pass
 
         self._bound_sync_service = sync_service
         if sync_service is None:
+            self._refresh_sync_status_card()
             return
         sync_service.sync_finished.connect(self._on_sync_finished)
         sync_service.sync_error.connect(self._on_sync_error)
+        runtime_signal = getattr(sync_service, "runtime_status_changed", None)
+        if runtime_signal is not None:
+            runtime_signal.connect(self._on_sync_runtime_changed)
+
+    def _on_sync_runtime_changed(self, _status: dict) -> None:
+        self._refresh_sync_status_card()
 
     def _on_sync_finished(self, _pushed: int, _pulled: int) -> None:
-        self._sync_status_lbl.setText("Syncing across devices")
         if self._user and not self._user.get("_network_unavailable") and not self._user.get("offline"):
             self._sync_now_btn.setEnabled(True)
+        self._refresh_sync_status_card()
         self._refresh_household_ui()
 
     def _on_sync_error(self, _err: str) -> None:
-        self._sync_status_lbl.setText("Sync temporarily unavailable")
         if self._user and self._sync_service:
             self._sync_now_btn.setEnabled(True)
+        self._refresh_sync_status_card()
+
+    def _refresh_sync_status_card(self) -> None:
+        if not self._user:
+            self._sync_status_lbl.setText("Sign in to enable cloud sync")
+            self._sync_sub_lbl.setText("Your recipes, meal plans and more will sync across devices.")
+            return
+        if self._user.get("_network_unavailable") or self._user.get("offline"):
+            self._sync_status_lbl.setText("Cloud sync unavailable")
+            self._sync_sub_lbl.setText("Sync will resume automatically when internet is available.")
+            return
+        runtime = {}
+        if self._visibility_service is not None:
+            try:
+                runtime = self._visibility_service.snapshot().sync_runtime
+            except Exception:
+                runtime = {}
+        if not runtime and self._sync_service is not None and hasattr(self._sync_service, "runtime_status"):
+            try:
+                runtime = self._sync_service.runtime_status() or {}
+            except Exception:
+                runtime = {}
+        headline, detail = describe_sync_runtime(runtime or {})
+        self._sync_status_lbl.setText(headline)
+        self._sync_sub_lbl.setText(detail)
 
     def _set_household_enabled(self, enabled: bool) -> None:
         self._household_controls_enabled = bool(enabled)
@@ -637,22 +681,28 @@ class _AccountPage(QWidget):
         self._hh_hint_lbl.setStyleSheet(
             f"font-size: 11px; color: {manager.c('#6f6f6f', '#7f7f7f')}; background: transparent;"
         )
-        self._hh_status_box.setStyleSheet(_subtle_surface_style())
-        self._hh_create_box.setStyleSheet(_subtle_surface_style())
-        self._hh_join_box.setStyleSheet(_subtle_surface_style())
+        flat_household_box = "background: transparent; border: none;"
+        self._hh_status_box.setStyleSheet(flat_household_box)
+        self._hh_create_box.setStyleSheet(flat_household_box)
+        self._hh_join_box.setStyleSheet(flat_household_box)
         self._hh_create_lbl.setStyleSheet(
             f"font-size: 11px; font-weight: 600; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
         )
         self._hh_join_lbl.setStyleSheet(
             f"font-size: 11px; font-weight: 600; color: {manager.c('#8a8a8a', '#666666')}; background: transparent;"
         )
-        self._hh_name_input.setStyleSheet(
-            f"QLineEdit {{ background: {manager.c('#111111', '#ffffff')};"
+        hh_input_style = (
+            f"QLineEdit {{ background: transparent;"
             f" color: {manager.c('#e8e8e8', '#1a1a1a')};"
-            f" border: 1px solid {manager.c('#2a2a2a', '#dcdcdc')}; border-radius: 8px; padding: 0 10px; }}"
-            "QLineEdit:focus { border-color: #ff6b35; }"
+            f" border: none; border-bottom: 1px solid {manager.c('#2a2a2a', '#d8cbbd')};"
+            " border-radius: 0; padding: 0 4px; }"
+            f"QLineEdit:focus {{ background: transparent;"
+            " border: none; border-bottom: 1px solid rgba(255,107,53,0.34); }"
         )
-        self._hh_join_input.setStyleSheet(self._hh_name_input.styleSheet())
+        self._hh_name_input.setStyleSheet(
+            hh_input_style
+        )
+        self._hh_join_input.setStyleSheet(hh_input_style)
         self._signin_btn.setStyleSheet(_primary_button_style())
         self._sync_now_btn.setStyleSheet(_secondary_button_style())
         _hh_action_style = _secondary_button_style()
@@ -663,4 +713,3 @@ class _AccountPage(QWidget):
 
 
 # ── Page: Profile ─────────────────────────────────────────────────────────────
-

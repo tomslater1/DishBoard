@@ -58,10 +58,3 @@ def is_online() -> bool:
     except Exception as exc:
         _log.info("Supabase host unreachable: %s", exc)
         return False
-
-
-def is_configured() -> bool:
-    """Return True if Supabase credentials are available (env vars or bundled defaults)."""
-    url = os.environ.get("SUPABASE_URL", "").strip() or _DEFAULT_URL
-    key = os.environ.get("SUPABASE_ANON_KEY", "").strip() or _DEFAULT_KEY
-    return bool(url and key)

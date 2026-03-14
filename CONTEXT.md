@@ -6,25 +6,37 @@
 >
 > After reading this file, also read `HANDOVER.md` for the latest implementation-level refactors,
 > platform notes, runtime architecture, and verification history.
+>
+> For product direction, UX priorities, and the long-term roadmap, also read `NORTH_STAR.md`.
 
 ---
 
 ## What is DishBoard?
 
-A personal recipe manager and meal planner desktop app for macOS, built with Python + PySide6.
-Tom Slater is the sole developer. It is currently a dev-only Python app run via `python3 DishBoard.py`.
+A personal recipe manager and meal planner desktop app for macOS and Windows, built with Python + PySide6.
+Tom Slater is the sole developer. It is currently a dev-first Python app run from source during development and packaged for desktop release.
 
 **Future plans:**
-- Package as a proper macOS `.app` via PyInstaller and share with friends
+- Package as polished desktop releases for both macOS and Windows
 - Eventually a companion iOS app (React Native consuming a thin local or cloud API layer)
 - Update distribution via GitHub Releases + in-app version checker
 
+**Current release snapshot:**
+- Current app version is `v0.71`
+- Phase 1 system state visibility is now completed through the shared visibility service plus Monitoring/account surfaces, rather than a persistent status bar on every page
+- The always-on shell monitoring strip and contextual page banner were removed after testing because they added noise without improving user actionability
+- Dishy, recipe nutrition/enrichment, sync/runtime tracking, and Monitoring integrity actions now publish scoped background work through the shared visibility service
+- Monitoring now acts as the detailed operational drill-down for severity, attention reasons, freshness, recent changes, and background work state
+- The calmer Phase 1 UI system cleanup remains the shared foundation: warmer neutral chrome, reduced action density, and more consistent spacing/toolbars/tabs/cards across the core screens
+- The product north star is now documented in `NORTH_STAR.md`: DishBoard should evolve toward a connected food operations console rather than a collection of disconnected utility pages.
+
 ## Non-Negotiable Guardrail
 
-- DishBoard must continue to run correctly on macOS at all times.
-- No code change should be made for Windows that breaks, weakens, or complicates the macOS app.
+- DishBoard must continue to run correctly on both macOS and Windows at all times.
+- No code change should be made for one desktop platform that breaks, weakens, or complicates the other.
 - Future iOS portability is also a priority, so platform-specific changes should be isolated and should not push the architecture toward Windows-only assumptions.
 - When making cross-platform changes, prefer additive or isolated platform handling over altering shared behaviour in a way that could regress macOS or future iOS work.
+- Every meaningful implementation change should also be logged in `HANDOVER.md` so work can move cleanly between machines and assistants.
 
 ---
 
@@ -36,7 +48,7 @@ Tom Slater is the sole developer. It is currently a dev-only Python app run via 
 | Styling | qt_material dark_amber base + custom `theme.qss` + `theme_light.qss` |
 | Database | SQLite via sqlite3 (`dishboard.db` in project root) |
 | AI | Anthropic Claude (claude-haiku-4-5-20251001 for chat, claude-sonnet-4-6 for tool-use) |
-| Web search | Google Custom Search API |
+| Web search | Direct scrapeable recipe-site search (BBC Good Food + Delish) |
 | Async | QThreadPool + custom `Worker`/`run_async` in `utils/workers.py` |
 | Icons | qtawesome (Font Awesome 5) |
 | Env / keys | All API keys stored in SQLite settings table, loaded into `os.environ` at startup |
@@ -52,6 +64,7 @@ DishBoard/
 ├── DishBoard.py                 # Thin bootstrap — sets cert env vars, resolves assets, launches ApplicationController
 ├── main_window.py               # QMainWindow: sidebar nav + QStackedWidget content area
 ├── CONTEXT.md                   # ← this file
+├── NORTH_STAR.md                # product direction: food operations console goals + roadmap
 ├── HANDOVER.md                  # detailed implementation handover for future humans / AI assistants
 │
 ├── views/
@@ -74,7 +87,7 @@ DishBoard/
 ├── api/
 │   ├── claude_ai.py             # Anthropic client: chat(), chat_with_tools(), lookup_nutrition()
 │   ├── dishy_tools.py           # Tool schemas (TOOLS list) + DishyActions executor
-│   ├── google_search.py         # Google Custom Search wrapper for recipe URL discovery
+│   ├── google_search.py         # Direct recipe-site search helper for scrapeable recipe URL discovery
 │   └── recipe_scraper.py        # Web scraper: extracts ingredients/instructions from recipe URLs
 │
 ├── auth/
@@ -330,6 +343,10 @@ color = theme_manager.c('#c8c8c8', '#333333')  # dark, light
 
 | Version | Summary |
 |---|---|
+| v0.71 | Cleanup + flow refresh release: removed dead/orphaned code, redesigned onboarding and the app tour to match the current visual system, replaced Shopping List smart-summary text with a cleaner estimated total treatment, removed the noisy planner mode banner text, and clarified the Home page purpose copy |
+| v0.70 | Completed Phase 1 system state visibility through the shared visibility service and Monitoring/account surfaces, standardized scoped runtime work tracking, and removed the low-value always-on shell visibility chrome |
+| v0.68 | Phase 1 UI system cleanup foundation: restrained warm-neutral redesign across core screens, search-first Recipes rework, calmer Dishy workspace, cleaner Settings/Help prioritisation, and direct scrapeable recipe-site search for working web results |
+| v0.67 | Planner intelligence, reusable templates, pantry rescue, leftover/prep metadata, smarter shopping generation, nutrition coaching, and scaled recipe details |
 | v0.66 | Windows compatibility milestone: OS-aware app-data paths, cross-platform file-open/export flows, Windows-ready PyInstaller spec/icon/keyring backend, updater asset selection by platform, and Windows build scripts (`build_windows.ps1` / `.bat`) |
 | v0.37 | Smart shopping lists (consolidate, practical units, skip pantry staples, pantry mode teaser); clear_meal_day tool; clear_meal_plan all_weeks support; meal planner wipe fixed |
 | v0.36 | Instant cloud sync on every data change; Today's Log reads directly from meal planner (no duplicates); macro rings driven by meal plan; NutritionSyncService removed |
@@ -379,10 +396,10 @@ color = theme_manager.c('#c8c8c8', '#333333')  # dark, light
 | v0.58 | Dishy bubble UI redesign: avatar on Dishy messages + typing indicator; gradient FAB; card-colour panel bg; themed input field; icon close button; removed tools badge; indented action pills; 16px corner radius; styled scrollbar |
 | v0.57 | Responsive scaling: sidebar auto-collapses at <940px window width (re-expands at >1060px); logo icon always visible (30px collapsed / 52px expanded); Dishy's Tip removed from sidebar; window minimum 780×520; meal planner, recipes, shopping list minimum size constraints lowered |
 
-**Current version: v0.61**
+**Current version: v0.71**
 
 > IMPORTANT: Always increment version on every session that makes changes. Do NOT reach v1.0 without explicit user approval.
-> When bumping version: (1) update `APP_VERSION` in `utils/version.py`, (2) prepend a new entry to `VERSION_HISTORY` in the same file, (3) update CONTEXT.md and MEMORY.md version tables.
+> When bumping version: (1) prepend a new entry to `assets/metadata/version_history.json`, (2) confirm `utils/version.py` still loads the JSON metadata correctly, and (3) update `CONTEXT.md`, `HANDOVER.md`, and `NORTH_STAR.md` when the change affects release history or product direction.
 
 ---
 

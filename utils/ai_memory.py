@@ -85,15 +85,16 @@ def _build_corpus(db: Database) -> list[MemorySnippet]:
 
     # Recipes
     for row in db.get_saved_recipes()[:300]:
+        row_d = dict(row)
         try:
-            data = json.loads(row["data_json"] or "{}")
+            data = json.loads(row_d.get("data_json") or "{}")
         except Exception:
             data = {}
         tags = ", ".join(data.get("tags", []))
         ingredients = ", ".join((data.get("ingredients", []) or [])[:15])
-        desc = data.get("description", "") or row.get("summary", "")
+        desc = data.get("description", "") or row_d.get("summary", "")
         text = (
-            f"Recipe: {row['title']}. Tags: {tags}. Ingredients: {ingredients}. "
+            f"Recipe: {row_d.get('title', '')}. Tags: {tags}. Ingredients: {ingredients}. "
             f"Description: {desc}"
         )
         snippets.append(MemorySnippet("recipe", text))
@@ -106,10 +107,11 @@ def _build_corpus(db: Database) -> list[MemorySnippet]:
         week_start = (today - timedelta(days=today.weekday())).isoformat()
         rows = db.get_meal_plan(week_start)
         for row in rows:
+            row_d = dict(row)
             snippets.append(
                 MemorySnippet(
                     "meal_plan",
-                    f"{row['day_of_week']} {row['meal_type']}: {row.get('custom_name') or ''}",
+                    f"{row_d.get('day_of_week', '')} {row_d.get('meal_type', '')}: {row_d.get('custom_name') or ''}",
                 )
             )
     except Exception:
@@ -126,7 +128,8 @@ def _build_corpus(db: Database) -> list[MemorySnippet]:
 
     # Shopping list
     for row in db.get_shopping_items()[:200]:
-        snippets.append(MemorySnippet("shopping", f"Shopping: {row['name']} {row.get('quantity') or ''} {row.get('unit') or ''}".strip()))
+        row_d = dict(row)
+        snippets.append(MemorySnippet("shopping", f"Shopping: {row_d.get('name', '')} {row_d.get('quantity') or ''} {row_d.get('unit') or ''}".strip()))
 
     # Recent nutrition logs
     try:
@@ -192,3 +195,15 @@ def build_memory_context(db: Database, query: str, *, max_items: int = 12) -> st
         return ""
 
     return "## Retrieved memory\n" + "\n".join(selected)
+
+
+def memory_source_summary(db: Database) -> dict:
+    snippets = _build_corpus(db)
+    counts: dict[str, int] = {}
+    for snip in snippets:
+        counts[snip.source] = counts.get(snip.source, 0) + 1
+    return {
+        "counts": counts,
+        "total": len(snippets),
+        "chat_sessions": len(db.get_dishy_sessions_summary()),
+    }

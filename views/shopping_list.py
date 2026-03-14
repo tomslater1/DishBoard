@@ -8,17 +8,24 @@ from PySide6.QtWidgets import (
     QLineEdit, QScrollArea, QCheckBox, QSizePolicy, QFrame,
     QStackedWidget, QProgressBar,
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QPainter, QColor
 
 from utils.theme import manager as theme_manager
 from utils.themed_dialog import ThemedMessageBox
 from utils.data_service import get_db
-from utils.grocery_consolidation import consolidate_rows
+from utils.grocery_consolidation import build_shopping_overview, consolidate_rows
 from utils.platform_ops import run_apple_script, is_macos, open_path_in_default_app, user_documents_dir
 from models.database import Database
 from widgets.primary_button import PrimaryButton
-from widgets.dishy_main_request_button import DishyMainRequestButton
+from widgets.page_scaffold import (
+    EmptyStateCard,
+    PageScaffold,
+    PageToolbar,
+    SegmentedTabs,
+    StatStrip,
+    StatusBanner,
+)
 
 
 # ── Category definitions ──────────────────────────────────────────────────────
@@ -124,6 +131,55 @@ class _MiniBar(QWidget):
         p.end()
 
 
+class _EstimatedSpendCard(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._amount = 0.0
+        self._build()
+        self.apply_theme()
+
+    def _build(self):
+        row = QHBoxLayout(self)
+        row.setContentsMargins(4, 2, 4, 2)
+        row.setSpacing(8)
+
+        self._icon = QLabel(self)
+        self._icon.setFixedSize(22, 22)
+        self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self._icon, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(2)
+
+        self._label = QLabel("Estimated total", self)
+        text_col.addWidget(self._label)
+
+        self._value = QLabel("£0.00", self)
+        text_col.addWidget(self._value)
+
+        row.addLayout(text_col, 1)
+
+    def set_amount(self, amount: float):
+        self._amount = max(0.0, float(amount or 0.0))
+        self._value.setText(f"£{self._amount:.2f}")
+
+    def apply_theme(self):
+        self.setStyleSheet("background: transparent; border: none;")
+        self._icon.setPixmap(qta.icon("fa5s.receipt", color="#ff6b35").pixmap(QSize(12, 12)))
+        self._icon.setStyleSheet("background: transparent; border: none;")
+        self._label.setStyleSheet(
+            f"color: {theme_manager.c('#8c867e', '#7b7268')};"
+            "font-size: 10px; font-weight: 700; letter-spacing: 0.2px;"
+            "background: transparent;"
+        )
+        self._value.setStyleSheet(
+            f"color: {theme_manager.c('#f2eee8', '#181510')};"
+            "font-size: 18px; font-weight: 700;"
+            "background: transparent;"
+        )
+
+
 # ── Individual item row ───────────────────────────────────────────────────────
 
 class _Item(QWidget):
@@ -131,6 +187,7 @@ class _Item(QWidget):
         super().__init__(parent)
         self.db_id = db_id
         self._source = source
+        self._highlighted = False
         self.setFixedHeight(40)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
@@ -167,6 +224,12 @@ class _Item(QWidget):
 
     def _style(self, checked):
         dark = theme_manager.mode == "dark"
+        self.setStyleSheet(
+            (
+                f"background:{theme_manager.c('rgba(255,107,53,0.10)', 'rgba(255,107,53,0.08)')};"
+                "border-radius:8px;"
+            ) if self._highlighted else "background:transparent;"
+        )
         ind = (
             "QCheckBox{outline:0}"
             "QCheckBox::indicator{width:18px;height:18px;border-radius:9px;border:1.5px solid;image:none}"
@@ -201,6 +264,15 @@ class _Item(QWidget):
 
     def item_text(self):
         return self._chk.text()
+
+    def highlight_temporarily(self, duration_ms: int = 1800):
+        self._highlighted = True
+        self._style(self._chk.isChecked())
+        QTimer.singleShot(duration_ms, self._clear_highlight)
+
+    def _clear_highlight(self):
+        self._highlighted = False
+        self._style(self._chk.isChecked())
 
 
 # ── Collapsible section card ──────────────────────────────────────────────────
@@ -687,6 +759,7 @@ class ShoppingListView(QWidget):
         self._db = db or get_db()
         self._sections: dict[str, _Section] = {}
         self._all_items: list[_Item] = []
+        self._current_rows: list[dict] = []
         self._ask_dishy_fn = None
         self._sync_fn = None
         self._notify_my_kitchen_fn = None
@@ -718,27 +791,39 @@ class ShoppingListView(QWidget):
     def _build_ui(self):
         self.setMinimumHeight(320)  # prevents the view from collapsing at small window heights
         root = QVBoxLayout(self)
-        root.setContentsMargins(36, 32, 36, 24)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Tab bar (top) ────────────────────────────────────────────────────
-        tab_row = QHBoxLayout()
-        tab_row.setSpacing(8)
-        tab_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self._tab_btns: dict[str, QPushButton] = {}
-        for tab_name in ("Shopping List", "Live Shop"):
-            btn = QPushButton(tab_name)
-            btn.setFixedHeight(34)
-            btn.setCheckable(True)
-            btn.setChecked(tab_name == self._current_tab)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(lambda checked=False, t=tab_name: self._switch_tab(t))
-            self._tab_btns[tab_name] = btn
-            tab_row.addWidget(btn)
-        tab_row.addStretch()
-        root.addLayout(tab_row)
-        root.addSpacing(16)
-        self._style_tabs()
+        self._scaffold = PageScaffold(
+            "Shopping List",
+            "Build the week's list, tidy it up, and switch to Live Shop when you're ready to buy.",
+            eyebrow="Food Operations",
+            parent=self,
+        )
+        root.addWidget(self._scaffold)
+
+        toolbar = PageToolbar(self._scaffold)
+        self._page_tabs = SegmentedTabs(
+            [("Shopping List", "Shopping List"), ("Live Shop", "Live Shop")],
+            self._scaffold,
+        )
+        self._page_tabs.tab_changed.connect(self._switch_tab)
+        toolbar.add_left(self._page_tabs)
+        self._scaffold.set_toolbar(toolbar)
+
+        self._context_banner = StatusBanner(
+            "Start by pulling ingredients from your meal plan. When you begin shopping, switch to Live Shop for a simpler aisle-by-aisle checklist.",
+            "system",
+            self._scaffold,
+        )
+        self._scaffold.set_banner(self._context_banner)
+
+        self._stat_bar = StatStrip(self._scaffold, density="compact")
+        self._n_total = self._stat_bar.add_stat("total", "0", "Total items", "#f0a500")["value"]
+        self._n_left = self._stat_bar.add_stat("left", "0", "Still to get", "#34d399")["value"]
+        self._n_done = self._stat_bar.add_stat("done", "0", "In basket", "#7c6af7")["value"]
+        self._n_cats = self._stat_bar.add_stat("cats", "0", "Active groups", "#4fc3f7")["value"]
+        self._scaffold.set_stats(self._stat_bar)
 
         # ── Tab stack ────────────────────────────────────────────────────────
         self._view_stack = QStackedWidget(self)
@@ -757,99 +842,83 @@ class ShoppingListView(QWidget):
         )
         self._view_stack.addWidget(self._tab_live_shop)
 
-        root.addWidget(self._view_stack, 1)
+        self._scaffold.body_layout().addWidget(self._view_stack, 1)
 
         # ── Now build the shopping list content into tab 0 ───────────────────
         self._build_shopping_tab()
+        self._page_tabs.set_current(self._current_tab)
 
         theme_manager.theme_changed.connect(self.apply_theme)
         self.load_from_db()
 
     def _switch_tab(self, tab_name: str):
         self._current_tab = tab_name
-        for t, btn in self._tab_btns.items():
-            btn.setChecked(t == tab_name)
-        self._style_tabs()
+        if self._page_tabs.current_key() != tab_name:
+            self._page_tabs.set_current(tab_name)
         idx = {"Shopping List": 0, "Live Shop": 1}[tab_name]
         self._view_stack.setCurrentIndex(idx)
         if tab_name == "Live Shop":
             self._tab_live_shop.refresh()
+            self._context_banner.set_variant("success")
+            self._context_banner.set_text("Live Shop strips things back to what still needs buying, grouped in a simpler in-store order.")
+        else:
+            self._context_banner.set_variant("system")
+            self._context_banner.set_text(
+                "Start by pulling ingredients from your meal plan. When you begin shopping, switch to Live Shop for a simpler aisle-by-aisle checklist."
+            )
 
-    def _style_tabs(self):
-        dark = theme_manager.mode == "dark"
-        for name, btn in self._tab_btns.items():
-            if btn.isChecked():
-                btn.setStyleSheet(
-                    "QPushButton{background:#f0a500;border:none;border-radius:17px;"
-                    "color:#ffffff;font-size:13px;font-weight:600;padding:0 16px}"
-                )
-            else:
-                unchecked_bg = "rgba(255,255,255,0.05)" if dark else "rgba(0,0,0,0.05)"
-                unchecked_txt = "#888888" if dark else "#666666"
-                border_col = "#2a2a2a" if dark else "#dddddd"
-                btn.setStyleSheet(
-                    f"QPushButton{{background:{unchecked_bg};border:1px solid {border_col};"
-                    f"border-radius:17px;color:{unchecked_txt};font-size:13px;padding:0 16px}}"
-                    f"QPushButton:hover{{background:{'rgba(255,255,255,0.08)' if dark else 'rgba(0,0,0,0.08)'}}}"
-                )
+    def show_root_page(self):
+        """Return Shopping List to its default list tab."""
+        self._switch_tab("Shopping List")
+
+    def activate_shopping_list(self) -> None:
+        """Palette-safe entrypoint for the editable shopping list."""
+        self._switch_tab("Shopping List")
+
+    def activate_add_item(self, text: str = "") -> None:
+        """Palette-safe entrypoint for quickly adding a shopping item."""
+        self.activate_shopping_list()
+        self._input.setText(text)
+        QTimer.singleShot(0, lambda: self._input.setFocus(Qt.FocusReason.ShortcutFocusReason))
+
+    def focus_item(self, item_id: int) -> bool:
+        """Reveal and briefly highlight a shopping item by DB id."""
+        self.activate_shopping_list()
+        self.load_from_db()
+        for item in self._all_items:
+            if int(item.db_id or 0) != int(item_id):
+                continue
+            self._shopping_scroll.ensureWidgetVisible(item, 0, 80)
+            item.highlight_temporarily()
+            return True
+        return False
+
+    def save_item_from_palette(self, name: str, quantity: str = "", unit: str = "") -> int:
+        item_id = self._db.add_shopping_item(name, quantity=quantity, unit=unit)
+        self.load_from_db()
+        if self._sync_fn:
+            self._sync_fn()
+        return int(item_id or 0)
 
     def _build_shopping_tab(self):
         """Build the existing shopping list UI into _tab_shopping_layout."""
         sl = self._tab_shopping_layout
-
-        # Header
-        self._title_lbl = QLabel("Shopping List")
-        self._title_lbl.setObjectName("page-title")
-        self._sub_lbl = QLabel("Tap a category to expand · check items off as you shop")
-        self._sub_lbl.setObjectName("page-date")
-        sl.addWidget(self._title_lbl)
-        sl.addWidget(self._sub_lbl)
-        sl.addSpacing(20)
-
-        # Stats row
-        self._stat_bar = QWidget(self)
-        self._stat_bar.setObjectName("stat-bar")
-        sb = QHBoxLayout(self._stat_bar)
-        sb.setContentsMargins(16, 12, 16, 12)
-        sb.setSpacing(0)
-
-        def _chip(val, lbl, col):
-            w = QWidget(self._stat_bar)
-            v = QVBoxLayout(w)
-            v.setContentsMargins(0, 0, 0, 0)
-            v.setSpacing(2)
-            v.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            n = QLabel(val, w)
-            n.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            n.setStyleSheet(f"color:{col};font-size:22px;font-weight:700;background:transparent")
-            t = QLabel(lbl, w)
-            t.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            t.setStyleSheet("font-size:11px;font-weight:500;color:#888888;background:transparent")
-            v.addWidget(n)
-            v.addWidget(t)
-            return w, n
-
-        self._w_total, self._n_total = _chip("0", "total", "#f0a500")
-        self._w_left,  self._n_left  = _chip("0", "to get", "#34d399")
-        self._w_done,  self._n_done  = _chip("0", "in basket", "#7c6af7")
-        self._w_cats,  self._n_cats  = _chip("0", "categories", "#4fc3f7")
-        for w in (self._w_total, self._w_left, self._w_done, self._w_cats):
-            sb.addWidget(w, 1)
-
-        sl.addWidget(self._stat_bar)
-        sl.addSpacing(4)
+        self._estimated_spend = _EstimatedSpendCard(self._tab_shopping)
+        sl.addWidget(self._estimated_spend)
+        sl.addSpacing(8)
 
         # Progress bar
         self._bar = _MiniBar("#f0a500", self)
         sl.addWidget(self._bar)
-        sl.addSpacing(20)
+        sl.addSpacing(16)
 
         # Action row
-        ar = QHBoxLayout()
-        ar.setSpacing(8)
+        actions = PageToolbar(self._tab_shopping, density="compact")
 
-        # Dishy generate button (green, AI-branded)
-        self._btn_gen = DishyMainRequestButton("Generate from Meal Plan", parent=self)
+        self._btn_gen = PrimaryButton("Generate from Meal Plan")
+        self._btn_gen.setIcon(qta.icon("fa5s.magic", color="#ffffff"))
+        self._btn_gen.setIconSize(QSize(13, 13))
+        self._btn_gen.setFixedHeight(38)
         self._btn_gen.clicked.connect(self._ask_dishy)
 
         self._btn_dishy = QPushButton("  Ask Dishy")
@@ -884,13 +953,16 @@ class ShoppingListView(QWidget):
         self._btn_consolidate.setToolTip("Merge duplicate list items and keep quantities tidy")
         self._btn_consolidate.clicked.connect(self._smart_consolidate)
 
-        ar.addWidget(self._btn_gen)
-        ar.addWidget(self._btn_dishy)
-        ar.addStretch()
-        ar.addWidget(self._btn_consolidate)
-        ar.addWidget(self._btn_export)
-        ar.addWidget(self._btn_clear)
-        sl.addLayout(ar)
+        actions.set_primary_action(self._btn_gen)
+        actions.add_secondary_action(self._btn_export)
+        actions.set_overflow_actions(
+            [
+                {"label": "Merge duplicates", "handler": self._smart_consolidate},
+                {"label": "Clear checked", "handler": self._clear_checked},
+                {"label": "Ask Dishy", "handler": self._open_dishy_chat},
+            ]
+        )
+        sl.addWidget(actions)
         sl.addSpacing(14)
 
         # Add item row
@@ -914,6 +986,7 @@ class ShoppingListView(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("QScrollArea{border:none;background:transparent}")
+        self._shopping_scroll = scroll
 
         self._scroll_contents = QWidget()
         self._scroll_contents.setStyleSheet("background:transparent")
@@ -921,39 +994,22 @@ class ShoppingListView(QWidget):
         self._vbox.setContentsMargins(0, 0, 0, 0)
         self._vbox.setSpacing(10)
 
-        self._empty = QLabel(
-            "Your list is empty.\nGenerate from your meal plan or add items above.",
-            self._scroll_contents,
+        self._empty = EmptyStateCard(
+            "Your list is empty",
+            "Generate from your meal plan or add items above to start building a cleaner grocery run.",
+            icon="List",
+            parent=self._scroll_contents,
         )
-        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty.setObjectName("card-body")
         self._vbox.addWidget(self._empty)
         self._vbox.addStretch()
 
         scroll.setWidget(self._scroll_contents)
         sl.addWidget(scroll, 1)
 
-        self._style_chrome()
-
-    def _style_chrome(self):
-        dark = theme_manager.mode == "dark"
-        bg = "#0f0f0f" if dark else "#ffffff"
-        border = "#1e1e1e" if dark else "#eeeeee"
-        input_col = "#d8d8d8" if dark else "#1a1a1a"
-        self._stat_bar.setStyleSheet(
-            f"QWidget#stat-bar{{background:{bg};border:1px solid {border};border-radius:12px}}"
-        )
-        self._input.setStyleSheet(
-            f"QLineEdit{{background:{'#111111' if dark else '#f5f5f5'};"
-            f"border:1px solid {border};border-radius:8px;"
-            f"color:{input_col};font-size:14px;padding:0 12px}}"
-        )
-
     def apply_theme(self, _=None):
-        self._style_chrome()
-        self._style_tabs()
         for s in self._sections.values():
             s.apply_theme()
+        self._estimated_spend.apply_theme()
         self._bar.update()
 
     # ── Data ──────────────────────────────────────────────────────────────────
@@ -976,6 +1032,7 @@ class ShoppingListView(QWidget):
             rows = self._db.get_shopping_items()
         except Exception:
             rows = []
+        self._current_rows = [dict(r) for r in rows]
 
         self._empty.setVisible(not rows)
 
@@ -1024,11 +1081,14 @@ class ShoppingListView(QWidget):
         done = sum(1 for i in self._all_items if i.is_checked())
         left = total - done
         cats = len(self._sections)
+        pantry_items = self._db.get_pantry_items()
+        overview = build_shopping_overview(self._current_rows, pantry_items)
         self._n_total.setText(str(total))
         self._n_left.setText(str(left))
         self._n_done.setText(str(done))
         self._n_cats.setText(str(cats))
         self._bar.set_pct(done / total if total else 0.0)
+        self._estimated_spend.set_amount(overview.get("estimated_cost", 0))
 
     # ── Actions ───────────────────────────────────────────────────────────────
 

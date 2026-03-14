@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QSize
 
 from utils.theme import manager as theme_manager
+from widgets.page_scaffold import PageScaffold, SectionHeader
 
 
 _SECTIONS = [
@@ -197,6 +198,35 @@ def _feature_item(text: str) -> QWidget:
     return row
 
 
+def _panel_style() -> str:
+    return (
+        "QWidget {"
+        f"  background: {theme_manager.c('#101215', '#fcf8f2')};"
+        "  border: none;"
+        "  border-radius: 16px;"
+        "}"
+    )
+
+
+def _secondary_button_style() -> str:
+    return (
+        "QPushButton {"
+        f"  color: {theme_manager.c('#e4ddd4', '#241d16')};"
+        f"  background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+        "  border: none;"
+        "  border-radius: 9px; padding: 0 14px; font-size: 13px; font-weight: 600;"
+        "}"
+        "QPushButton:hover {"
+        f"  background: {theme_manager.c('rgba(255,255,255,0.05)', 'rgba(255,107,53,0.05)')};"
+        "  border-color: rgba(255,107,53,0.32);"
+        "}"
+    )
+
+
+def _muted_icon_colour() -> str:
+    return theme_manager.c("#ff8a5d", "#d76432")
+
+
 def _connects_row(connects: list, navigate_to) -> QWidget:
     row = QWidget()
     row.setStyleSheet("background: transparent; border: none;")
@@ -206,27 +236,19 @@ def _connects_row(connects: list, navigate_to) -> QWidget:
 
     lbl = QLabel("Links with:")
     lbl.setStyleSheet(
-        f"color: {theme_manager.c('#666666', '#888888')};"
+        f"color: {theme_manager.c('#7a736b', '#8b8176')};"
         " font-size: 13px; background: transparent; border: none;"
     )
     hl.addWidget(lbl)
 
-    for idx, icon_name, colour, title in connects:
+    for idx, icon_name, _colour, title in connects:
         btn = QPushButton()
-        btn.setIcon(qta.icon(icon_name, color=colour).pixmap(QSize(11, 11)))
+        btn.setIcon(qta.icon(icon_name, color=_muted_icon_colour()).pixmap(QSize(11, 11)))
         btn.setIconSize(QSize(11, 11))
         btn.setText(f"  {title}")
         btn.setFixedHeight(24)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setStyleSheet(
-            f"QPushButton {{"
-            f"  color: {colour}; font-size: 12px; font-weight: 500;"
-            f"  background: {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.04)')};"
-            f"  border: 1px solid {theme_manager.c('rgba(255,255,255,0.1)', 'rgba(0,0,0,0.1)')};"
-            f"  border-radius: 5px; padding: 0 8px;"
-            f"}}"
-            f"QPushButton:hover {{ background: {theme_manager.c('rgba(255,255,255,0.12)', 'rgba(0,0,0,0.08)')}; }}"
-        )
+        btn.setStyleSheet(_secondary_button_style())
         _i = idx
         btn.clicked.connect(lambda _, i=_i: navigate_to(i))
         hl.addWidget(btn)
@@ -238,34 +260,27 @@ def _connects_row(connects: list, navigate_to) -> QWidget:
 def _section_card(section: dict, navigate_to) -> QWidget:
     card = QWidget()
     card.setObjectName("help-card")
-    card.setStyleSheet(
-        "QWidget#help-card {"
-        f"  background: {theme_manager.c('#111111', '#ffffff')};"
-        "  border-radius: 14px;"
-        f"  border: 1px solid {theme_manager.c('#1e1e1e', '#e0e0e0')};"
-        "}"
-    )
+    card.setStyleSheet(_panel_style())
     card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     vl = QVBoxLayout(card)
-    vl.setContentsMargins(22, 18, 22, 18)
-    vl.setSpacing(12)
+    vl.setContentsMargins(24, 20, 24, 20)
+    vl.setSpacing(14)
 
-    # ── Header: icon + title + Open button ──────────────────────────────────
     header = QHBoxLayout()
-    header.setSpacing(10)
+    header.setSpacing(12)
 
     icon_bg = QWidget()
-    icon_bg.setFixedSize(34, 34)
+    icon_bg.setFixedSize(36, 36)
     icon_bg.setStyleSheet(
-        f"background: {theme_manager.c('rgba(255,255,255,0.05)', 'rgba(0,0,0,0.05)')};"
-        f" border-radius: 8px; border: 1px solid {theme_manager.c('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.08)')};"
+        f"background: {theme_manager.c('rgba(255,255,255,0.04)', 'rgba(255,107,53,0.05)')};"
+        f" border-radius: 10px; border: 1px solid {theme_manager.c('#232831', '#eadfce')};"
     )
     icon_bg_l = QHBoxLayout(icon_bg)
     icon_bg_l.setContentsMargins(0, 0, 0, 0)
     icon_lbl = QLabel()
     icon_lbl.setPixmap(
-        qta.icon(section["icon"], color=section["colour"]).pixmap(QSize(16, 16))
+        qta.icon(section["icon"], color=_muted_icon_colour()).pixmap(QSize(16, 16))
     )
     icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
     icon_lbl.setStyleSheet("background: transparent; border: none;")
@@ -273,22 +288,14 @@ def _section_card(section: dict, navigate_to) -> QWidget:
 
     title_lbl = QLabel(section["title"])
     title_lbl.setStyleSheet(
-        f"color: {section['colour']}; font-size: 17px; font-weight: 700;"
+        f"color: {theme_manager.c('#f0ece7', '#1f1710')}; font-size: 17px; font-weight: 700;"
         " background: transparent; border: none;"
     )
 
     go_btn = QPushButton("Open  →")
     go_btn.setFixedHeight(30)
     go_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    go_btn.setStyleSheet(
-        f"QPushButton {{"
-        f"  color: {section['colour']}; font-size: 13px; font-weight: 600;"
-        f"  background: transparent;"
-        f"  border: 1px solid {theme_manager.c('rgba(255,255,255,0.12)', 'rgba(0,0,0,0.12)')};"
-        f"  border-radius: 7px; padding: 0 14px;"
-        f"}}"
-        f"QPushButton:hover {{ background: {theme_manager.c('rgba(255,255,255,0.07)', 'rgba(0,0,0,0.05)')}; }}"
-    )
+    go_btn.setStyleSheet(_secondary_button_style())
     idx = section["index"]
     go_btn.clicked.connect(lambda: navigate_to(idx))
 
@@ -298,40 +305,72 @@ def _section_card(section: dict, navigate_to) -> QWidget:
     header.addWidget(go_btn)
     vl.addLayout(header)
 
-    # ── Summary ──────────────────────────────────────────────────────────────
     summary_lbl = QLabel(section["summary"])
     summary_lbl.setWordWrap(True)
     summary_lbl.setStyleSheet(
-        f"color: {theme_manager.c('#c0c0c0', '#333333')}; font-size: 15px;"
+        f"color: {theme_manager.c('#b3aca4', '#4f453c')}; font-size: 14px;"
         " background: transparent; border: none;"
     )
     vl.addWidget(summary_lbl)
 
-    # ── Divider ───────────────────────────────────────────────────────────────
-    sep = QFrame()
-    sep.setFrameShape(QFrame.Shape.HLine)
-    sep.setStyleSheet(
-        f"color: {theme_manager.c('#1e1e1e', '#e8e8e8')};"
-        f" background: {theme_manager.c('#1e1e1e', '#e8e8e8')};"
-        " border: none; max-height: 1px;"
-    )
-    vl.addWidget(sep)
-
-    # ── Feature list ─────────────────────────────────────────────────────────
     if section.get("features"):
         features_widget = QWidget()
         features_widget.setStyleSheet("background: transparent; border: none;")
         fvl = QVBoxLayout(features_widget)
         fvl.setContentsMargins(4, 0, 0, 0)
         fvl.setSpacing(4)
-        for feat in section["features"]:
+        for feat in section["features"][:3]:
             fvl.addWidget(_feature_item(feat))
         vl.addWidget(features_widget)
 
-    # ── Links with ────────────────────────────────────────────────────────────
     if section.get("connects"):
         vl.addWidget(_connects_row(section["connects"], navigate_to))
 
+    return card
+
+
+def _quick_start_panel(navigate_to) -> QWidget:
+    card = QWidget()
+    card.setStyleSheet(_panel_style())
+    layout = QVBoxLayout(card)
+    layout.setContentsMargins(24, 22, 24, 22)
+    layout.setSpacing(16)
+
+    eyebrow = QLabel("Most Used")
+    eyebrow.setStyleSheet(
+        f"color: {theme_manager.c('#837c74', '#8a8074')};"
+        " font-size: 11px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase;"
+        " background: transparent;"
+    )
+    title = QLabel("Start with the daily flow")
+    title.setStyleSheet(
+        f"color: {theme_manager.c('#f3eee8', '#211912')}; font-size: 22px; font-weight: 700;"
+        " background: transparent;"
+    )
+    body = QLabel(
+        "Most people move through Recipes, Meal Planner, Shopping List, and My Kitchen. "
+        "Use this page as a quick map, not a second settings screen."
+    )
+    body.setWordWrap(True)
+    body.setStyleSheet(
+        f"color: {theme_manager.c('#b4ada5', '#4d443a')}; font-size: 14px; background: transparent;"
+    )
+
+    button_row = QHBoxLayout()
+    button_row.setSpacing(10)
+    for idx, label in ((1, "Recipes"), (2, "Meal Planner"), (5, "Shopping List"), (4, "My Kitchen")):
+        btn = QPushButton(label)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setFixedHeight(34)
+        btn.setStyleSheet(_secondary_button_style())
+        btn.clicked.connect(lambda _, i=idx: navigate_to(i))
+        button_row.addWidget(btn)
+    button_row.addStretch()
+
+    layout.addWidget(eyebrow)
+    layout.addWidget(title)
+    layout.addWidget(body)
+    layout.addLayout(button_row)
     return card
 
 
@@ -352,22 +391,17 @@ class HelpView(QWidget):
         else:
             outer = QVBoxLayout(self)
 
-        outer.setContentsMargins(36, 36, 36, 36)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        title = QLabel("How to use DishBoard")
-        title.setObjectName("page-title")
-        outer.addWidget(title)
-        outer.addSpacing(6)
-
-        subtitle = QLabel(
-            "DishBoard is one connected system — your recipes, meal plan, nutrition, and shopping "
-            "list all talk to each other automatically. Dishy is the AI layer that ties it all together."
+        scaffold = PageScaffold(
+            "How To Use DishBoard",
+            "DishBoard works best when Recipes, Planning, Shopping, and Nutrition feed each other. This page keeps that flow easy to read.",
+            eyebrow="Guide",
+            parent=self,
+            quiet_header=True,
         )
-        subtitle.setObjectName("page-date")
-        subtitle.setWordWrap(True)
-        outer.addWidget(subtitle)
-        outer.addSpacing(24)
+        outer.addWidget(scaffold)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -378,34 +412,37 @@ class HelpView(QWidget):
         container.setStyleSheet("background: transparent;")
         vl = QVBoxLayout(container)
         vl.setContentsMargins(0, 0, 12, 0)
-        vl.setSpacing(14)
+        vl.setSpacing(18)
 
-        for section in _SECTIONS:
-            vl.addWidget(_section_card(section, self._navigate_to))
+        vl.addWidget(_quick_start_panel(self._navigate_to))
 
-        vl.addSpacing(8)
+        groups = [
+            ("Daily Flow", "The main working loop most people use every week.", {1, 2, 5, 4, 3}),
+            ("Support And Guidance", "Use these when you need AI help, setup, or account management.", {6, 8, 0}),
+        ]
 
-        # ── The loop tip ──────────────────────────────────────────────────────
+        for title, subtitle, indexes in groups:
+            vl.addWidget(SectionHeader(title, subtitle))
+            for section in _SECTIONS:
+                if section["index"] in indexes:
+                    vl.addWidget(_section_card(section, self._navigate_to))
+
         tip_card = QWidget()
-        tip_card.setStyleSheet(
-            f"background: {theme_manager.c('rgba(52,211,153,0.07)', 'rgba(52,211,153,0.06)')};"
-            f" border: 1px solid {theme_manager.c('rgba(52,211,153,0.2)', 'rgba(52,211,153,0.25)')};"
-            " border-radius: 12px;"
-        )
+        tip_card.setStyleSheet(_panel_style())
         tip_vl = QVBoxLayout(tip_card)
-        tip_vl.setContentsMargins(18, 14, 18, 14)
-        tip_vl.setSpacing(10)
+        tip_vl.setContentsMargins(22, 18, 22, 18)
+        tip_vl.setSpacing(12)
 
         tip_header = QHBoxLayout()
         tip_header.setSpacing(10)
         tip_icon = QLabel()
-        tip_icon.setPixmap(qta.icon("fa5s.sync-alt", color="#34d399").pixmap(QSize(14, 14)))
+        tip_icon.setPixmap(qta.icon("fa5s.sync-alt", color=_muted_icon_colour()).pixmap(QSize(14, 14)))
         tip_icon.setFixedSize(18, 18)
         tip_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tip_icon.setStyleSheet("background: transparent; border: none;")
         tip_title = QLabel("The DishBoard loop")
         tip_title.setStyleSheet(
-            "color: #34d399; font-size: 15px; font-weight: 700;"
+            f"color: {theme_manager.c('#f2ece4', '#221911')}; font-size: 15px; font-weight: 700;"
             " background: transparent; border: none;"
         )
         tip_header.addWidget(tip_icon)
@@ -421,8 +458,7 @@ class HelpView(QWidget):
             ("Dishy throughout", "Ask Dishy anything at any step. It knows your data and takes real actions inside the app."),
         ]
 
-        _muted = theme_manager.c("#888888", "#555555")
-        _text  = theme_manager.c("#bbbbbb", "#333333")
+        _text = theme_manager.c("#b8b1a8", "#463d34")
 
         for step_title, step_body in steps:
             step_row = QHBoxLayout()
@@ -432,7 +468,7 @@ class HelpView(QWidget):
             t_lbl = QLabel(step_title)
             t_lbl.setFixedWidth(145)
             t_lbl.setStyleSheet(
-                f"color: #34d399; font-size: 14px; font-weight: 600;"
+                f"color: {_muted_icon_colour()}; font-size: 14px; font-weight: 600;"
                 " background: transparent; border: none;"
             )
             b_lbl = QLabel(step_body)
@@ -448,7 +484,7 @@ class HelpView(QWidget):
         vl.addWidget(tip_card)
         vl.addStretch()
         scroll.setWidget(container)
-        outer.addWidget(scroll, 1)
+        scaffold.body_layout().addWidget(scroll, 1)
 
     def apply_theme(self, _mode: str):
         self._build_ui()

@@ -1,5 +1,7 @@
 .env
 dishboard.db
+dishboard.db-shm
+dishboard.db-wal
 config.json
 __pycache__/
 *.pyc

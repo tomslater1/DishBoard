@@ -1,7 +1,6 @@
 """
-Dishy tool definitions (Anthropic tool-use schema) and action executor.
+Dishy runtime tool executor.
 
-TOOLS  — list of tool dicts passed to the Anthropic API.
 DishyActions — executes tool calls, writes to the DB, and records which
                views need refreshing on the main thread.
 """
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
 # ── Tool schemas (Anthropic format) ──────────────────────────────────────────
 
 
-from api.dishy_tool_specs import TOOLS
 
 # ── Colour / icon helpers ─────────────────────────────────────────────────────
 
@@ -1188,7 +1186,7 @@ class DishyActions:
         except ValueError:
             qty = None
         db = self._open_db()
-        item_id = db.add_pantry_item(name, qty, unit, storage)
+        db.add_pantry_item(name, qty, unit, storage)
         if "my_kitchen" not in self.pending_refreshes:
             self.pending_refreshes.append("my_kitchen")
         qty_label = f" ({qty_str} {unit})".strip() if (qty_str or unit) else ""

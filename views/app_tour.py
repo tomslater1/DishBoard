@@ -1,40 +1,20 @@
 """
-AppTourOverlay — interactive onboarding tour for new users and offline-mode sessions.
+AppTourOverlay - refreshed guided tour for first-run users.
 
-Displayed as a floating overlay parented to MainWindow.  Navigates between views,
-spotlights key widgets, and uses Dishy (Claude AI) to narrate each step personally
-using the user's name and profile.
-
-Triggered:
-  • First-time new users — after OnboardingWizard completes (app_tour_complete not set)
-  • Every offline-mode session — regardless of flag
-
-Emits `finished` when the user completes or skips the tour.
+Displayed as a floating overlay parented to MainWindow. The copy is curated
+instead of generated live so the tour stays concise, visible, and coherent.
 """
+
 from __future__ import annotations
 
-import os
+from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from PySide6.QtCore import Qt, QRect, QPoint, QRectF, Signal
-from PySide6.QtGui import (
-    QPainter, QColor, QPainterPath, QPen, QFont, QPixmap,
-    QLinearGradient, QBrush,
-)
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-)
+import qtawesome as qta
 
 from utils.theme import manager as theme_manager
-from utils.platform_ops import preferred_ui_font_family
-from utils.workers import run_async
 
-
-# ── Tour step definitions ─────────────────────────────────────────────────────
-# bubble_anchor values:
-#   "center"       → centred on screen (no spotlight, welcome/goodbye)
-#   "right"        → bubble to the right of the spotlight (sidebar step)
-#   "content_top"  → floats near the top of the content area (content-page steps)
-#   "bottom_right" → bottom-right corner (settings/help step)
 
 _STEPS: list[dict] = [
     {
@@ -43,21 +23,15 @@ _STEPS: list[dict] = [
         "target_key": None,
         "arrow_side": None,
         "bubble_anchor": "center",
-        "title": "Hi, I'm Dishy! 👋",
-        "prompt": (
-            "Introduce yourself to {name} as Dishy, their personal AI cooking assistant "
-            "inside DishBoard. Be warm and enthusiastic. Tell them you're about to give "
-            "them a quick guided tour of the app. "
-            "Format: one warm opener sentence, then 2 bullet points (using the • character) "
-            "teasing what you can help them with. Keep it short and exciting."
-        ),
-        "fallback": (
-            "Hey {name}, I'm Dishy — your personal AI cooking assistant built right "
-            "into DishBoard!\n"
-            "• I can plan your meals, build recipes, track your nutrition, and handle "
-            "your shopping list\n"
-            "• Let me show you around so you know exactly where everything lives"
-        ),
+        "eyebrow": "Guided tour",
+        "title": "DishBoard now opens like a full kitchen workflow.",
+        "body": "This short walkthrough shows how planning, recipes, shopping, and Dishy now connect in one calmer flow.",
+        "highlights": [
+            "Home gives you the operational snapshot.",
+            "Each section has a clearer role.",
+            "Dishy can act across the whole system.",
+        ],
+        "cta": "Start on Home, then move wherever tonight's cooking problem actually lives.",
     },
     {
         "id": "sidebar",
@@ -65,19 +39,15 @@ _STEPS: list[dict] = [
         "target_key": "sidebar_nav_area",
         "arrow_side": "right",
         "bubble_anchor": "right",
-        "title": "Your Navigation Hub",
-        "prompt": (
-            "Explain the sidebar navigation panel to the user. "
-            "Format: one short opener sentence, then 2-3 bullet points (using •) "
-            "listing what the sidebar sections are. "
-            "Do NOT use the user's name. Do NOT start with a greeting."
-        ),
-        "fallback": (
-            "The sidebar is your navigation hub — everything's one click away.\n"
-            "• Home, Recipes, Meal Planner, Nutrition, My Kitchen, Shopping List\n"
-            "• The Dishy button (that's me!) opens our full chat\n"
-            "• Settings and Help live at the bottom"
-        ),
+        "eyebrow": "Navigation",
+        "title": "The sidebar is the control rail for the whole app.",
+        "body": "Main workspaces stay in the upper stack, while Help and Settings stay parked below for slower tasks.",
+        "highlights": [
+            "Home, Recipes, Planner, Nutrition.",
+            "My Kitchen, Shopping, Dishy chat.",
+            "Help and Settings stay at the base.",
+        ],
+        "cta": "Use it like an operations board, not a menu maze.",
     },
     {
         "id": "home",
@@ -85,22 +55,15 @@ _STEPS: list[dict] = [
         "target_key": "content_area",
         "arrow_side": None,
         "bubble_anchor": "content_top",
-        "title": "Home",
-        "prompt": (
-            "Explain what the Home dashboard actually shows. It contains: "
-            "a greeting header with today's date; stat cards; a Today's Plan card showing "
-            "today's breakfast, lunch and dinner (pulled live from the Meal Planner); "
-            "a Recent Recipes card; a quick-action strip with buttons for every section; "
-            "and a bottom row with mini macro rings, a shopping list preview, and favourites. "
-            "Keep it accurate to those real sections — do not invent features. "
-            "Format: one short opener, then 2 bullet points (using •). "
-            "No greeting. No user name."
-        ),
-        "fallback": (
-            "Your daily dashboard — everything at a glance.\n"
-            "• Today's planned meals (breakfast, lunch, dinner) pulled live from your planner\n"
-            "• Quick-action buttons, recent recipes, shopping preview, and macro snapshot below"
-        ),
+        "eyebrow": "Home",
+        "title": "Home is now the daily readout, not just a landing page.",
+        "body": "It pulls together today's plan, recipe momentum, quick actions, and the current state of shopping and nutrition.",
+        "highlights": [
+            "See today's meals immediately.",
+            "Pick up recent recipe work faster.",
+            "Jump into the next action without hunting.",
+        ],
+        "cta": "If you only open one screen first, open this one.",
     },
     {
         "id": "recipes",
@@ -108,20 +71,15 @@ _STEPS: list[dict] = [
         "target_key": "content_area",
         "arrow_side": None,
         "bubble_anchor": "content_top",
-        "title": "Your Recipe Library",
-        "prompt": (
-            "Explain the Recipes section. Mention that recipes can be imported from any "
-            "website URL, created from scratch, or generated by Dishy. "
-            "Mention that nutrition is calculated automatically. "
-            "Format: one short opener, then 2-3 bullet points (using •). "
-            "No greeting. No user name."
-        ),
-        "fallback": (
-            "Your Recipe Library is where your whole cooking collection lives.\n"
-            "• Paste any recipe URL and I'll import and analyse it automatically\n"
-            "• Create recipes from scratch — I'll calculate all the nutrition too\n"
-            "• Browse by tag, mark favourites, and jump straight to the meal planner"
-        ),
+        "eyebrow": "Recipes",
+        "title": "Recipes are the source of truth for what you cook.",
+        "body": "Bring in recipes from the web, create your own, or let Dishy help shape them into something worth reusing.",
+        "highlights": [
+            "Import from URLs quickly.",
+            "Save originals or Dishy-built versions.",
+            "Keep nutrition and tags close to the recipe.",
+        ],
+        "cta": "A stronger library makes every later step faster.",
     },
     {
         "id": "meal_planner",
@@ -129,20 +87,15 @@ _STEPS: list[dict] = [
         "target_key": "content_area",
         "arrow_side": None,
         "bubble_anchor": "content_top",
-        "title": "Meal Planner",
-        "prompt": (
-            "Explain the Meal Planner. It's a weekly grid — Monday to Sunday, "
-            "with Breakfast, Lunch, and Dinner for each day. "
-            "Mention that Dishy can fill the whole week instantly. "
-            "Format: one short opener, then 2-3 bullet points (using •). "
-            "No greeting. No user name."
-        ),
-        "fallback": (
-            "Plan every meal for the week right here.\n"
-            "• A clean Mon–Sun grid with Breakfast, Lunch, and Dinner slots\n"
-            "• Just ask me to fill the week and I'll build a balanced plan around your preferences\n"
-            "• Nutrition updates automatically the moment you set a meal"
-        ),
+        "eyebrow": "Meal planner",
+        "title": "The planner is where the week turns into an actual schedule.",
+        "body": "Build the grid yourself or let Dishy fill it with better defaults based on your profile, pantry, and saved recipes.",
+        "highlights": [
+            "Work day by day or fill the week.",
+            "Keep leftovers and intent visible.",
+            "Push the rest of the app from here.",
+        ],
+        "cta": "Once the planner is real, the rest of DishBoard can react properly.",
     },
     {
         "id": "nutrition",
@@ -150,60 +103,63 @@ _STEPS: list[dict] = [
         "target_key": "content_area",
         "arrow_side": None,
         "bubble_anchor": "content_top",
-        "title": "Nutrition Tracking",
-        "prompt": (
-            "Explain the Nutrition dashboard. Macro rings update automatically from the "
-            "meal plan — no manual logging needed. "
-            "Calories, protein, carbs, fat, fibre, sugar. "
-            "Format: one short opener, then 2-3 bullet points (using •). "
-            "No greeting. No user name."
-        ),
-        "fallback": (
-            "Your nutrition tracks itself — no manual logging ever.\n"
-            "• Six macro rings show your daily intake vs goals in real time\n"
-            "• The rings update automatically whenever you change your meal plan\n"
-            "• Calories, protein, carbs, fat, fibre, and sugar — all in one view"
-        ),
+        "eyebrow": "Nutrition",
+        "title": "Nutrition reads like a dashboard now, not a chore log.",
+        "body": "Planned intake, logged intake, coaching, and weekly trends sit together so you can understand the day without extra admin.",
+        "highlights": [
+            "Macro rings show the current day.",
+            "Quick add covers real consumption.",
+            "Weekly trends stay visible in context.",
+        ],
+        "cta": "Treat it like feedback on the plan, not a separate system.",
     },
     {
-        "id": "shopping",
+        "id": "my_kitchen",
         "view_index": 4,
         "target_key": "content_area",
         "arrow_side": None,
         "bubble_anchor": "content_top",
-        "title": "Shopping List",
-        "prompt": (
-            "Explain the Shopping List. It can be auto-generated from the week's meal plan. "
-            "Ingredients are consolidated and sorted by category. "
-            "Format: one short opener, then 2-3 bullet points (using •). "
-            "No greeting. No user name."
-        ),
-        "fallback": (
-            "Your grocery list, built automatically from your meal plan.\n"
-            "• Generate the full week's shopping list in one tap\n"
-            "• Ingredients are consolidated and sorted by category for easy shopping\n"
-            "• Tick items off as you go — your list stays in sync with the plan"
-        ),
+        "eyebrow": "My Kitchen",
+        "title": "My Kitchen is the stock picture DishBoard plans against.",
+        "body": "Pantry, fridge, and freezer items live here so recipe and planning decisions can react to what is already in the house.",
+        "highlights": [
+            "Track where ingredients actually live.",
+            "Catch low-stock and use-up moments faster.",
+            "Give Dishy better pantry context.",
+        ],
+        "cta": "Even a partial kitchen list makes planning smarter.",
     },
     {
-        "id": "dishy",
+        "id": "shopping",
         "view_index": 5,
         "target_key": "content_area",
         "arrow_side": None,
         "bubble_anchor": "content_top",
-        "title": "Chat With Me Anytime",
-        "prompt": (
-            "Introduce the full Dishy chat page. This is where longer conversations happen. "
-            "Dishy can take real actions — save recipes, set meal slots, update shopping list. "
-            "Format: one short opener, then 2-3 bullet points (using •). "
-            "Be enthusiastic. No greeting. No user name."
-        ),
-        "fallback": (
-            "This is my home — the full Dishy chat where you can ask me anything.\n"
-            "• Plan your week, discover new recipes, or just ask what to cook tonight\n"
-            "• I take real actions inside the app — I don't just advise, I actually do it\n"
-            "• Every conversation is saved so you can pick up right where you left off"
-        ),
+        "eyebrow": "Shopping",
+        "title": "Shopping now feels downstream from the plan, which is exactly right.",
+        "body": "Generate a working grocery list from the week, keep duplicates consolidated, and move bought items back into the kitchen flow.",
+        "highlights": [
+            "Build lists from the planner.",
+            "Keep categories cleaner and easier to shop.",
+            "Close the loop back into My Kitchen.",
+        ],
+        "cta": "This section works best after the planner has shape.",
+    },
+    {
+        "id": "dishy",
+        "view_index": 6,
+        "target_key": "content_area",
+        "arrow_side": None,
+        "bubble_anchor": "content_top",
+        "eyebrow": "Dishy",
+        "title": "Dishy is the action layer across the whole product.",
+        "body": "Use the full chat when you want to plan, build, search, or clean up multiple parts of the app without bouncing between screens.",
+        "highlights": [
+            "Ask for recipes or a full week plan.",
+            "Let Dishy update lists and slots.",
+            "Keep longer cooking conversations in one place.",
+        ],
+        "cta": "Open this when the problem spans more than one page.",
     },
     {
         "id": "settings",
@@ -211,19 +167,15 @@ _STEPS: list[dict] = [
         "target_key": "help_settings_area",
         "arrow_side": "top",
         "bubble_anchor": "bottom_right",
-        "title": "Help & Settings",
-        "prompt": (
-            "Explain that Settings and Help are at the bottom of the sidebar. "
-            "Settings has theme toggle, dietary preferences, and data management. "
-            "Help has a full feature guide. "
-            "Format: one short opener, then 2 bullet points (using •). "
-            "No greeting. No user name."
-        ),
-        "fallback": (
-            "Settings and Help are always at the bottom of the sidebar.\n"
-            "• Switch themes, update dietary preferences, and manage your data in Settings\n"
-            "• The Help guide walks through every feature in detail whenever you need it"
-        ),
+        "eyebrow": "Help and settings",
+        "title": "The lower sidebar handles slower maintenance work.",
+        "body": "Settings is where you refine profile, sync, and account behaviour. Help is where the product explains itself when you want deeper guidance.",
+        "highlights": [
+            "Adjust profile and app behaviour.",
+            "Check data and sync status.",
+            "Use Help for a slower walkthrough.",
+        ],
+        "cta": "Come here when you are tuning the system, not cooking inside it.",
     },
     {
         "id": "complete",
@@ -231,326 +183,237 @@ _STEPS: list[dict] = [
         "target_key": None,
         "arrow_side": None,
         "bubble_anchor": "center",
-        "title": "You're all set! 🎉",
-        "prompt": (
-            "Give a warm, personal sign-off to close the tour. "
-            "Remind {name} that you're always available to help. "
-            "You can reference something personal if natural — their cooking skill ({skill}) "
-            "or dietary preferences ({dietary}). "
-            "End with an encouraging call to action. "
-            "Format: one energetic opener sentence, then 2 bullet points (using •) "
-            "about what they should do first. Keep it exciting!"
-        ),
-        "fallback": (
-            "That's the tour — you're ready to go, {name}!\n"
-            "• Start by saving your first recipe or ask me to plan this week's meals\n"
-            "• I'm always here — just tap the Dishy button whenever you need me 🧑‍🍳"
-        ),
+        "eyebrow": "Ready",
+        "title": "You have the full map now.",
+        "body": "The cleanest next move is usually one of three things: add a recipe, shape the week, or ask Dishy to do the first heavy lift for you.",
+        "highlights": [
+            "Save a recipe you actually use.",
+            "Block out the next few dinners.",
+            "Ask Dishy for the first draft.",
+        ],
+        "cta": "The app feels best once something real is on the planner.",
     },
 ]
 
 
-# ── System prompt for tour narration ─────────────────────────────────────────
-
-def _build_tour_system_prompt(name: str, skill: str, dietary: str) -> str:
-    return (
-        f"You are Dishy, the friendly AI cooking assistant built into DishBoard. "
-        f"You are giving {name} a guided first-look tour of the app.\n\n"
-        f"User profile: name={name}, cooking skill={skill}, dietary preferences={dietary}.\n\n"
-        "STRICT rules for every message in this tour:\n"
-        f"- Only use {name}'s name in the very first welcome message. Never say their name again.\n"
-        "- After the first message, NEVER start with a greeting (Hi, Hey, Hello, Great, etc.).\n"
-        "- FORMAT — every message must follow this exact structure, nothing more:\n"
-        "    One short punchy sentence (10 words max).\n"
-        "    • Bullet one — one short phrase, 8 words max\n"
-        "    • Bullet two — one short phrase, 8 words max\n"
-        "  Use the • character only. Never dashes, asterisks, or numbers.\n"
-        "- BREVITY is critical. Each bullet is a phrase, not a sentence. No waffle.\n"
-        "- Tone: casual, warm, like a knowledgeable friend texting you.\n"
-        "- No markdown other than the • character.\n"
-        "- You have full memory of previous steps — never repeat what you already said."
-    )
-
-
-# ── Speech bubble widget ───────────────────────────────────────────────────────
-
 class _TourBubble(QWidget):
-    """Glass-morphism Dishy speech bubble with step counter, message, and nav buttons."""
-
     next_clicked = Signal()
     back_clicked = Signal()
     skip_clicked = Signal()
 
+    BUBBLE_W = 520
+
     def __init__(self, total_steps: int, parent: QWidget):
         super().__init__(parent)
         self._total = total_steps
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._setup_ui()
         self.apply_theme(theme_manager.mode)
 
-    # Width used for the bubble and communicated to the label for wrap calculation
-    BUBBLE_W = 600
-
-    def _setup_ui(self):
+    def _setup_ui(self) -> None:
         self.setFixedWidth(self.BUBBLE_W)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # ── Card container ──
         self._card = QWidget(self)
         self._card.setObjectName("tour-bubble-card")
-        card_layout = QVBoxLayout(self._card)
-        card_layout.setContentsMargins(28, 24, 28, 22)
-        card_layout.setSpacing(16)
+        layout = QVBoxLayout(self._card)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(14)
 
-        # ── Header: avatar + title + step label ──
-        hdr = QHBoxLayout()
-        hdr.setSpacing(14)
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(10)
 
-        self._avatar = QLabel()
-        self._avatar.setFixedSize(44, 44)
-        self._avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._avatar.setStyleSheet("background: transparent; border: none;")
-        self._draw_avatar()
-        hdr.addWidget(self._avatar)
+        self._eyebrow_lbl = QLabel()
+        self._eyebrow_lbl.setObjectName("tour-eyebrow")
+        top.addWidget(self._eyebrow_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-
-        self._title_lbl = QLabel()
-        self._title_lbl.setObjectName("tour-title")
-        title_col.addWidget(self._title_lbl)
+        top.addStretch()
 
         self._step_lbl = QLabel()
         self._step_lbl.setObjectName("tour-step")
-        title_col.addWidget(self._step_lbl)
+        top.addWidget(self._step_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(top)
 
-        hdr.addLayout(title_col)
-        hdr.addStretch()
-        card_layout.addLayout(hdr)
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(12)
 
-        # ── Separator ──
-        sep = QWidget()
-        sep.setObjectName("tour-sep")
-        sep.setFixedHeight(1)
-        card_layout.addWidget(sep)
+        self._avatar = QLabel()
+        self._avatar.setFixedSize(42, 42)
+        self._avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._avatar.setStyleSheet("background: transparent;")
+        self._avatar.setPixmap(qta.icon("fa5s.robot", color="#ff6b35").pixmap(QSize(20, 20)))
+        title_row.addWidget(self._avatar, 0, Qt.AlignmentFlag.AlignTop)
 
-        # ── Message ──
-        # Fixed width tells the label exactly how wide it is so word-wrap
-        # height is computed correctly when adjustSize() is called.
-        self._msg_lbl = QLabel()
-        self._msg_lbl.setObjectName("tour-message")
-        self._msg_lbl.setWordWrap(True)
-        self._msg_lbl.setTextFormat(Qt.TextFormat.PlainText)
-        self._msg_lbl.setFixedWidth(self.BUBBLE_W - 56)   # bubble - 2*28 padding
-        self._msg_lbl.setMinimumHeight(180)
-        self._msg_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        card_layout.addWidget(self._msg_lbl)
+        self._title_lbl = QLabel()
+        self._title_lbl.setWordWrap(True)
+        self._title_lbl.setFixedWidth(self.BUBBLE_W - 102)
+        self._title_lbl.setObjectName("tour-title")
+        title_row.addWidget(self._title_lbl, 1)
+        layout.addLayout(title_row)
 
-        # ── Progress dots ──
+        self._body_lbl = QLabel()
+        self._body_lbl.setWordWrap(True)
+        self._body_lbl.setFixedWidth(self.BUBBLE_W - 48)
+        self._body_lbl.setObjectName("tour-body")
+        layout.addWidget(self._body_lbl)
+
+        self._highlight_rows: list[QLabel] = []
+        for _ in range(3):
+            row = QLabel()
+            row.setWordWrap(True)
+            row.setFixedWidth(self.BUBBLE_W - 48)
+            row.setObjectName("tour-highlight")
+            self._highlight_rows.append(row)
+            layout.addWidget(row)
+
+        self._cta_box = QLabel()
+        self._cta_box.setWordWrap(True)
+        self._cta_box.setFixedWidth(self.BUBBLE_W - 48)
+        self._cta_box.setObjectName("tour-cta")
+        layout.addWidget(self._cta_box)
+
         dots_row = QHBoxLayout()
-        dots_row.setContentsMargins(0, 0, 0, 0)
+        dots_row.setContentsMargins(0, 2, 0, 0)
         dots_row.setSpacing(6)
         self._dots: list[QLabel] = []
         for _ in range(self._total):
-            dot = QLabel("●")
-            dot.setFixedSize(14, 14)
-            dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            dots_row.addWidget(dot)
+            dot = QLabel()
+            dot.setFixedSize(18, 6)
+            dot.setStyleSheet("border-radius: 3px;")
             self._dots.append(dot)
+            dots_row.addWidget(dot)
         dots_row.addStretch()
-        card_layout.addLayout(dots_row)
+        layout.addLayout(dots_row)
 
-        # ── Buttons ──
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 4, 0, 0)
+        buttons.setSpacing(10)
 
-        self._skip_btn = QPushButton("Skip tour")
-        self._skip_btn.setObjectName("tour-skip-btn")
-        self._skip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._skip_btn = QPushButton("Close tour")
         self._skip_btn.clicked.connect(self.skip_clicked)
-        btn_row.addWidget(self._skip_btn)
+        buttons.addWidget(self._skip_btn)
 
-        btn_row.addStretch()
+        buttons.addStretch()
 
-        self._back_btn = QPushButton("← Back")
-        self._back_btn.setObjectName("tour-back-btn")
-        self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._back_btn = QPushButton("Back")
         self._back_btn.clicked.connect(self.back_clicked)
-        btn_row.addWidget(self._back_btn)
+        buttons.addWidget(self._back_btn)
 
-        self._next_btn = QPushButton("Next →")
-        self._next_btn.setObjectName("tour-next-btn")
-        self._next_btn.setFixedHeight(40)
-        self._next_btn.setMinimumWidth(120)
-        self._next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._next_btn = QPushButton("Next")
         self._next_btn.clicked.connect(self.next_clicked)
-        btn_row.addWidget(self._next_btn)
+        buttons.addWidget(self._next_btn)
 
-        card_layout.addLayout(btn_row)
+        layout.addLayout(buttons)
         outer.addWidget(self._card)
 
-    def _draw_avatar(self):
-        size = 44
-        px = QPixmap(size, size)
-        px.fill(Qt.GlobalColor.transparent)
-        p = QPainter(px)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        grad = QLinearGradient(0, 0, 0, size)
-        grad.setColorAt(0.0, QColor("#6ee7c0"))
-        grad.setColorAt(1.0, QColor("#0d9e6a"))
-        p.setBrush(QBrush(grad))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(1, 1, size - 2, size - 2)
-        p.setPen(QColor("#ffffff"))
-        f = QFont(preferred_ui_font_family(), 18, QFont.Weight.Bold)
-        p.setFont(f)
-        p.drawText(px.rect(), Qt.AlignmentFlag.AlignCenter, "D")
-        p.end()
-        self._avatar.setPixmap(px)
-
-    # ── Public setters ────────────────────────────────────────────────────────
-
-    def set_step(self, idx: int, title: str, is_last: bool = False):
-        self._title_lbl.setText(title)
+    def set_step(self, idx: int, step: dict, is_last: bool) -> None:
+        self._eyebrow_lbl.setText(step["eyebrow"])
         self._step_lbl.setText(f"Step {idx + 1} of {self._total}")
+        self._title_lbl.setText(step["title"])
+        self._body_lbl.setText(step["body"])
 
-        for i, dot in enumerate(self._dots):
-            if i == idx:
-                state = "active"
-            elif i < idx:
-                state = "done"
+        highlights = step.get("highlights") or []
+        for row_idx, label in enumerate(self._highlight_rows):
+            if row_idx < len(highlights):
+                label.setText(f"- {highlights[row_idx]}")
+                label.setVisible(True)
             else:
-                state = "inactive"
-            dot.setStyleSheet(self._dot_qss(state))
+                label.setVisible(False)
 
+        self._cta_box.setText(f"Try this next: {step['cta']}")
         self._back_btn.setVisible(idx > 0)
-        self._skip_btn.setVisible(not is_last)
-        self._next_btn.setText("Let's cook! 🎉" if is_last else "Next →")
+        self._next_btn.setText("Start cooking" if is_last else "Next")
+
+        for dot_idx, dot in enumerate(self._dots):
+            if dot_idx < idx:
+                dot.setProperty("state", "done")
+            elif dot_idx == idx:
+                dot.setProperty("state", "active")
+            else:
+                dot.setProperty("state", "idle")
+            self._apply_dot_style(dot)
+
         self.adjustSize()
 
-    def set_message(self, text: str):
-        self._msg_lbl.setText(text)
-        # Ensure the label recomputes its wrapped height before adjustSize()
-        # propagates up through the card layout to the bubble widget.
-        self._msg_lbl.updateGeometry()
-        self.adjustSize()
-
-    def set_loading(self):
-        self._msg_lbl.setText("Dishy is thinking…")
-        self._msg_lbl.updateGeometry()
-        self.adjustSize()
-
-    # ── Dot style ─────────────────────────────────────────────────────────────
-
-    def _dot_qss(self, state: str) -> str:
-        base = "font-size: 9px; background: transparent; border: none;"
+    def _apply_dot_style(self, dot: QLabel) -> None:
+        state = str(dot.property("state") or "idle")
         if state == "active":
-            return f"color: #34d399; {base}"
-        if state == "done":
-            return f"color: rgba(52,211,153,0.45); {base}"
-        inactive = theme_manager.c("rgba(255,255,255,0.18)", "rgba(0,0,0,0.14)")
-        return f"color: {inactive}; {base}"
+            color = "#ff6b35"
+        elif state == "done":
+            color = "rgba(255,107,53,0.34)"
+        else:
+            color = theme_manager.c("#2b3036", "#d8ccbf")
+        dot.setStyleSheet(f"background: {color}; border-radius: 3px;")
 
-    # ── Theme ─────────────────────────────────────────────────────────────────
-
-    def apply_theme(self, mode: str):
-        dark = (mode == "dark")
-
-        bubble_bg  = "rgba(10,10,10,0.96)"   if dark else "rgba(255,255,255,0.98)"
-        border     = "rgba(52,211,153,0.30)"  if dark else "rgba(52,211,153,0.55)"
-        title_col  = "#f2f2f2"               if dark else "#111111"
-        step_col   = "#666666"               if dark else "#888888"
-        msg_col    = "rgba(230,230,230,0.9)" if dark else "rgba(25,25,25,0.85)"
-        sep_col    = "rgba(52,211,153,0.12)" if dark else "rgba(52,211,153,0.2)"
-        skip_col   = "rgba(255,255,255,0.3)" if dark else "rgba(0,0,0,0.35)"
-        back_bg    = "rgba(255,255,255,0.05)" if dark else "rgba(0,0,0,0.05)"
-        back_col   = "rgba(255,255,255,0.55)" if dark else "rgba(0,0,0,0.55)"
+    def apply_theme(self, mode: str) -> None:
+        dark = mode == "dark"
+        card_bg = "rgba(17,19,23,0.98)" if dark else "rgba(255,250,244,0.98)"
+        border = "rgba(255,107,53,0.28)" if dark else "rgba(255,107,53,0.34)"
+        title_col = theme_manager.c("#f2eee8", "#181510")
+        body_col = theme_manager.c("#c6beb5", "#6d645b")
+        hint_bg = "rgba(255,107,53,0.10)"
+        hint_border = "rgba(255,107,53,0.22)"
 
         self._card.setStyleSheet(
-            f"QWidget#tour-bubble-card {{"
-            f" background: {bubble_bg};"
-            f" border: 1.5px solid {border};"
-            f" border-radius: 18px;"
-            f"}}"
+            f"QWidget#tour-bubble-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 20px; }}"
         )
-        self._title_lbl.setStyleSheet(
-            f"color: {title_col}; font-size: 19px; font-weight: 700;"
-            " background: transparent; border: none;"
+        self._eyebrow_lbl.setStyleSheet(
+            "background: rgba(255,107,53,0.14); color: #ff6b35; border: 1px solid rgba(255,107,53,0.28);"
+            "border-radius: 11px; padding: 4px 10px; font-size: 11px; font-weight: 700;"
         )
         self._step_lbl.setStyleSheet(
-            f"color: {step_col}; font-size: 12px; background: transparent; border: none;"
+            f"color: {theme_manager.c('#8c867e', '#867c72')}; font-size: 11px; font-weight: 600; background: transparent;"
         )
-        self._msg_lbl.setStyleSheet(
-            f"color: {msg_col}; font-size: 15px; line-height: 1.7;"
-            " background: transparent; border: none;"
+        self._title_lbl.setStyleSheet(
+            f"color: {title_col}; font-size: 22px; font-weight: 800; line-height: 1.15; background: transparent;"
         )
-        self._card.findChild(QWidget, "tour-sep")
-        # Find separator by fixed height signal
-        for child in self._card.findChildren(QWidget):
-            if child.objectName() == "tour-sep":
-                child.setStyleSheet(f"background: {sep_col}; border: none;")
+        self._body_lbl.setStyleSheet(
+            f"color: {body_col}; font-size: 13px; line-height: 1.55; background: transparent;"
+        )
+        for label in self._highlight_rows:
+            label.setStyleSheet(
+                f"color: {title_col}; font-size: 12px; font-weight: 600; line-height: 1.5; background: transparent;"
+            )
+        self._cta_box.setStyleSheet(
+            f"background: {hint_bg}; color: {title_col}; border: 1px solid {hint_border};"
+            "border-radius: 14px; padding: 10px 12px; font-size: 12px; font-weight: 600; line-height: 1.5;"
+        )
         self._skip_btn.setStyleSheet(
-            f"QPushButton {{ color: {skip_col}; background: transparent; border: none;"
-            " font-size: 12px; text-decoration: underline; padding: 4px 2px; }}"
-            "QPushButton:hover { color: #34d399; }"
+            "QPushButton { background: transparent; color: #ff6b35; border: none; font-size: 12px; font-weight: 700; padding: 4px 2px; }"
+            "QPushButton:hover { color: #ff7a48; }"
         )
         self._back_btn.setStyleSheet(
-            f"QPushButton {{ color: {back_col}; background: {back_bg};"
-            " border: 1px solid rgba(128,128,128,0.18); border-radius: 9px;"
-            " font-size: 13px; padding: 7px 16px; }}"
-            "QPushButton:hover { background: rgba(52,211,153,0.1); color: #34d399; }"
+            f"QPushButton {{ background: {theme_manager.c('#13161a', '#f4ede4')}; color: {theme_manager.c('#a39d95', '#71685d')};"
+            f" border: 1px solid {theme_manager.c('#2b3036', '#ddd2c5')}; border-radius: 10px; padding: 8px 18px; font-size: 13px; font-weight: 600; }}"
+            "QPushButton:hover { border-color: rgba(255,107,53,0.28); color: #ff6b35; }"
         )
         self._next_btn.setStyleSheet(
-            "QPushButton { color: #0a0a0a; background: #34d399; border: none;"
-            " border-radius: 9px; font-size: 14px; font-weight: 600; padding: 7px 22px; }"
-            "QPushButton:hover { background: #2fc48a; }"
-            "QPushButton:pressed { background: #28b07a; }"
+            "QPushButton { background: #ff6b35; color: #fff7f1; border: 1px solid rgba(255,107,53,0.42);"
+            " border-radius: 10px; padding: 8px 20px; font-size: 13px; font-weight: 700; }"
+            "QPushButton:hover { background: #ff7a48; border-color: rgba(255,107,53,0.62); }"
         )
-        # Refresh dots
         for dot in self._dots:
-            state = (
-                "active" if "34d399" in dot.styleSheet() and "0.45" not in dot.styleSheet()
-                else "done" if "0.45" in dot.styleSheet()
-                else "inactive"
-            )
-            dot.setStyleSheet(self._dot_qss(state))
+            self._apply_dot_style(dot)
 
-
-# ── Main overlay widget ────────────────────────────────────────────────────────
 
 class AppTourOverlay(QWidget):
-    """
-    Transparent overlay parented to MainWindow.
-    Uses QPainterPath.subtracted() to punch a visible spotlight hole — works
-    correctly for child widgets without relying on CompositionMode_Clear.
-    """
-
     finished = Signal()
 
     def __init__(self, main_window, db):
         super().__init__(main_window)
-        self._mw    = main_window
-        self._db    = db
+        self._mw = main_window
+        self._db = db
         self._step_idx = 0
         self._spotlight_rect: QRect | None = None
         self._arrow_side: str | None = None
 
-        # Narration cache + conversation history for Dishy continuity
-        self._narrations: dict[int, str] = {}
-        self._chat_history: list[dict]   = []   # grows as steps complete
-        self._fetching: set[int]         = set() # prevent duplicate fetches
-
-        # User profile for personalised narration
-        self._user_name = db.get_setting("user_name", "").strip() or "there"
-        self._skill     = db.get_setting("cooking_skill", "").replace("_", " ") or "home cook"
-        self._dietary   = db.get_setting("dietary_prefs", "").replace(",", ", ") or "no specific"
-
-        # Child widget — transparent background, no frame hints
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_NoSystemBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
 
         self._bubble = _TourBubble(len(_STEPS), self)
         self._bubble.next_clicked.connect(self._on_next)
@@ -560,23 +423,17 @@ class AppTourOverlay(QWidget):
         theme_manager.theme_changed.connect(self.apply_theme)
         self.apply_theme(theme_manager.mode)
 
-    # ── Public API ────────────────────────────────────────────────────────────
-
-    def start(self):
+    def start(self) -> None:
         self._resize_to_parent()
         self.show()
         self.raise_()
         self._go_to_step(0)
-        self._fetch_narration(0)   # waterfall: 0 → 1 → 2 … in on_result callbacks
 
-    # ── Step navigation ───────────────────────────────────────────────────────
-
-    def _go_to_step(self, idx: int):
+    def _go_to_step(self, idx: int) -> None:
         if idx < 0 or idx >= len(_STEPS):
             return
         self._step_idx = idx
         step = _STEPS[idx]
-        is_last = (idx == len(_STEPS) - 1)
 
         if step["view_index"] is not None:
             try:
@@ -588,32 +445,24 @@ class AppTourOverlay(QWidget):
         self._spotlight_rect = self._get_spotlight_rect(target_key) if target_key else None
         self._arrow_side = step.get("arrow_side")
 
-        self._bubble.set_step(idx, step["title"], is_last)
-        if idx in self._narrations:
-            self._bubble.set_message(self._narrations[idx])
-        else:
-            self._bubble.set_loading()
-
+        self._bubble.set_step(idx, step, idx == len(_STEPS) - 1)
         self._position_bubble(step["bubble_anchor"])
         self.update()
 
-    def _on_next(self):
+    def _on_next(self) -> None:
         if self._step_idx >= len(_STEPS) - 1:
             self.finished.emit()
             self.hide()
-        else:
-            self._go_to_step(self._step_idx + 1)
+            return
+        self._go_to_step(self._step_idx + 1)
 
-    def _on_back(self):
+    def _on_back(self) -> None:
         if self._step_idx > 0:
             self._go_to_step(self._step_idx - 1)
 
-    def _on_skip(self):
-        self._go_to_step(len(_STEPS) - 1)
-        # Ensure final step narration is kicked off
-        self._fetch_narration(len(_STEPS) - 1)
-
-    # ── Spotlight helpers ─────────────────────────────────────────────────────
+    def _on_skip(self) -> None:
+        self.finished.emit()
+        self.hide()
 
     def _get_spotlight_rect(self, target_key: str | None) -> QRect | None:
         if not target_key:
@@ -627,82 +476,63 @@ class AppTourOverlay(QWidget):
         except Exception:
             return None
 
-    def _position_bubble(self, anchor: str):
-        # Let the layout compute the natural height from the current text.
-        # adjustSize() uses sizeHint() which QLabel reports correctly once
-        # its width is fixed (set via setFixedWidth in _setup_ui).
+    def _position_bubble(self, anchor: str) -> None:
         self._bubble.adjustSize()
 
-        w  = self.width()
-        h  = self.height()
-        bw = self._bubble.width()
-        bh = self._bubble.height()
-        mg = 28
+        width = self.width()
+        height = self.height()
+        bubble_w = self._bubble.width()
+        bubble_h = self._bubble.height()
+        margin = 28
 
         if anchor == "center":
-            x = (w - bw) // 2
-            y = (h - bh) // 2
-
+            x = (width - bubble_w) // 2
+            y = (height - bubble_h) // 2
         elif anchor == "right":
-            sr = self._spotlight_rect
-            if sr:
-                x = min(sr.right() + mg, w - bw - mg)
-                y = max(sr.top(), mg)
-                y = min(y, h - bh - mg)
+            spot = self._spotlight_rect
+            if spot:
+                x = min(spot.right() + margin, width - bubble_w - margin)
+                y = min(max(spot.top(), margin), height - bubble_h - margin)
             else:
-                x = (w - bw) // 2
-                y = (h - bh) // 2
-
+                x = width - bubble_w - margin
+                y = margin
         elif anchor == "content_top":
-            # Float inside the content area, near the top-right corner
-            sr = self._spotlight_rect
-            if sr:
-                x = sr.right() - bw - mg
-                x = max(sr.left() + mg, x)
-                y = sr.top() + mg + 24
+            spot = self._spotlight_rect
+            if spot:
+                x = max(spot.left() + margin, spot.right() - bubble_w - margin)
+                y = min(spot.top() + margin + 18, height - bubble_h - margin)
             else:
-                x = w - bw - mg
-                y = mg + 24
-
+                x = width - bubble_w - margin
+                y = margin
         elif anchor == "bottom_right":
-            x = w - bw - mg
-            y = h - bh - mg - 50
-
+            x = width - bubble_w - margin
+            y = height - bubble_h - margin - 34
         else:
-            x = (w - bw) // 2
-            y = h - bh - mg
+            x = (width - bubble_w) // 2
+            y = height - bubble_h - margin
 
         self._bubble.move(max(0, x), max(0, y))
 
-    # ── Painting ──────────────────────────────────────────────────────────────
-
-    def paintEvent(self, event):
+    def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        dark = (theme_manager.mode == "dark")
-        overlay = QColor(0, 0, 0, 178 if dark else 148)
+        overlay = QColor(0, 0, 0, 168 if theme_manager.mode == "dark" else 140)
 
         if self._spotlight_rect and not self._spotlight_rect.isEmpty():
-            pad  = 14
+            pad = 14
             spot = self._spotlight_rect.adjusted(-pad, -pad, pad, pad)
 
-            # Draw overlay with a hole punched out for the spotlight.
-            # QPainterPath.subtracted() avoids CompositionMode_Clear which
-            # doesn't work reliably on child widgets — parent content shows
-            # through the unpainted hole naturally.
             full = QPainterPath()
             full.addRect(QRectF(self.rect()))
 
             hole = QPainterPath()
-            hole.addRoundedRect(QRectF(spot), 10, 10)
-
+            hole.addRoundedRect(QRectF(spot), 12, 12)
             painter.fillPath(full.subtracted(hole), overlay)
 
-            # Green accent ring around spotlight
-            painter.setPen(QPen(QColor(52, 211, 153, 210), 2))
+            painter.setPen(QPen(QColor(255, 107, 53, 230), 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(QRectF(spot.adjusted(-2, -2, 2, 2)), 12, 12)
+            painter.drawRoundedRect(QRectF(spot.adjusted(-2, -2, 2, 2)), 14, 14)
 
             if self._arrow_side:
                 self._paint_arrow(painter, spot)
@@ -711,55 +541,51 @@ class AppTourOverlay(QWidget):
 
         painter.end()
 
-    def _paint_arrow(self, painter: QPainter, spot: QRect):
+    def _paint_arrow(self, painter: QPainter, spot: QRect) -> None:
         painter.setPen(Qt.PenStyle.NoPen)
-        sz = 10
+        fill = QColor(255, 107, 53, 220)
+        size = 10
 
         if self._arrow_side == "right":
             cx, cy = spot.left() - 1, spot.center().y()
             path = QPainterPath()
             path.moveTo(cx, cy)
-            path.lineTo(cx - 18, cy - sz)
-            path.lineTo(cx - 18, cy + sz)
+            path.lineTo(cx - 18, cy - size)
+            path.lineTo(cx - 18, cy + size)
             path.closeSubpath()
-            painter.fillPath(path, QColor(52, 211, 153, 210))
-
+            painter.fillPath(path, fill)
         elif self._arrow_side == "left":
             cx, cy = spot.right() + 1, spot.center().y()
             path = QPainterPath()
             path.moveTo(cx, cy)
-            path.lineTo(cx + 18, cy - sz)
-            path.lineTo(cx + 18, cy + sz)
+            path.lineTo(cx + 18, cy - size)
+            path.lineTo(cx + 18, cy + size)
             path.closeSubpath()
-            painter.fillPath(path, QColor(52, 211, 153, 210))
-
+            painter.fillPath(path, fill)
         elif self._arrow_side == "top":
             cx = spot.center().x()
             cy = spot.bottom() + 1
             path = QPainterPath()
             path.moveTo(cx, cy)
-            path.lineTo(cx - sz, cy + 18)
-            path.lineTo(cx + sz, cy + 18)
+            path.lineTo(cx - size, cy + 18)
+            path.lineTo(cx + size, cy + 18)
             path.closeSubpath()
-            painter.fillPath(path, QColor(52, 211, 153, 210))
-
+            painter.fillPath(path, fill)
         elif self._arrow_side == "bottom":
             cx = spot.center().x()
             cy = spot.top() - 1
             path = QPainterPath()
             path.moveTo(cx, cy)
-            path.lineTo(cx - sz, cy - 18)
-            path.lineTo(cx + sz, cy - 18)
+            path.lineTo(cx - size, cy - 18)
+            path.lineTo(cx + size, cy - 18)
             path.closeSubpath()
-            painter.fillPath(path, QColor(52, 211, 153, 210))
+            painter.fillPath(path, fill)
 
-    # ── Resize ────────────────────────────────────────────────────────────────
-
-    def _resize_to_parent(self):
+    def _resize_to_parent(self) -> None:
         if self._mw:
             self.resize(self._mw.width(), self._mw.height())
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         step = _STEPS[self._step_idx]
         target_key = step.get("target_key")
@@ -767,75 +593,6 @@ class AppTourOverlay(QWidget):
         self._position_bubble(step["bubble_anchor"])
         self.update()
 
-    # ── Theme ─────────────────────────────────────────────────────────────────
-
-    def apply_theme(self, mode: str):
+    def apply_theme(self, mode: str) -> None:
         self._bubble.apply_theme(mode)
         self.update()
-
-    # ── AI Narration (waterfall fetch with history) ───────────────────────────
-
-    def _fetch_narration(self, idx: int):
-        """
-        Fetch Dishy's narration for step `idx`.
-        Uses a waterfall pattern: on_result appends to chat_history then
-        kicks off the fetch for idx+1, ensuring each step has full context
-        from all previous Dishy messages.
-        """
-        if idx in self._narrations or idx in self._fetching or idx >= len(_STEPS):
-            return
-        self._fetching.add(idx)
-
-        step = _STEPS[idx]
-        prompt_text = step["prompt"].format(
-            name=self._user_name,
-            skill=self._skill,
-            dietary=self._dietary,
-        )
-        fallback = step["fallback"].format(
-            name=self._user_name,
-            skill=self._skill,
-            dietary=self._dietary,
-        )
-        # Snapshot the history at this moment (before the async call)
-        history_snapshot = list(self._chat_history)
-        sys_prompt = _build_tour_system_prompt(self._user_name, self._skill, self._dietary)
-
-        def _fetch():
-            from api.claude_ai import ClaudeAI as _ClaudeAI
-            client = _ClaudeAI()._get_client()
-            messages = list(history_snapshot)
-            messages.append({"role": "user", "content": prompt_text})
-            resp = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=160,   # short by design: opener + 2 bullets
-                system=sys_prompt,
-                messages=messages,
-            )
-            return resp.content[0].text.strip()
-
-        def _on_result(text: str):
-            self._narrations[idx] = text
-            self._fetching.discard(idx)
-            # Extend history so next step has full context
-            self._chat_history.append({"role": "user",      "content": prompt_text})
-            self._chat_history.append({"role": "assistant",  "content": text})
-            # Update bubble if we're still on this step
-            if idx == self._step_idx:
-                self._bubble.set_message(text)
-                self._position_bubble(_STEPS[idx]["bubble_anchor"])
-                self.update()
-            # Kick off the next step's fetch (waterfall)
-            self._fetch_narration(idx + 1)
-
-        def _on_error(_err: str):
-            self._narrations[idx] = fallback
-            self._fetching.discard(idx)
-            if idx == self._step_idx:
-                self._bubble.set_message(fallback)
-                self._position_bubble(_STEPS[idx]["bubble_anchor"])
-                self.update()
-            # Still kick off next step with whatever history we have
-            self._fetch_narration(idx + 1)
-
-        run_async(_fetch, on_result=_on_result, on_error=_on_error)

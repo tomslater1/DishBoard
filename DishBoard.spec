@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(SPEC)))
 
 # Auto-read version from utils/version.py so the bundle always matches
 from utils.version import APP_VERSION
-_v = APP_VERSION.lstrip("v")                                           # "0.44"
+_v = APP_VERSION.lstrip("v")                                           # e.g. "0.71"
 _build = str(int(_v.split(".")[0]) * 100 + int(_v.split(".")[1]))      # "44"
 
 # Dynamic mf2py data path — works regardless of Python version or install location
@@ -41,6 +41,8 @@ a = Analysis(
         # Read-only assets bundled inside the .app
         ('assets/styles', 'assets/styles'),
         ('assets/icons',  'assets/icons'),
+        ('assets/metadata', 'assets/metadata'),
+        ('assets/prompts', 'assets/prompts'),
         # mf2py (dependency of extruct → recipe_scrapers) has a non-Python data dir
         # IMPORTANT: dishboard.db and config.json must NEVER appear here.
         # User data is written to OS-specific app-data folders at runtime.
@@ -83,7 +85,6 @@ a = Analysis(
         'auth.session_manager',
         'auth.cloud_sync',
         'auth.oauth_server',
-        'auth.migration_dialog',
         'utils.cloud_sync_service',
     ],
     hookspath=[],

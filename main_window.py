@@ -1,17 +1,20 @@
+import json
 import os
+import sys
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from utils.version import APP_VERSION
 import qtawesome as qta
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QPushButton, QLabel, QStackedWidget, QStatusBar,
+    QPushButton, QLabel, QStackedWidget, QStatusBar, QApplication,
 )
 from PySide6.QtCore import (
     Qt, QSize, QPropertyAnimation, QParallelAnimationGroup,
-    QEasingCurve, QAbstractAnimation, Signal, Property,
+    QEasingCurve, QAbstractAnimation, QTimer, Signal, Property,
 )
-from PySide6.QtGui import QGuiApplication, QPixmap
+from PySide6.QtGui import QGuiApplication, QKeySequence, QPixmap, QShortcut
 
 from models.database import Database
 from utils.data_service import get_db
@@ -29,9 +32,19 @@ from views.dishy import DishyView
 from views.help import HelpView
 from views.settings import SettingsView
 from widgets.dishy_bubble import DishyBubble
+from widgets.command_palette import (
+    CommandPaletteDialog,
+    PaletteEntry,
+    PaletteField,
+    QuickAddForm,
+    rank_entries,
+)
 from widgets.sync_indicator import SyncIndicator
 from api.dishy_tools import DishyActions
 from utils.animation import slide_in_widget
+from utils.recipe_search import filter_and_rank_saved_recipes
+from utils.service_hub import registry as service_registry
+from utils.system_visibility import SystemVisibilityService
 from utils.theme import manager as theme_manager
 
 SIDEBAR_EXPANDED = 220
@@ -40,16 +53,16 @@ ACCENT = "#ff6b35"
 
 
 def _inactive_icon_color() -> str:
-    return theme_manager.c("#8d96a5", "#5f7088")
+    return theme_manager.c("#98938c", "#665f58")
 
 NAV_ITEMS = [
-    ("fa5s.home",          "Home",           "#ff6b35"),
-    ("fa5s.book-open",     "Recipes",        "#7c6af7"),
-    ("fa5s.calendar-alt",  "Meal Planner",   "#4caf8a"),
-    ("fa5s.heartbeat",     "Nutrition",      "#e05c7a"),
-    ("fa5s.box-open",      "My Kitchen",     "#e8924a"),
-    ("fa5s.shopping-cart", "Shopping List",  "#f0a500"),
-    ("fa5s.robot",         "Dishy",          "#34d399"),
+    ("fa5s.home",          "Home",           ACCENT),
+    ("fa5s.book-open",     "Recipes",        ACCENT),
+    ("fa5s.calendar-alt",  "Meal Planner",   ACCENT),
+    ("fa5s.heartbeat",     "Nutrition",      ACCENT),
+    ("fa5s.box-open",      "My Kitchen",     ACCENT),
+    ("fa5s.shopping-cart", "Shopping List",  ACCENT),
+    ("fa5s.robot",         "Dishy",          ACCENT),
 ]
 
 class NavButton(QPushButton):
@@ -69,7 +82,7 @@ class NavButton(QPushButton):
         r, g, b = int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)
         self.setStyleSheet(
             f"QPushButton#nav-btn:checked {{"
-            f" background-color: rgba({r},{g},{b},0.12);"
+            f" background-color: rgba({r},{g},{b},0.10);"
             f" color: {c}; font-weight: 600;"
             f" border-left: 2px solid {c}; padding-left: 14px;"
             f"}}"
@@ -146,6 +159,12 @@ class MainWindow(QMainWindow):
         self._meal_deduction_service = None
         self._page_anim = None
         self._db = db or get_db()
+        self._palette_command_entries: list[PaletteEntry] = []
+        self._palette_quick_add_entries: list[PaletteEntry] = []
+        self._last_palette_query = ""
+        self._palette_shortcuts: list[QShortcut] = []
+        self._visibility_service = SystemVisibilityService(self._db, parent=self)
+        service_registry.register("visibility", self._visibility_service)
         self._centre_on_screen()
         self._build_ui()
 
@@ -162,11 +181,14 @@ class MainWindow(QMainWindow):
 
         self._sidebar_widget = self._build_sidebar()
         root.addWidget(self._sidebar_widget)
-        root.addWidget(self._build_content_wrapper())
+        self._content_wrapper = self._build_content_wrapper()
+        root.addWidget(self._content_wrapper)
 
         status = QStatusBar()
         status.showMessage("DishBoard by Tom Slater")
         self.setStatusBar(status)
+        self._build_command_palette()
+        self._setup_command_palette_shortcuts()
 
     # ---------------------------------------------------------------- sidebar
 
@@ -259,10 +281,9 @@ class MainWindow(QMainWindow):
         layout.addSpacing(8)
         layout.addStretch()
 
-        # Sync status indicator — hidden until user is logged in
+        # Sync status indicator kept off-layout; sync still runs, but the sidebar no longer shows it.
         self._sync_indicator = SyncIndicator()
         self._sync_indicator.setVisible(False)
-        layout.addWidget(self._sync_indicator)
 
         bottom_div = QWidget()
         bottom_div.setObjectName("sidebar-divider")
@@ -329,10 +350,7 @@ class MainWindow(QMainWindow):
         # Back-navigation bar — hidden until there is history
         self._back_bar = QWidget()
         self._back_bar.setObjectName("back-bar")
-        self._back_bar.setStyleSheet(
-            f"background-color: {theme_manager.c('#0a0a0a', '#ebebeb')};"
-            f" border-bottom: 1px solid {theme_manager.c('#161616', '#cccccc')};"
-        )
+        self._back_bar.setStyleSheet(self._back_bar_style())
         self._back_bar.setFixedHeight(62)
         bl = QHBoxLayout(self._back_bar)
         bl.setContentsMargins(14, 0, 14, 0)
@@ -345,6 +363,7 @@ class MainWindow(QMainWindow):
         self._back_btn.setText("   Back")
         self._back_btn.setFixedHeight(38)
         self._back_btn.setMinimumWidth(90)
+        self._back_btn.setStyleSheet(self._back_btn_style())
         self._back_btn.clicked.connect(self._go_back)
 
         bl.addWidget(self._back_btn)
@@ -396,6 +415,7 @@ class MainWindow(QMainWindow):
         self._shopping_view.set_sync_fn(self._trigger_cloud_sync)
         self._dishy_view.set_sync_fn(self._trigger_cloud_sync)
         self._settings_view.set_sync_fn(self._trigger_cloud_sync)
+        self._settings_view.set_visibility_service(self._visibility_service)
 
         # Wire Shopping List Live Shop → My Kitchen refresh + navigation
         self._shopping_view.set_notify_my_kitchen_fn(
@@ -435,13 +455,871 @@ class MainWindow(QMainWindow):
 
         # Wire theme changes so every view can update itself
         theme_manager.theme_changed.connect(self._on_theme_changed)
-
         return wrapper
+
+    def _build_command_palette(self) -> None:
+        self._command_palette = CommandPaletteDialog(self)
+        self._command_palette.query_changed.connect(self._refresh_palette_results)
+        self._command_palette.entry_activated.connect(self._on_palette_entry_activated)
+        self._command_palette.form_action_requested.connect(self._on_palette_form_action)
+        self._command_palette.form_field_changed.connect(self._on_palette_form_field_changed)
+        self._palette_command_entries = self._create_palette_command_entries()
+        self._palette_quick_add_entries = self._create_palette_quick_add_entries()
+        self._refresh_palette_results("")
+
+    def _setup_command_palette_shortcuts(self) -> None:
+        sequence = "Meta+K" if sys.platform == "darwin" else "Ctrl+K"
+        shortcut = QShortcut(QKeySequence(sequence), self)
+        shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        shortcut.activated.connect(self.open_command_palette)
+        self._palette_shortcuts = [shortcut]
+
+    def _create_palette_command_entries(self) -> list[PaletteEntry]:
+        return [
+            PaletteEntry(
+                "go_home",
+                "command",
+                "Go Home",
+                "Return to the operations home screen.",
+                "Commands",
+                ("dashboard", "home"),
+                10,
+            ),
+            PaletteEntry(
+                "open_recipes",
+                "command",
+                "Open Recipes",
+                "Open your saved recipe workspace.",
+                "Commands",
+                ("library", "saved recipes"),
+                10,
+            ),
+            PaletteEntry(
+                "search_recipes",
+                "command",
+                "Search Recipes",
+                "Open Recipes and focus the global recipe search bar.",
+                "Commands",
+                ("find recipe", "recipe search", "discover"),
+                20,
+            ),
+            PaletteEntry(
+                "create_recipe",
+                "command",
+                "Create Recipe",
+                "Start a new recipe in the editor.",
+                "Commands",
+                ("new recipe", "add recipe"),
+                30,
+            ),
+            PaletteEntry(
+                "open_meal_planner",
+                "command",
+                "Open Meal Planner",
+                "Jump to the current week's planner.",
+                "Commands",
+                ("planner", "weekly plan"),
+                10,
+            ),
+            PaletteEntry(
+                "open_nutrition",
+                "command",
+                "Open Nutrition",
+                "Open today's nutrition dashboard.",
+                "Commands",
+                ("macros", "nutrition dashboard"),
+                10,
+            ),
+            PaletteEntry(
+                "open_my_kitchen",
+                "command",
+                "Open My Kitchen",
+                "Open the Pantry, Fridge, and Freezer tracker.",
+                "Commands",
+                ("pantry", "fridge", "freezer", "stock"),
+                10,
+            ),
+            PaletteEntry(
+                "open_shopping_list",
+                "command",
+                "Open Shopping List",
+                "Open the editable shopping list.",
+                "Commands",
+                ("groceries", "shopping"),
+                10,
+            ),
+            PaletteEntry(
+                "open_dishy",
+                "command",
+                "Open Dishy",
+                "Open the Dishy workspace.",
+                "Commands",
+                ("assistant", "copilot", "chat"),
+                10,
+            ),
+            PaletteEntry(
+                "ask_dishy",
+                "command",
+                "Ask Dishy",
+                "Open Dishy ready to type a prompt.",
+                "Commands",
+                ("chat", "ask ai", "prompt"),
+                20,
+            ),
+            PaletteEntry(
+                "open_help",
+                "command",
+                "Open Help",
+                "Open the how-to-use guide.",
+                "Commands",
+                ("guide", "how to use", "help"),
+                10,
+            ),
+            PaletteEntry(
+                "open_settings",
+                "command",
+                "Open Settings",
+                "Open app preferences and account settings.",
+                "Commands",
+                ("preferences", "account", "settings"),
+                20,
+            ),
+        ]
+
+    def _create_palette_quick_add_entries(self) -> list[PaletteEntry]:
+        return [
+            PaletteEntry(
+                "add_pantry_item",
+                "quick_add",
+                "Add Pantry Item",
+                "Add stock directly without opening the full My Kitchen dialog.",
+                "Quick Add",
+                ("pantry", "fridge", "freezer", "stock"),
+                10,
+            ),
+            PaletteEntry(
+                "add_shopping_item",
+                "quick_add",
+                "Add Shopping Item",
+                "Add to the shopping list from one lightweight form.",
+                "Quick Add",
+                ("shopping", "groceries", "list"),
+                20,
+            ),
+            PaletteEntry(
+                "log_nutrition",
+                "quick_add",
+                "Log Nutrition",
+                "Estimate a food item with Dishy, then confirm before saving.",
+                "Quick Add",
+                ("nutrition", "food", "macros", "log"),
+                30,
+            ),
+            PaletteEntry(
+                "plan_meal",
+                "quick_add",
+                "Plan Meal",
+                "Choose a day, meal slot, and saved recipe for the active week.",
+                "Quick Add",
+                ("meal", "planner", "slot", "week"),
+                40,
+            ),
+        ]
+
+    def _load_palette_recents(self) -> list[PaletteEntry]:
+        raw = self._db.get_setting("command_palette_recents", "[]")
+        try:
+            items = json.loads(raw or "[]")
+        except Exception:
+            items = []
+        entries: list[PaletteEntry] = []
+        for item in items[:8]:
+            if not isinstance(item, dict):
+                continue
+            entry_id = str(item.get("id") or "").strip()
+            kind = str(item.get("kind") or "").strip()
+            if not entry_id or not kind:
+                continue
+            entries.append(
+                PaletteEntry(
+                    entry_id,
+                    kind,
+                    self._palette_display_text(item.get("title") or ""),
+                    self._palette_display_text(item.get("subtitle") or ""),
+                    "Recent",
+                    tuple(item.get("keywords") or ()),
+                    int(item.get("sort_priority", 0) or 0),
+                    dict(item.get("payload") or {}),
+                    recent=True,
+                )
+            )
+        return entries
+
+    def _record_palette_recent(self, entry: PaletteEntry) -> None:
+        current = self._load_palette_recents()
+        payload = [
+            {
+                "id": item.id,
+                "kind": item.kind,
+                "title": self._palette_display_text(item.title),
+                "subtitle": self._palette_display_text(item.subtitle),
+                "keywords": list(item.keywords),
+                "sort_priority": item.sort_priority,
+                "payload": dict(item.payload or {}),
+            }
+            for item in current
+            if not (item.id == entry.id and item.kind == entry.kind)
+        ]
+        payload.insert(
+            0,
+            {
+                "id": entry.id,
+                "kind": entry.kind,
+                "title": self._palette_display_text(entry.title),
+                "subtitle": self._palette_display_text(entry.subtitle),
+                "keywords": list(entry.keywords),
+                "sort_priority": entry.sort_priority,
+                "payload": dict(entry.payload or {}),
+            },
+        )
+        self._db.set_setting("command_palette_recents", json.dumps(payload[:8]))
+        self._trigger_cloud_sync()
+
+    def _current_palette_week_start(self) -> str:
+        try:
+            return self._meal_planner_view.current_week_start_iso()
+        except Exception:
+            today = datetime.now().date()
+            return (today - timedelta(days=today.weekday())).isoformat()
+
+    def _search_settings_entries(self, query: str) -> list[PaletteEntry]:
+        entries = [
+            PaletteEntry(
+                f"settings:{section['key']}",
+                "settings_section",
+                section["label"],
+                "Open this section in Settings.",
+                "Settings",
+                ("settings", section["group"], section["label"]),
+                40,
+                {"section": section["key"]},
+            )
+            for section in self._settings_view.palette_sections()
+        ]
+        return rank_entries(entries, query)
+
+    def _palette_display_text(self, text: str) -> str:
+        return " ".join(str(text or "").replace("_", " ").split())
+
+    def _search_recipe_entries(self, query: str) -> list[PaletteEntry]:
+        try:
+            rows = self._db.get_saved_recipes()
+        except Exception:
+            rows = []
+        results = filter_and_rank_saved_recipes(rows, query)[:8]
+        entries: list[PaletteEntry] = []
+        for row in results:
+            data = dict(row)
+            try:
+                recipe_data = json.loads(data.get("data_json") or "{}")
+            except Exception:
+                recipe_data = {}
+            tags = ", ".join(
+                self._palette_display_text(tag)
+                for tag in (recipe_data.get("tags") or [])[:3]
+                if str(tag or "").strip()
+            )
+            subtitle = tags or "Saved recipe"
+            entries.append(
+                PaletteEntry(
+                    f"recipe:{data['id']}",
+                    "recipe",
+                    self._palette_display_text(data.get("title") or ""),
+                    subtitle,
+                    "Recipes",
+                    tuple(recipe_data.get("tags") or ()),
+                    10,
+                    {"recipe_id": int(data["id"])},
+                )
+            )
+        return entries
+
+    def _simple_entity_entries(
+        self,
+        *,
+        query: str,
+        rows: list[dict],
+        kind: str,
+        group: str,
+        title_key: str,
+        subtitle_fn,
+        payload_fn,
+        keywords_fn=None,
+        limit: int = 8,
+    ) -> list[PaletteEntry]:
+        normalized = " ".join(str(query or "").lower().split())
+        entries: list[PaletteEntry] = []
+        for row in rows:
+            title = str(row.get(title_key) or "").strip()
+            if not title:
+                continue
+            subtitle = subtitle_fn(row)
+            keywords = tuple(keywords_fn(row) if keywords_fn else ())
+            entry = PaletteEntry(
+                f"{kind}:{row.get('id')}",
+                kind,
+                title,
+                subtitle,
+                group,
+                keywords,
+                50,
+                payload_fn(row),
+            )
+            if normalized and not rank_entries([entry], normalized):
+                continue
+            entries.append(entry)
+        return rank_entries(entries, query)[:limit]
+
+    def _search_pantry_entries(self, query: str) -> list[PaletteEntry]:
+        rows = self._db.get_pantry_items()
+        return self._simple_entity_entries(
+            query=query,
+            rows=rows,
+            kind="pantry_item",
+            group="My Kitchen",
+            title_key="name",
+            subtitle_fn=lambda row: f"{row.get('storage', 'Pantry')} · {str(row.get('quantity') or '').strip()} {str(row.get('unit') or '').strip()}".strip(" ·"),
+            payload_fn=lambda row: {"item_id": int(row.get("id") or 0)},
+            keywords_fn=lambda row: (row.get("storage", ""), row.get("unit", "")),
+        )
+
+    def _search_shopping_entries(self, query: str) -> list[PaletteEntry]:
+        rows = [dict(row) for row in self._db.get_shopping_items()]
+        return self._simple_entity_entries(
+            query=query,
+            rows=rows,
+            kind="shopping_item",
+            group="Shopping",
+            title_key="name",
+            subtitle_fn=lambda row: f"{str(row.get('quantity') or '').strip()} {str(row.get('unit') or '').strip()}".strip() or "Shopping item",
+            payload_fn=lambda row: {"item_id": int(row.get("id") or 0)},
+            keywords_fn=lambda row: (row.get("source", ""),),
+        )
+
+    def _search_meal_slot_entries(self, query: str) -> list[PaletteEntry]:
+        week_start = self._current_palette_week_start()
+        try:
+            rows = [dict(row) for row in self._db.get_meal_plan(week_start)]
+        except Exception:
+            rows = []
+        rows = [row for row in rows if str(row.get("custom_name") or "").strip()]
+        entries: list[PaletteEntry] = []
+        for row in rows:
+            entries.append(
+                PaletteEntry(
+                    f"meal_slot:{row.get('id')}",
+                    "meal_slot",
+                    self._palette_display_text(row.get("custom_name") or ""),
+                    f"{self._palette_display_text(row.get('day_of_week', ''))} · {str(row.get('meal_type') or '').capitalize()}",
+                    "Meal Planner",
+                    (row.get("day_of_week", ""), row.get("meal_type", ""), week_start),
+                    30,
+                    {
+                        "day": str(row.get("day_of_week") or ""),
+                        "meal_type": str(row.get("meal_type") or ""),
+                        "week_start": week_start,
+                        "recipe_id": int(row.get("recipe_id") or 0) or None,
+                    },
+                )
+            )
+        return rank_entries(entries, query)[:8]
+
+    def _search_dishy_entries(self, query: str) -> list[PaletteEntry]:
+        entries: list[PaletteEntry] = []
+        for session in self._db.get_dishy_sessions_summary()[:12]:
+            preview = str(session.get("first_message") or "").strip()
+            entries.append(
+                PaletteEntry(
+                    f"dishy_session:{session['session_id']}",
+                    "dishy_session",
+                    preview[:70] + ("…" if len(preview) > 70 else ""),
+                    f"{session.get('date', '')} · {session.get('message_count', 0)} messages",
+                    "Dishy",
+                    ("dishy", "session", preview),
+                    60,
+                    {"session_id": session["session_id"]},
+                )
+            )
+        return rank_entries(entries, query)[:6]
+
+    def _build_palette_entries(self, query: str) -> list[PaletteEntry]:
+        query = str(query or "").strip()
+        if not query:
+            entries = [*self._load_palette_recents(), *self._palette_quick_add_entries, *self._palette_command_entries]
+            return rank_entries(entries, "")
+
+        ranked: list[PaletteEntry] = []
+        ranked.extend(rank_entries([*self._palette_quick_add_entries, *self._palette_command_entries], query))
+        ranked.extend(self._search_recipe_entries(query))
+        ranked.extend(self._search_pantry_entries(query))
+        ranked.extend(self._search_shopping_entries(query))
+        ranked.extend(self._search_meal_slot_entries(query))
+        ranked.extend(self._search_settings_entries(query))
+        ranked.extend(self._search_dishy_entries(query))
+        deduped: list[PaletteEntry] = []
+        seen: set[tuple[str, str]] = set()
+        for entry in ranked:
+            key = (entry.kind, entry.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(entry)
+        return deduped[:24]
+
+    def _refresh_palette_results(self, query: str) -> None:
+        self._last_palette_query = str(query or "")
+        self._command_palette.set_entries(self._build_palette_entries(query))
+
+    def _quick_add_form(self, form_id: str, *, values: dict | None = None) -> QuickAddForm:
+        values = dict(values or {})
+        if form_id == "add_pantry_item":
+            return QuickAddForm(
+                id=form_id,
+                title="Add Pantry Item",
+                subtitle="Add stock directly from the command panel.",
+                primary_label="Add Item",
+                helper_text="Name is required. Expiry should use YYYY-MM-DD if you enter one.",
+                fields=(
+                    PaletteField("name", "Name", "e.g. Chicken breast", required=True, default=values.get("name", "")),
+                    PaletteField("quantity", "Quantity", "e.g. 500", field_type="number", default=values.get("quantity", "")),
+                    PaletteField("unit", "Unit", "e.g. g", default=values.get("unit", "")),
+                    PaletteField(
+                        "storage",
+                        "Storage",
+                        field_type="choice",
+                        options=(("Pantry", "Pantry"), ("Fridge", "Fridge"), ("Freezer", "Freezer")),
+                        default=values.get("storage", "Pantry"),
+                    ),
+                    PaletteField("expiry_date", "Expiry", "YYYY-MM-DD (optional)", default=values.get("expiry_date", "")),
+                ),
+            )
+        if form_id == "add_shopping_item":
+            return QuickAddForm(
+                id=form_id,
+                title="Add Shopping Item",
+                subtitle="Capture groceries without leaving the command panel.",
+                primary_label="Add Item",
+                helper_text="Name is required.",
+                fields=(
+                    PaletteField("name", "Name", "e.g. Greek yogurt", required=True, default=values.get("name", "")),
+                    PaletteField("quantity", "Quantity", "e.g. 2", field_type="number", default=values.get("quantity", "")),
+                    PaletteField("unit", "Unit", "e.g. tubs", default=values.get("unit", "")),
+                ),
+            )
+        if form_id == "log_nutrition":
+            return QuickAddForm(
+                id=form_id,
+                title="Log Nutrition",
+                subtitle="Estimate a food item with Dishy, then confirm before saving it.",
+                primary_label="Lookup",
+                helper_text="Describe the food naturally, for example “2 eggs and toast”.",
+                fields=(
+                    PaletteField("query", "Food", "e.g. 2 eggs, bowl of oats", required=True, default=values.get("query", "")),
+                ),
+            )
+        if form_id == "plan_meal":
+            return QuickAddForm(
+                id=form_id,
+                title="Plan Meal",
+                subtitle="Choose a day, meal slot, and saved recipe for the active week.",
+                primary_label="Save Meal",
+                helper_text="Recipe search uses your saved recipes and picks the best match.",
+                fields=(
+                    PaletteField(
+                        "day",
+                        "Day",
+                        field_type="choice",
+                        options=tuple((day, day) for day in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")),
+                        default=values.get("day", datetime.now().strftime("%A")),
+                    ),
+                    PaletteField(
+                        "meal_type",
+                        "Meal",
+                        field_type="choice",
+                        options=(("Breakfast", "breakfast"), ("Lunch", "lunch"), ("Dinner", "dinner"), ("Snack", "snack")),
+                        default=values.get("meal_type", "dinner"),
+                    ),
+                    PaletteField(
+                        "recipe_query",
+                        "Recipe",
+                        "Start typing a saved recipe",
+                        field_type="recipe_search",
+                        required=True,
+                        default=values.get("recipe_query", ""),
+                    ),
+                ),
+            )
+        raise ValueError(f"Unknown quick-add form: {form_id}")
+
+    def _show_quick_add_form(self, form_id: str, *, values: dict | None = None) -> None:
+        self._command_palette.show_quick_add(self._quick_add_form(form_id, values=values))
+        if form_id == "plan_meal":
+            seed_query = str((values or {}).get("recipe_query") or "")
+            if seed_query:
+                self._update_palette_recipe_suggestions(seed_query)
+
+    def _show_log_nutrition_preview(self, data: dict, *, original_query: str) -> None:
+        rows = (
+            ("Food", str(data.get("food_name") or "Unknown")),
+            ("Serving", str(data.get("serving") or "Estimated serving")),
+            ("Calories", f"{float(data.get('kcal', 0)):.0f} kcal"),
+            (
+                "Macros",
+                f"P {float(data.get('protein_g', 0)):.1f}g · C {float(data.get('carbs_g', 0)):.1f}g · F {float(data.get('fat_g', 0)):.1f}g",
+            ),
+        )
+        self._command_palette.show_quick_add(
+            QuickAddForm(
+                id="log_nutrition",
+                title="Confirm Nutrition Log",
+                subtitle="Review Dishy’s estimate before saving it to today.",
+                primary_label="Save Log",
+                helper_text="This uses the same Dishy estimation flow as the Nutrition page.",
+                preview_rows=rows,
+                preview_payload={"nutrition": dict(data or {}), "query": original_query},
+                mode="preview",
+            )
+        )
+
+    def _resolve_recipe_match(self, query: str):
+        try:
+            rows = self._db.get_saved_recipes()
+        except Exception:
+            rows = []
+        matches = filter_and_rank_saved_recipes(rows, query)
+        return matches[0] if matches else None
+
+    def _palette_recipe_suggestions(self, query: str) -> list[dict]:
+        try:
+            rows = self._db.get_saved_recipes()
+        except Exception:
+            rows = []
+        query = str(query or "").strip()
+        if not query:
+            return []
+        matches = filter_and_rank_saved_recipes(rows, query) if query else list(rows)
+        suggestions: list[dict] = []
+        for row in matches[:5]:
+            data = dict(row)
+            title = self._palette_display_text(data.get("title") or "")
+            if query and not self._recipe_suggestion_matches(title, query):
+                continue
+            try:
+                recipe_data = json.loads(data.get("data_json") or "{}")
+            except Exception:
+                recipe_data = {}
+            tags = ", ".join(
+                self._palette_display_text(tag)
+                for tag in (recipe_data.get("tags") or [])[:2]
+                if str(tag or "").strip()
+            )
+            suggestions.append(
+                {
+                    "id": int(data.get("id") or 0),
+                    "title": title,
+                    "subtitle": tags or "Saved recipe",
+                }
+            )
+            if len(suggestions) >= 5:
+                break
+        return suggestions
+
+    def _recipe_suggestion_matches(self, title: str, query: str) -> bool:
+        query = " ".join(str(query or "").lower().split())
+        title = " ".join(str(title or "").lower().split())
+        if not query:
+            return True
+        if query in title:
+            return True
+        title_words = title.split()
+        if any(word.startswith(query) for word in title_words):
+            return True
+        query_words = query.split()
+        if query_words and all(
+            any(
+                qword in word
+                or word.startswith(qword)
+                or SequenceMatcher(None, qword, word).ratio() >= 0.72
+                for word in title_words
+            )
+            for qword in query_words
+        ):
+            return True
+        return max((SequenceMatcher(None, query, word).ratio() for word in title_words), default=0.0) >= 0.72
+
+    def _update_palette_recipe_suggestions(self, query: str) -> None:
+        self._command_palette.set_field_suggestions(
+            "recipe_query",
+            self._palette_recipe_suggestions(query),
+        )
+
+    def _on_palette_form_field_changed(self, form_id: str, field_key: str, value: str) -> None:
+        if form_id == "plan_meal" and field_key == "recipe_query":
+            self._update_palette_recipe_suggestions(value)
+
+    def _on_palette_entry_activated(self, entry: PaletteEntry) -> None:
+        if entry.kind == "quick_add":
+            self._show_quick_add_form(entry.id)
+            return
+        self._command_palette.hide()
+        QTimer.singleShot(0, lambda e=entry: self._execute_palette_entry(e))
+
+    def _execute_palette_entry(self, entry: PaletteEntry) -> bool:
+        handled = False
+        if entry.kind == "command":
+            handled = self._execute_command_entry(entry.id)
+        elif entry.kind == "recipe":
+            recipe_id = int(entry.payload.get("recipe_id") or 0)
+            if recipe_id:
+                self._on_nav_clicked(1)
+                self._recipes_view.open_by_id(recipe_id)
+                handled = True
+        elif entry.kind == "pantry_item":
+            item_id = int(entry.payload.get("item_id") or 0)
+            self._on_nav_clicked(4)
+            handled = self._my_kitchen_storage_view.focus_item(item_id)
+        elif entry.kind == "shopping_item":
+            item_id = int(entry.payload.get("item_id") or 0)
+            self._on_nav_clicked(5)
+            handled = self._shopping_view.focus_item(item_id)
+        elif entry.kind == "meal_slot":
+            self._on_nav_clicked(2)
+            handled = self._meal_planner_view.open_meal_slot(
+                str(entry.payload.get("day") or ""),
+                str(entry.payload.get("meal_type") or ""),
+            )
+        elif entry.kind == "settings_section":
+            self._on_settings_clicked()
+            self._settings_view.activate_settings(str(entry.payload.get("section") or "preferences"))
+            handled = True
+        elif entry.kind == "dishy_session":
+            self._on_nav_clicked(6)
+            handled = self._dishy_view.open_session(str(entry.payload.get("session_id") or ""))
+        if handled:
+            self._record_palette_recent(entry)
+        return handled
+
+    def _execute_command_entry(self, command_id: str) -> bool:
+        mapping = {
+            "go_home": self.go_home,
+            "open_recipes": self._open_recipes_saved,
+            "search_recipes": self._open_recipes_search,
+            "create_recipe": self._open_recipe_create,
+            "open_meal_planner": self._open_meal_planner,
+            "open_nutrition": self._open_nutrition,
+            "open_my_kitchen": self._open_my_kitchen,
+            "open_shopping_list": self._open_shopping_list,
+            "open_dishy": self._open_dishy,
+            "ask_dishy": self._open_dishy_chat,
+            "open_help": self._on_guide_clicked,
+            "open_settings": self._open_settings,
+        }
+        handler = mapping.get(command_id)
+        if handler is None:
+            return False
+        handler()
+        entry = next((item for item in self._palette_command_entries if item.id == command_id), None)
+        if entry is not None:
+            self._record_palette_recent(entry)
+        return True
+
+    def _on_palette_form_action(self, form_id: str, action: str, values: dict) -> None:
+        if action != "primary":
+            self._command_palette.clear_form()
+            self._refresh_palette_results(self._last_palette_query)
+            return
+
+        if form_id == "add_pantry_item":
+            name = str(values.get("name") or "").strip()
+            if not name:
+                self._command_palette.update_form_message("Name is required.", is_error=True)
+                return
+            qty_raw = str(values.get("quantity") or "").strip()
+            try:
+                quantity = float(qty_raw) if qty_raw else None
+            except ValueError:
+                self._command_palette.update_form_message("Quantity must be a number.", is_error=True)
+                return
+            expiry = str(values.get("expiry_date") or "").strip() or None
+            if expiry:
+                try:
+                    datetime.fromisoformat(expiry)
+                except ValueError:
+                    self._command_palette.update_form_message("Expiry must use YYYY-MM-DD.", is_error=True)
+                    return
+            item_id = self._my_kitchen_storage_view.save_item_from_palette(
+                name=name,
+                quantity=quantity,
+                unit=str(values.get("unit") or "").strip(),
+                storage=str(values.get("storage") or "Pantry"),
+                expiry_date=expiry,
+            )
+            self._command_palette.hide()
+            self._on_nav_clicked(4)
+            self._my_kitchen_storage_view.focus_item(item_id)
+            self._record_palette_recent(next(item for item in self._palette_quick_add_entries if item.id == form_id))
+            return
+
+        if form_id == "add_shopping_item":
+            name = str(values.get("name") or "").strip()
+            if not name:
+                self._command_palette.update_form_message("Name is required.", is_error=True)
+                return
+            item_id = self._shopping_view.save_item_from_palette(
+                name=name,
+                quantity=str(values.get("quantity") or "").strip(),
+                unit=str(values.get("unit") or "").strip(),
+            )
+            self._command_palette.hide()
+            self._on_nav_clicked(5)
+            self._shopping_view.focus_item(item_id)
+            self._record_palette_recent(next(item for item in self._palette_quick_add_entries if item.id == form_id))
+            return
+
+        if form_id == "log_nutrition":
+            preview_payload = dict(values.get("_preview_payload") or {})
+            if preview_payload:
+                nutrition = dict(preview_payload.get("nutrition") or {})
+                if not self._nutrition_view.save_estimate_to_today(nutrition):
+                    self._command_palette.update_form_message("Could not save this nutrition estimate.", is_error=True)
+                    return
+                self._trigger_cloud_sync()
+                self._command_palette.hide()
+                self._on_nav_clicked(3)
+                self._record_palette_recent(next(item for item in self._palette_quick_add_entries if item.id == form_id))
+                return
+            query = str(values.get("query") or "").strip()
+            if not query:
+                self._command_palette.update_form_message("Food query is required.", is_error=True)
+                return
+            self._command_palette.set_form_pending(True)
+            self._command_palette.update_form_message("Asking Dishy for an estimate…")
+            self._nutrition_view.request_quick_estimate(
+                query,
+                on_result=lambda data, q=query: self._on_palette_nutrition_lookup_result(q, data),
+                on_error=self._on_palette_nutrition_lookup_error,
+            )
+            return
+
+        if form_id == "plan_meal":
+            selected_recipe_id = int(values.get("recipe_query_selected_id") or 0)
+            recipe_row = None
+            if selected_recipe_id:
+                recipe_row = next(
+                    (row for row in self._db.get_saved_recipes() if int(row["id"]) == selected_recipe_id),
+                    None,
+                )
+            recipe_query = str(values.get("recipe_query") or "").strip()
+            if recipe_row is None and recipe_query:
+                recipe_row = self._resolve_recipe_match(recipe_query)
+            if recipe_row is None:
+                self._command_palette.update_form_message("No saved recipe matched that search.", is_error=True)
+                return
+            day = str(values.get("day") or "").strip()
+            meal_type = str(values.get("meal_type") or "").strip().lower()
+            if not self._meal_planner_view.save_meal_slot_from_palette(day, meal_type, int(recipe_row["id"])):
+                self._command_palette.update_form_message("Could not save that meal slot.", is_error=True)
+                return
+            self._command_palette.hide()
+            self._on_nav_clicked(2)
+            self._meal_planner_view.open_meal_slot(day, meal_type)
+            self._record_palette_recent(next(item for item in self._palette_quick_add_entries if item.id == form_id))
+            return
+
+    def _on_palette_nutrition_lookup_result(self, query: str, data: dict) -> None:
+        self._command_palette.set_form_pending(False)
+        self._show_log_nutrition_preview(data, original_query=query)
+
+    def _on_palette_nutrition_lookup_error(self, err: str) -> None:
+        self._command_palette.set_form_pending(False)
+        msg = "Lookup failed — check your connection or API key."
+        err_lower = str(err or "").lower()
+        if "credit" in err_lower or "too low" in err_lower:
+            msg = "Anthropic credits are low — top up before using nutrition lookup."
+        elif "401" in err_lower or "auth" in err_lower:
+            msg = "Nutrition lookup could not authenticate — check your API key."
+        self._command_palette.update_form_message(msg, is_error=True)
+
+    def _open_recipes_saved(self) -> None:
+        self._on_nav_clicked(1)
+        self._recipes_view.activate_saved_recipes()
+
+    def _open_recipes_search(self) -> None:
+        self._on_nav_clicked(1)
+        self._recipes_view.activate_recipe_search()
+
+    def _open_recipe_create(self) -> None:
+        self._on_nav_clicked(1)
+        self._recipes_view.activate_create_recipe()
+
+    def _open_meal_planner(self) -> None:
+        self._on_nav_clicked(2)
+        self._meal_planner_view.activate_planner()
+
+    def _open_nutrition(self) -> None:
+        self._on_nav_clicked(3)
+
+    def _open_my_kitchen(self) -> None:
+        self._on_nav_clicked(4)
+        self._my_kitchen_storage_view.activate_storage()
+
+    def _open_shopping_list(self) -> None:
+        self._on_nav_clicked(5)
+        self._shopping_view.activate_shopping_list()
+
+    def _open_dishy(self) -> None:
+        self._on_nav_clicked(6)
+
+    def _open_dishy_chat(self) -> None:
+        self._on_nav_clicked(6)
+        self._dishy_view.activate_chat()
+
+    def _open_settings(self) -> None:
+        self._on_settings_clicked()
+        self._settings_view.activate_settings()
 
     # --------------------------------------------------------------- navigation
 
     _PAGE_NAMES = ["Home", "Recipes", "Meal Planner",
                    "Nutrition", "My Kitchen", "Shopping List", "Dishy", "How to use", "Settings"]
+
+    def _back_bar_style(self) -> str:
+        return (
+            f"background-color: {theme_manager.c('#101214', '#f6f1eb')};"
+            " border-bottom: none;"
+        )
+
+    def _back_btn_style(self) -> str:
+        return (
+            "QPushButton {"
+            " background: transparent;"
+            " border: none;"
+            f" color: {theme_manager.c('#a39c93', '#6c6258')};"
+            " font-size: 13px; font-weight: 600; text-align: left; padding: 0 8px;"
+            "}"
+            "QPushButton:hover {"
+            f" color: {theme_manager.c('#ece6de', '#241c15')};"
+            "}"
+        )
+
+    def _prepare_page_for_sidebar_navigation(self, index: int) -> None:
+        view = self._stack.widget(index)
+        if view is None or not hasattr(view, "show_root_page"):
+            return
+        try:
+            view.show_root_page()
+        except Exception:
+            pass
 
     def _on_nav_clicked(self, index: int):
         current = self._stack.currentIndex()
@@ -453,6 +1331,7 @@ class MainWindow(QMainWindow):
         self._guide_btn.setChecked(False)
         self._settings_btn.setChecked(False)
         self._stack.setCurrentIndex(index)
+        self._prepare_page_for_sidebar_navigation(index)
         self._dishy_bubble.set_page(self._PAGE_NAMES[index])
         self._animate_current_page()
         # Refresh the view being shown so it always has up-to-date data
@@ -462,7 +1341,6 @@ class MainWindow(QMainWindow):
                 view.refresh()
             except Exception:
                 pass
-
     def _on_guide_clicked(self):
         current = self._stack.currentIndex()
         if current != 7:
@@ -473,9 +1351,9 @@ class MainWindow(QMainWindow):
         self._guide_btn.setChecked(True)
         self._settings_btn.setChecked(False)
         self._stack.setCurrentIndex(7)
+        self._prepare_page_for_sidebar_navigation(7)
         self._dishy_bubble.set_page("How to use")
         self._animate_current_page()
-
     def _on_settings_clicked(self):
         current = self._stack.currentIndex()
         if current != 8:
@@ -486,9 +1364,9 @@ class MainWindow(QMainWindow):
         self._guide_btn.setChecked(False)
         self._settings_btn.setChecked(True)
         self._stack.setCurrentIndex(8)
+        self._prepare_page_for_sidebar_navigation(8)
         self._dishy_bubble.set_page("Settings")
         self._animate_current_page()
-
     def _go_back(self):
         if not self._nav_history:
             return
@@ -501,7 +1379,6 @@ class MainWindow(QMainWindow):
         self._back_bar.setVisible(bool(self._nav_history))
         self._dishy_bubble.set_page(self._PAGE_NAMES[prev])
         self._animate_current_page()
-
     def _animate_current_page(self):
         """Slide-in transition without QGraphics effects (paint-stable)."""
         view = self._stack.currentWidget()
@@ -584,6 +1461,32 @@ class MainWindow(QMainWindow):
             self._auto_collapsed = False
             self._toggle_sidebar()
             self._in_resize_toggle = False
+        if hasattr(self, "_command_palette") and self._command_palette.isVisible():
+            self._command_palette.reposition()
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        if hasattr(self, "_command_palette") and self._command_palette.isVisible():
+            self._command_palette.reposition()
+
+    def open_command_palette(self) -> None:
+        modal = QApplication.activeModalWidget()
+        if modal is not None and modal is not self._command_palette:
+            return
+        self._refresh_palette_results("")
+        self._command_palette.show_palette("")
+
+    def run_command_palette_entry(self, entry_id: str, query: str = "") -> bool:
+        entry = next((item for item in self._build_palette_entries(query) if item.id == entry_id), None)
+        if entry is None:
+            return False
+        if entry.kind == "quick_add":
+            self._show_quick_add_form(entry.id)
+            return True
+        return self._execute_palette_entry(entry)
+
+    def run_command_palette_command(self, command_id: str) -> bool:
+        return self.run_command_palette_entry(command_id)
 
     def _trigger_dishy_prompt(self, text: str):
         """Navigate to DishyView and auto-send a prompt (called from Home)."""
@@ -633,10 +1536,8 @@ class MainWindow(QMainWindow):
 
     def _on_theme_changed(self, mode: str):
         """Notify every view that supports live theme updates."""
-        self._back_bar.setStyleSheet(
-            f"background-color: {theme_manager.c('#0a0a0a', '#ebebeb')};"
-            f" border-bottom: 1px solid {theme_manager.c('#161616', '#cccccc')};"
-        )
+        self._back_bar.setStyleSheet(self._back_bar_style())
+        self._back_btn.setStyleSheet(self._back_btn_style())
         self._sidebar_date_compact.setStyleSheet(
             f"font-size: 10px; font-weight: 700; color: {theme_manager.c('#888888', '#666666')};"
             " line-height: 1.3; background: transparent; padding: 0;"
@@ -649,21 +1550,25 @@ class MainWindow(QMainWindow):
             if hasattr(view, "apply_theme"):
                 view.apply_theme(mode)
         self._dishy_bubble.apply_theme(mode)
+        if hasattr(self, "_command_palette"):
+            self._command_palette.apply_theme()
 
     # ── Cloud sync public API ─────────────────────────────────────────────────
 
     def _trigger_cloud_sync(self) -> None:
         """Trigger an immediate cloud sync after any data mutation. Safe if not logged in."""
         try:
+            self._visibility_service.refresh()
             if self._cloud_sync_service is not None:
                 self._cloud_sync_service.sync_now()
         except Exception:
             pass
 
     def set_sync_service(self, service) -> None:
-        """Wire a CloudSyncBackgroundService to the sidebar sync indicator."""
+        """Wire a CloudSyncBackgroundService without exposing sidebar sync chrome."""
         self._cloud_sync_service = service
-        self._sync_indicator.setVisible(True)
+        self._visibility_service.bind_sync_service(service)
+        self._sync_indicator.setVisible(False)
         self._sync_indicator.set_state("syncing")
         service.sync_started.connect(
             lambda: self._sync_indicator.set_state("syncing")
@@ -715,6 +1620,7 @@ class MainWindow(QMainWindow):
                 home_view.refresh()
         except Exception:
             pass
+        self._visibility_service.refresh()
 
     def go_home(self) -> None:
         """Navigate to the Home view and deselect settings/guide buttons."""
@@ -740,19 +1646,21 @@ class MainWindow(QMainWindow):
                 refresh_fn()
             except Exception:
                 pass
+        self._visibility_service.refresh()
 
     def set_offline_mode(self) -> None:
         """Legacy alias — calls set_sync_unavailable."""
         self.set_sync_unavailable()
 
     def set_sync_unavailable(self) -> None:
-        """Show a sync-unavailable indicator (network down, still signed in)."""
-        self._sync_indicator.setVisible(True)
+        """Track sync-unavailable state without showing sidebar sync chrome."""
+        self._sync_indicator.setVisible(False)
         self._sync_indicator.set_state("offline")
 
     def set_account_user(self, user: dict | None, sync_service) -> None:
         """Pass account info to the Settings > Account page."""
         self._settings_view.set_account_info(user, sync_service)
+        self._settings_view.set_visibility_service(self._visibility_service)
         # Start meal deduction service after login
         if not hasattr(self, "_meal_deduction_service") or self._meal_deduction_service is None:
             try:

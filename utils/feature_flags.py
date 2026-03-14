@@ -234,7 +234,3 @@ if __name__ == "__main__":
 
     print("feature_flags.py is a support module.")
     print(f"Start DishBoard with: {sys.executable} DishBoard.py")
-
-
-def get_default_flags() -> dict[str, bool]:
-    return dict(_DEFAULT_FLAGS)

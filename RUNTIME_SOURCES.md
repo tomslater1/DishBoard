@@ -11,7 +11,6 @@ Current runtime data/services are:
   - Planned intake: meal plan + recipe nutrition
   - Consumed intake: `nutrition_logs`
 
-Legacy path:
+Removed legacy runtime path:
 
-- `utils/nutrition_sync.py` is deprecated and not used in startup/runtime wiring.
-
+- `utils/nutrition_sync.py` has been deleted because it was no longer wired into startup or runtime flows.

@@ -18,7 +18,6 @@ class NotificationTests(TempDBTestCase):
 
     def test_expiry_and_meal_reminders_are_deduped(self):
         # Expiry in 3 days should produce one warning notification.
-        exp = (date.today()).replace(day=date.today().day)
         expiry = date.fromordinal(date.today().toordinal() + 3).isoformat()
         self.db.add_pantry_item("Chicken breast", quantity=2, unit="pack", storage="Fridge", expiry_date=expiry)
 

@@ -1,5 +1,4 @@
 import json
-from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from utils.theme import manager as theme_manager
 from utils.themed_dialog import ThemedMessageBox
@@ -8,11 +7,10 @@ import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QScrollArea, QSizePolicy, QStackedWidget,
-    QDialog, QGridLayout, QComboBox,
-    QFrame, QFileDialog,
+    QDialog, QGridLayout, QFileDialog,
 )
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath
-from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtCore import QTimer
 
 from api.claude_ai import ClaudeAI
@@ -21,17 +19,19 @@ from models.database import Database
 from utils.data_service import get_db
 from utils.recipe_search import filter_and_rank_saved_recipes
 from utils.recipe_health import validate_recipe, health_label
+from utils.recipe_scaling import scale_recipe
 from utils.search_clients import get_google_search_api
+from utils.service_hub import registry as service_registry
 from utils.workers import run_async
 from views.recipe_catalog import (
     RECIPE_ICONS,
     RECIPE_COLOURS,
     RECIPE_TAGS,
-    DAYS,
-    MEAL_TYPES,
 )
 from widgets.ingredient_row import NutritionIngredientList
+from widgets.page_scaffold import EmptyStateCard, OverflowActionMenu, PageScaffold, PageToolbar
 from widgets.primary_button import PrimaryButton
+from utils.ui_tokens import input_style, secondary_button_style
 
 from views.recipes_shared import (
     AddToCalendarDialog,
@@ -116,6 +116,100 @@ def _cached_image_path(url: str) -> str | None:
         return None
 
 
+_TAG_TOOLTIPS = {
+    "breakfast": "Breakfast recipe. Used to group meals that fit the first meal of the day.",
+    "lunch": "Lunch recipe. Used to group lighter midday meals.",
+    "dinner": "Dinner recipe. Used to group more substantial evening meals.",
+    "snack": "Snack recipe. Usually a smaller bite between meals.",
+    "dessert": "Dessert recipe. A sweet finish or treat-style dish.",
+    "dishy": "Dishy-generated or Dishy-enriched recipe. AI has helped create or improve the recipe data.",
+    "online": "Imported from the web rather than created directly inside DishBoard.",
+    "vegetarian": "No meat or fish in the recipe.",
+    "vegan": "No animal products in the recipe.",
+    "gluten-free": "Designed to avoid gluten-containing ingredients.",
+    "dairy-free": "Designed to avoid dairy ingredients.",
+    "high-protein": "Higher-protein recipe, useful when you want more protein per serving.",
+    "low-carb": "Lower in carbs than a typical version of this dish.",
+    "keto": "Very low-carb recipe intended to fit ketogenic eating.",
+    "paleo": "Recipe styled around minimally processed foods, usually avoiding grains and most dairy.",
+    "quick (< 30 min)": "Designed to be ready in under 30 minutes.",
+    "one-pot": "Mostly cooked in one pot or pan, so cleanup is lighter.",
+    "meal-prep": "A good make-ahead recipe for later meals.",
+    "batch cook": "Well suited to cooking in larger quantities for multiple portions.",
+    "spicy": "Has noticeable heat from chili, pepper, or spice blends.",
+    "healthy": "A general healthy-leaning tag based on the recipe profile.",
+    "comfort food": "Richer or more indulgent dish aimed at comfort and flavour.",
+    "budget-friendly": "Designed to be relatively affordable per portion.",
+    "date night": "A more special-feeling recipe suited to serving or sharing.",
+    "kid-friendly": "Generally milder and easier for children to enjoy.",
+    "bbq": "Built for grilling, barbecue cooking, or smoky barbecue flavours.",
+    "baking": "Primarily baked rather than pan-cooked.",
+}
+
+
+def _apply_tooltip(widget: QWidget, text: str) -> QWidget:
+    tip = str(text or "").strip()
+    if not tip:
+        return widget
+    widget.setToolTip(tip)
+    for child in widget.findChildren(QWidget):
+        child.setToolTip(tip)
+    return widget
+
+
+def _recipe_tag_tooltip(tag: str) -> str:
+    label = str(tag or "").strip()
+    if not label:
+        return ""
+    return _TAG_TOOLTIPS.get(
+        label.lower(),
+        f"Recipe tag: {label}. DishBoard uses tags like this to describe the recipe and make filtering easier.",
+    )
+
+
+def _health_score_tooltip(score: int) -> str:
+    return (
+        f"Dishy recipe quality score: {score}/100 ({health_label(score)}). "
+        "Higher scores usually mean the recipe is clearer, more complete, and easier to work with. "
+        "This is a recipe-quality signal, not a medical health rating."
+    )
+
+
+def _time_tooltip(minutes: int) -> str:
+    return f"Estimated total time for this recipe: about {minutes} minute{'s' if minutes != 1 else ''}."
+
+
+def _servings_tooltip(servings: str) -> str:
+    return f"Estimated yield: this recipe is intended to feed about {servings} serving{'s' if str(servings) != '1' else ''}."
+
+
+def _source_tooltip(host: str) -> str:
+    site = str(host or "").strip() or "the source site"
+    return f"Recipe source: {site}. This tells you where the recipe came from."
+
+
+def _trust_score_tooltip(score: float) -> str:
+    val = max(0.0, min(100.0, float(score or 0)))
+    return (
+        f"Search-result trust score: {val:.0f}/100. "
+        "Higher trust usually means the title, source, and snippet look more like a complete recipe page and less like noisy article content."
+    )
+
+
+def _dishy_nutrition_tooltip() -> str:
+    return "Dishy can analyse this recipe and estimate macros before you save it."
+
+
+def _nutrition_button_tooltip(state: str) -> str:
+    if state == "loading":
+        return "Dishy is currently scraping and analysing this recipe."
+    if state == "ready":
+        return "Nutrition has been gathered. Open the recipe to review ingredients, instructions, and macro estimates."
+    if state == "error":
+        return "The last nutrition attempt failed. Click to try gathering Dishy nutrition again."
+    return "Ask Dishy to scrape this web recipe and estimate its nutrition before saving it."
+
+
 # ── Recipe card (grid view) ───────────────────────────────────────────────────
 
 class RecipeCard(QWidget):
@@ -134,6 +228,8 @@ class RecipeCard(QWidget):
             data = json.loads(recipe.get("data_json") or "{}")
         except Exception:
             pass
+        health = validate_recipe(data or {})
+        health_score = int(health.get("score", 0) or 0)
 
         icon_name   = data.get("icon",        "fa5s.utensils")
         colour      = data.get("colour",      "#ff6b35")
@@ -214,6 +310,14 @@ class RecipeCard(QWidget):
         )
         bl.addWidget(title_lbl)
 
+        quality_lbl = QLabel(f"{health_score}/100 {health_label(health_score)}")
+        quality_lbl.setStyleSheet(
+            "background: rgba(52,211,153,0.12); color: #34d399;"
+            " border-radius: 5px; padding: 2px 8px; font-size: 10px; font-weight: 700;"
+        )
+        _apply_tooltip(quality_lbl, _health_score_tooltip(health_score))
+        bl.addWidget(quality_lbl, 0, Qt.AlignmentFlag.AlignLeft)
+
         if description:
             desc_lbl = QLabel(description[:130] + ("…" if len(description) > 130 else ""))
             desc_lbl.setWordWrap(True)
@@ -257,6 +361,7 @@ class RecipeCard(QWidget):
                     )
                     chip_hl.addWidget(ic)
                     chip_hl.addWidget(txt)
+                    _apply_tooltip(chip_w, _recipe_tag_tooltip(tag))
                     tr.addWidget(chip_w)
                 else:
                     chip_bg  = "rgba(76,175,138,0.12)" if is_meal else "rgba(255,107,53,0.10)"
@@ -268,6 +373,7 @@ class RecipeCard(QWidget):
                         f" border: 1px solid {chip_bdr}; border-radius: 4px;"
                         " font-size: 10px; font-weight: 600; padding: 1px 7px;"
                     )
+                    _apply_tooltip(chip, _recipe_tag_tooltip(tag))
                     tr.addWidget(chip)
             tr.addStretch()
             bl.addWidget(tags_w)
@@ -299,6 +405,8 @@ class RecipeCard(QWidget):
             t_ic.setStyleSheet("background: transparent;")
             t_lbl = QLabel(f"{cook_time} min")
             t_lbl.setStyleSheet(meta_style)
+            _apply_tooltip(t_ic, _time_tooltip(cook_time))
+            _apply_tooltip(t_lbl, _time_tooltip(cook_time))
             fl.addWidget(t_ic)
             fl.addWidget(t_lbl)
         if servings:
@@ -307,6 +415,8 @@ class RecipeCard(QWidget):
             s_ic.setStyleSheet("background: transparent;")
             s_lbl = QLabel(f"Serves {servings}")
             s_lbl.setStyleSheet(meta_style)
+            _apply_tooltip(s_ic, _servings_tooltip(servings))
+            _apply_tooltip(s_lbl, _servings_tooltip(servings))
             fl.addWidget(s_ic)
             fl.addWidget(s_lbl)
         fl.addStretch()
@@ -317,6 +427,7 @@ class RecipeCard(QWidget):
             qta.icon("fa5s.star", color="#fbbf24" if is_fav else _star_dim).pixmap(QSize(12, 12))
         )
         fav_lbl.setStyleSheet("background: transparent;")
+        _apply_tooltip(fav_lbl, "Favourite recipe." if is_fav else "Not currently marked as a favourite.")
         fl.addWidget(fav_lbl)
 
         _trash_dim = theme_manager.c("#444444", "#aaaaaa")
@@ -326,6 +437,7 @@ class RecipeCard(QWidget):
         del_btn.setIconSize(QSize(11, 11))
         del_btn.setFixedSize(24, 24)
         del_btn.clicked.connect(on_delete)
+        del_btn.setToolTip("Delete this recipe")
         del_btn.enterEvent = lambda _: del_btn.setIcon(qta.icon("fa5s.trash-alt", color="#ef4444"))
         del_btn.leaveEvent = lambda _: del_btn.setIcon(
             qta.icon("fa5s.trash-alt", color=theme_manager.c("#444444", "#aaaaaa"))
@@ -363,8 +475,8 @@ class RecipeCard(QWidget):
 class SavedRecipeRow(QWidget):
     def __init__(self, recipe: dict, on_select, on_delete, parent=None):
         super().__init__(parent)
-        self.setObjectName("shopping-item")
-        self.setFixedHeight(68)
+        self.setObjectName("recipe-library-row")
+        self.setFixedHeight(92)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -375,55 +487,61 @@ class SavedRecipeRow(QWidget):
             pass
 
         icon_name  = data.get("icon", "fa5s.utensils")
-        colour     = data.get("colour", "#ff6b35")
         is_fav     = bool(recipe.get("is_favourite", 0))
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 14, 0)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 14, 16, 14)
+        layout.setSpacing(14)
 
         ic = QLabel()
-        ic.setFixedSize(48, 48)
+        ic.setFixedSize(42, 42)
+        ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ic.setStyleSheet(
-            f"background-color: {theme_manager.c('#141414', '#f0f0f0')};"
-            " border-radius: 8px; background: transparent;"
+            f"background-color: {theme_manager.c('#171c21', '#f3ebe1')};"
+            f"border: 1px solid {theme_manager.c('#2b3138', '#ddd0c3')};"
+            " border-radius: 12px; background: transparent;"
         )
         img_source, is_http = _resolve_photo_path(recipe, data)
         if img_source and not is_http:
             px = QPixmap(img_source).scaled(
-                48, 48,
+                42, 42,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            if px.width() > 48 or px.height() > 48:
-                px = px.copy((px.width() - 48) // 2, (px.height() - 48) // 2, 48, 48)
+            if px.width() > 42 or px.height() > 42:
+                px = px.copy((px.width() - 42) // 2, (px.height() - 42) // 2, 42, 42)
             ic.setPixmap(px)
         elif img_source and is_http:
-            ic.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(22, 22)))
+            ic.setPixmap(qta.icon(icon_name, color=theme_manager.c("#f1ece5", "#2d241c")).pixmap(QSize(18, 18)))
             ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._ic_lbl = ic
             self._load_thumb_async(img_source)
         else:
-            ic.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(22, 22)))
+            ic.setPixmap(qta.icon(icon_name, color=theme_manager.c("#f1ece5", "#2d241c")).pixmap(QSize(18, 18)))
             ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         text_col = QVBoxLayout()
-        text_col.setSpacing(2)
+        text_col.setSpacing(4)
         title_txt = recipe.get("title", "")
         name_lbl = QLabel(title_txt[:60] + ("…" if len(title_txt) > 60 else ""))
-        name_lbl.setStyleSheet(
-            f"background: transparent; color: {theme_manager.c('#d4d4d4', '#1a1a1a')};"
-            " font-size: 13px; font-weight: 500;"
-        )
+        name_lbl.setObjectName("recipe-row-title")
         tags = data.get("tags", [])
-        tag_str = "  ·  ".join(tags[:3])
-        sub_lbl = QLabel(tag_str or recipe.get("source", ""))
-        sub_lbl.setStyleSheet(
-            f"background: transparent; color: {theme_manager.c('#555555', '#888888')};"
-            " font-size: 11px;"
-        )
+        source_bits = []
+        if recipe.get("ready_mins"):
+            source_bits.append(f"{recipe['ready_mins']} min")
+        if tags:
+            source_bits.append(" · ".join(tags[:2]))
+        source_bits.append("Saved recipe")
+        sub_lbl = QLabel("  •  ".join([bit for bit in source_bits if bit]))
+        sub_lbl.setObjectName("recipe-row-meta")
         text_col.addWidget(name_lbl)
         text_col.addWidget(sub_lbl)
+
+        if data.get("description"):
+            body_lbl = QLabel(data["description"][:120] + ("…" if len(data["description"]) > 120 else ""))
+            body_lbl.setObjectName("recipe-row-body")
+            body_lbl.setWordWrap(True)
+            text_col.addWidget(body_lbl)
 
         fav_lbl = QLabel()
         _star_dim2 = theme_manager.c("#3a3a3a", "#aaaaaa")
@@ -465,15 +583,15 @@ class SavedRecipeRow(QWidget):
                 if not self._ic_lbl or not self._ic_lbl.isVisible():
                     return
                 px = QPixmap(cached).scaled(
-                    48, 48,
+                    42, 42,
                     Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-                if px.width() > 48 or px.height() > 48:
+                if px.width() > 42 or px.height() > 42:
                     px = px.copy(
-                        (px.width() - 48) // 2,
-                        (px.height() - 48) // 2,
-                        48, 48,
+                        (px.width() - 42) // 2,
+                        (px.height() - 42) // 2,
+                        42, 42,
                     )
                 self._ic_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self._ic_lbl.setPixmap(px)
@@ -503,34 +621,30 @@ class SearchResultRow(QWidget):
         self._on_get_nutrition = lambda: on_get_nutrition(result)
         self._state = state
         tm = theme_manager
+        self._host = urlparse(result.get("url", "")).netloc.replace("www.", "")
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(102)
-
-        self._normal_bg  = tm.c("#14191f", "#ffffff")
-        self._hover_bg   = tm.c("#1a2028", "#f7fafc")
-        self._normal_bdr = tm.c("#263242", "#e1e8f0")
-        self._hover_bdr  = "#ff6b35"
-        self._apply_style(hover=False)
+        self.setMinimumHeight(110)
+        self.setObjectName("recipe-result-row")
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(16, 12, 14, 12)
-        outer.setSpacing(12)
+        outer.setContentsMargins(18, 16, 16, 16)
+        outer.setSpacing(14)
 
         # Site initial badge
-        host = urlparse(result.get("url", "")).netloc.replace("www.", "")
-        initial = host[0].upper() if host else "R"
+        initial = self._host[0].upper() if self._host else "R"
         site_badge = QLabel(initial)
         site_badge.setFixedSize(40, 40)
         site_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         site_badge.setStyleSheet(
-            f"background: {tm.c('#223042', '#eef3f8')};"
-            f"border: 1px solid {tm.c('#2f4258', '#d6e0ea')};"
-            " border-radius: 11px;"
-            f" color: {tm.c('#a7b9cf', '#6f8398')};"
+            f"background: {tm.c('rgba(255,255,255,0.03)', 'rgba(255,107,53,0.05)')};"
+            "border: none;"
+            " border-radius: 12px;"
+            f" color: {tm.c('#f1ece5', '#2d241c')};"
             " font-size: 14px; font-weight: 700;"
         )
+        _apply_tooltip(site_badge, _source_tooltip(self._host))
 
         # Text column
         text_col = QVBoxLayout()
@@ -539,40 +653,22 @@ class SearchResultRow(QWidget):
 
         title = result.get("title", "")
         title_lbl = QLabel(title[:78] + ("…" if len(title) > 78 else ""))
-        title_lbl.setStyleSheet(
-            f"background: transparent;"
-            f" color: {tm.c('#eef5ff', '#102033')};"
-            " font-size: 14px; font-weight: 700;"
-        )
+        title_lbl.setObjectName("recipe-row-title")
 
-        # Domain + Dishy badge row
+        # Source + Dishy badge row
         meta_row = QHBoxLayout()
         meta_row.setSpacing(6)
         meta_row.setContentsMargins(0, 0, 0, 0)
 
-        host_lbl = QLabel(host)
-        host_lbl.setStyleSheet(
-            f"background: transparent;"
-            f" color: {tm.c('#8ea2ba', '#70859c')};"
-            " font-size: 11px; font-weight: 600;"
-        )
+        host_lbl = QLabel(self._host)
+        host_lbl.setObjectName("recipe-row-meta")
+        _apply_tooltip(host_lbl, _source_tooltip(self._host))
 
-        dishy_badge = QLabel("Dishy nutrition")
-        dishy_badge.setStyleSheet(
-            "background: rgba(52,211,153,0.12);"
-            " color: #34d399;"
-            " font-size: 10px; font-weight: 700;"
-            " border-radius: 5px; padding: 2px 8px;"
-        )
+        dishy_badge = QLabel("Nutrition available")
+        dishy_badge.setObjectName("recipe-chip")
+        _apply_tooltip(dishy_badge, _dishy_nutrition_tooltip())
 
         meta_row.addWidget(host_lbl)
-        self._trust_lbl = QLabel("")
-        self._trust_lbl.setStyleSheet(
-            f"background: transparent;"
-            f" color: {tm.c('#7ea0c5', '#6d86a0')};"
-            " font-size: 10px; font-weight: 700;"
-        )
-        meta_row.addWidget(self._trust_lbl)
         meta_row.addWidget(dishy_badge)
         meta_row.addStretch()
 
@@ -582,37 +678,45 @@ class SearchResultRow(QWidget):
         snippet = result.get("snippet", "")
         if snippet:
             snippet_lbl = QLabel(snippet[:110] + ("…" if len(snippet) > 110 else ""))
-            snippet_lbl.setStyleSheet(
-                f"background: transparent;"
-                f" color: {tm.c('#8092a8', '#8598ad')};"
-                " font-size: 11px;"
-            )
-            snippet_lbl.setWordWrap(False)
+            snippet_lbl.setObjectName("recipe-row-body")
+            snippet_lbl.setWordWrap(True)
             text_col.addWidget(snippet_lbl)
+            self._snippet_lbl = snippet_lbl
+        else:
+            self._snippet_lbl = None
 
         controls = QVBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(8)
+        controls.setSpacing(10)
         controls.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self._nutrition_btn = QPushButton()
         self._nutrition_btn.setFixedHeight(31)
-        self._nutrition_btn.setMinimumWidth(136)
+        self._nutrition_btn.setMinimumWidth(132)
         self._nutrition_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._nutrition_btn.clicked.connect(lambda _checked=False: self._on_get_nutrition())
         controls.addWidget(self._nutrition_btn)
 
-        arrow_wrap = QLabel()
-        arrow_wrap.setFixedSize(30, 30)
-        arrow_wrap.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        arrow_wrap.setPixmap(
-            qta.icon("fa5s.chevron-right", color=tm.c("#8ea2ba", "#8ca0b5")).pixmap(QSize(10, 10))
+        self._open_btn = QPushButton("Open")
+        self._open_btn.setFixedHeight(30)
+        self._open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._open_btn.setIcon(qta.icon("fa5s.chevron-right", color=tm.c("#8d867d", "#8d8174")))
+        self._open_btn.setIconSize(QSize(10, 10))
+        self._open_btn.setStyleSheet(
+            "QPushButton {"
+            f" background: {tm.c('rgba(255,255,255,0.03)', 'rgba(255,107,53,0.05)')};"
+            " border: none; border-radius: 9px;"
+            f" color: {tm.c('#a39c93', '#73685d')};"
+            " padding: 0 12px; font-size: 12px; font-weight: 600; text-align: center;"
+            "}"
+            "QPushButton:hover {"
+            f" background: {tm.c('rgba(255,255,255,0.05)', 'rgba(255,107,53,0.09)')};"
+            f" color: {tm.c('#f0ebe4', '#251d16')};"
+            "}"
         )
-        arrow_wrap.setStyleSheet(
-            f"background: {tm.c('rgba(255,255,255,0.05)', '#f1f5f9')};"
-            f"border: 1px solid {tm.c('#2c3b4f', '#d9e2ec')}; border-radius: 9px;"
-        )
-        controls.addWidget(arrow_wrap, 0, Qt.AlignmentFlag.AlignRight)
+        self._open_btn.clicked.connect(self._callback)
+        _apply_tooltip(self._open_btn, "Open this web recipe preview to inspect the ingredients, instructions, and Dishy nutrition analysis.")
+        controls.addWidget(self._open_btn, 0, Qt.AlignmentFlag.AlignRight)
         controls.addStretch()
 
         outer.addWidget(site_badge)
@@ -621,25 +725,9 @@ class SearchResultRow(QWidget):
         self.set_trust_score(trust_score if trust_score is not None else 50.0)
         self.set_nutrition_state(state)
 
-    def _apply_style(self, hover: bool):
-        bg  = self._hover_bg  if hover else self._normal_bg
-        bdr = self._hover_bdr if hover else self._normal_bdr
-        self.setStyleSheet(
-            f"SearchResultRow {{ background: {bg}; border: 1px solid {bdr};"
-            " border-radius: 12px; }"
-        )
-
-    def enterEvent(self, event):
-        self._apply_style(hover=True)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self._apply_style(hover=False)
-        super().leaveEvent(event)
-
     def mousePressEvent(self, event):
         pos = event.position().toPoint()
-        if self._nutrition_btn.geometry().contains(pos):
+        if self._nutrition_btn.geometry().contains(pos) or self._open_btn.geometry().contains(pos):
             super().mousePressEvent(event)
             return
         self._callback()
@@ -650,61 +738,38 @@ class SearchResultRow(QWidget):
         if state == "loading":
             self._nutrition_btn.setEnabled(False)
             self._nutrition_btn.setText("  Gathering…")
-            self._nutrition_btn.setIcon(qta.icon("fa5s.circle-notch", color="#34d399"))
+            self._nutrition_btn.setIcon(qta.icon("fa5s.circle-notch", color="#ff6b35"))
             self._nutrition_btn.setIconSize(QSize(11, 11))
-            self._nutrition_btn.setStyleSheet(
-                "QPushButton { background: rgba(52,211,153,0.14); color: #34d399;"
-                " border: 1px solid rgba(52,211,153,0.35); border-radius: 8px;"
-                " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
-            )
+            self._nutrition_btn.setStyleSheet(secondary_button_style(31))
+            _apply_tooltip(self._nutrition_btn, _nutrition_button_tooltip(state))
             return
         if state == "ready":
             self._nutrition_btn.setEnabled(True)
             self._nutrition_btn.setText("  Ready ✓")
-            self._nutrition_btn.setIcon(qta.icon("fa5s.check", color="#34d399"))
+            self._nutrition_btn.setIcon(qta.icon("fa5s.check", color="#ff6b35"))
             self._nutrition_btn.setIconSize(QSize(11, 11))
-            self._nutrition_btn.setStyleSheet(
-                "QPushButton { background: rgba(52,211,153,0.12); color: #34d399;"
-                " border: 1px solid rgba(52,211,153,0.38); border-radius: 8px;"
-                " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
-                "QPushButton:hover { background: rgba(52,211,153,0.18); }"
-            )
+            self._nutrition_btn.setStyleSheet(secondary_button_style(31))
+            _apply_tooltip(self._nutrition_btn, _nutrition_button_tooltip(state))
             return
         if state == "error":
             self._nutrition_btn.setEnabled(True)
             self._nutrition_btn.setText("  Retry Nutrition")
-            self._nutrition_btn.setIcon(qta.icon("fa5s.exclamation-triangle", color="#f0a500"))
+            self._nutrition_btn.setIcon(qta.icon("fa5s.exclamation-triangle", color="#ff6b35"))
             self._nutrition_btn.setIconSize(QSize(11, 11))
-            self._nutrition_btn.setStyleSheet(
-                "QPushButton { background: rgba(240,165,0,0.10); color: #f0a500;"
-                " border: 1px solid rgba(240,165,0,0.35); border-radius: 8px;"
-                " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
-                "QPushButton:hover { background: rgba(240,165,0,0.16); }"
-            )
+            self._nutrition_btn.setStyleSheet(secondary_button_style(31))
+            _apply_tooltip(self._nutrition_btn, _nutrition_button_tooltip(state))
             return
         # idle
         self._nutrition_btn.setEnabled(True)
         self._nutrition_btn.setText("  Get Nutrition")
-        self._nutrition_btn.setIcon(qta.icon("fa5s.robot", color="#34d399"))
+        self._nutrition_btn.setIcon(qta.icon("fa5s.robot", color="#ff6b35"))
         self._nutrition_btn.setIconSize(QSize(11, 11))
-        self._nutrition_btn.setStyleSheet(
-            "QPushButton { background: rgba(52,211,153,0.10); color: #34d399;"
-            " border: 1px solid rgba(52,211,153,0.30); border-radius: 8px;"
-            " font-size: 11px; font-weight: 700; padding: 0 10px; text-align: left; }"
-            "QPushButton:hover { background: rgba(52,211,153,0.16); }"
-        )
+        self._nutrition_btn.setStyleSheet(secondary_button_style(31))
+        _apply_tooltip(self._nutrition_btn, _nutrition_button_tooltip(state))
 
     def set_trust_score(self, score: float):
-        val = max(0.0, min(100.0, float(score or 0)))
-        if val >= 80:
-            grade = "A"
-        elif val >= 68:
-            grade = "B"
-        elif val >= 55:
-            grade = "C"
-        else:
-            grade = "D"
-        self._trust_lbl.setText(f"Trust {grade} · {val:.0f}")
+        # Trust still informs result ordering, but no longer renders as visible chrome.
+        _ = score
 
 
 # ── Create-recipe form helpers ───────────────────────────────────────────────
@@ -1756,6 +1821,7 @@ class RecipesView(QWidget):
         self._current_recipe: dict | None = None
         self._current_recipe_db_id: int | None = None
         self._current_recipe_is_fav: bool = False
+        self._detail_scale_servings: float | None = None
         self._ask_dishy_fn = None        # set by MainWindow via set_ask_dishy()
         self._nutrition_refresh_fn = None # set by MainWindow via set_nutrition_refresh()
         self._sync_fn = None              # set by MainWindow to trigger cloud sync
@@ -1779,6 +1845,10 @@ class RecipesView(QWidget):
     def set_sync_fn(self, fn):
         """Called by MainWindow to trigger cloud sync after recipe saves/deletes."""
         self._sync_fn = fn
+
+    @staticmethod
+    def _visibility_service():
+        return service_registry.get("visibility")
 
     @staticmethod
     def _has_recipe_nutrition(recipe: dict | None) -> bool:
@@ -1883,6 +1953,31 @@ class RecipesView(QWidget):
         """Reload saved recipes — called after Dishy saves a recipe."""
         self._load_saved_recipes()
 
+    def show_root_page(self):
+        """Reset Recipes to its default saved-recipes landing page."""
+        try:
+            self._create_page.reset_for_create()
+        except Exception:
+            pass
+        self._stack.setCurrentIndex(0)
+
+    def activate_saved_recipes(self) -> None:
+        """Palette-safe entrypoint for the default saved-recipes workspace."""
+        self._show_saved()
+
+    def activate_recipe_search(self, query: str = "") -> None:
+        """Palette-safe entrypoint for recipe discovery."""
+        self._show_saved()
+        if query:
+            self._search_input.setText(query)
+            self._search()
+        QTimer.singleShot(0, lambda: self._search_input.setFocus(Qt.FocusReason.ShortcutFocusReason))
+
+    def activate_create_recipe(self) -> None:
+        """Palette-safe entrypoint for recipe creation."""
+        self._start_create()
+        QTimer.singleShot(0, lambda: self._create_page._title_input.setFocus(Qt.FocusReason.ShortcutFocusReason))
+
     def open_by_id(self, recipe_id: int):
         """Navigate directly to a saved recipe's detail view by DB id."""
         try:
@@ -1896,6 +1991,7 @@ class RecipesView(QWidget):
             self._current_recipe = data
             self._current_recipe_db_id = rd["id"]
             self._current_recipe_is_fav = bool(rd["is_favourite"])
+            self._detail_scale_servings = None
             self._came_from_search = False
             is_fav = bool(rd["is_favourite"])
         except Exception:
@@ -1909,85 +2005,60 @@ class RecipesView(QWidget):
 
     def apply_theme(self, mode: str = "dark"):
         """Called by MainWindow when the user toggles the colour theme."""
-        # Re-apply inline styles (not covered by global QSS)
-        self._local_search.setStyleSheet(
-            f"QLineEdit {{ background: {theme_manager.c('#111111', '#ffffff')};"
-            f" color: {theme_manager.c('#e8e8e8', '#1a1a1a')};"
-            f" border: 1px solid {theme_manager.c('#222222', '#e0e0e0')};"
-            " border-radius: 6px; padding: 0 10px; font-size: 13px; }"
-            f"QLineEdit:focus {{ border-color: #7c6af7; }}"
-        )
-        self._search_input.setStyleSheet(
-            f"QLineEdit {{ background: {theme_manager.c('#111111', '#ffffff')};"
-            f" color: {theme_manager.c('#e8e8e8', '#1a1a1a')};"
-            f" border: 1px solid {theme_manager.c('#222222', '#e0e0e0')};"
-            " border-radius: 9px; padding: 0 14px; font-size: 14px; min-height: 0; }"
-            "QLineEdit:focus { border-color: #7c6af7; }"
-        )
+        self._local_search.setStyleSheet(input_style(height=34, radius=12))
         self._load_saved_recipes()          # rebuilds RecipeCard widgets with fresh theme colours
         self._create_page.apply_theme(mode) # update create-form inline styles
 
     def _build_ui(self):
         self.setMinimumHeight(360)  # prevents the view from collapsing at small window heights
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(36, 36, 36, 10)
-        outer.setSpacing(18)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # Header
-        title = QLabel("Recipes")
-        title.setObjectName("page-title")
-        subtitle = QLabel("Search the web, browse your saved recipes, or create your own")
-        subtitle.setObjectName("page-date")
-        outer.addWidget(title)
-        outer.addWidget(subtitle)
-
-        # Action row
-        action_row = QHBoxLayout()
-        action_row.setSpacing(10)
+        self._scaffold = PageScaffold(
+            "Recipes",
+            "Search first, browse saved recipes, and keep creation tools out of the way until you need them.",
+            eyebrow="Food Operations",
+            parent=self,
+            quiet_header=True,
+        )
+        outer.addWidget(self._scaffold)
 
         self._search_input = QLineEdit()
+        self._search_input.setObjectName("page-search-input")
         self._search_input.setPlaceholderText(
-            "e.g. 'chicken tikka masala', 'easy pasta bake'…"
+            "Search recipes, ingredients, cuisines, or dishes"
         )
         self._search_input.setFixedHeight(42)
-        self._search_input.setStyleSheet(
-            f"QLineEdit {{ background: {theme_manager.c('#111111', '#ffffff')};"
-            f" color: {theme_manager.c('#e8e8e8', '#1a1a1a')};"
-            f" border: 1px solid {theme_manager.c('#222222', '#e0e0e0')};"
-            " border-radius: 9px; padding: 0 14px; font-size: 14px; min-height: 0; }"
-            "QLineEdit:focus { border-color: #7c6af7; }"
-        )
         self._search_input.returnPressed.connect(self._search)
 
-        search_btn = PrimaryButton("Search")
-        search_btn.setFixedHeight(42)
+        search_btn = QPushButton()
+        search_btn.setObjectName("ghost-btn")
+        search_btn.setIcon(qta.icon("fa5s.search", color=theme_manager.c("#8d867d", "#756d63")))
+        search_btn.setIconSize(QSize(13, 13))
+        search_btn.setFixedSize(42, 42)
         search_btn.clicked.connect(self._search)
 
-        create_btn = QPushButton("  Create Recipe")
-        create_btn.setObjectName("ghost-btn")
-        create_btn.setIcon(qta.icon("fa5s.plus", color="#888888"))
+        create_btn = PrimaryButton("Create Recipe")
+        create_btn.setIcon(qta.icon("fa5s.plus", color="#ffffff"))
         create_btn.setIconSize(QSize(12, 12))
         create_btn.setFixedHeight(42)
         create_btn.clicked.connect(self._start_create)
 
         saved_btn = QPushButton("  Saved")
         saved_btn.setObjectName("ghost-btn")
-        saved_btn.setIcon(qta.icon("fa5s.bookmark", color=theme_manager.c("#888888", "#555555")))
+        saved_btn.setIcon(qta.icon("fa5s.bookmark", color=theme_manager.c("#8d867d", "#756d63")))
         saved_btn.setIconSize(QSize(12, 12))
         saved_btn.setFixedHeight(42)
         saved_btn.clicked.connect(self._show_saved)
 
-        self._ask_dishy_btn = QPushButton("  Ask Dishy")
-        self._ask_dishy_btn.setObjectName("ghost-btn")
-        self._ask_dishy_btn.setIcon(qta.icon("fa5s.robot", color="#34d399"))
-        self._ask_dishy_btn.setIconSize(QSize(12, 12))
-        self._ask_dishy_btn.setFixedHeight(42)
-        self._ask_dishy_btn.setToolTip("Ask Dishy to create and save a recipe for you")
-        self._ask_dishy_btn.clicked.connect(self._ask_dishy_for_recipe)
+        self._filter_btn = OverflowActionMenu("Filter", self)
+        self._filter_btn.setObjectName("chip-btn")
+        self._filter_btn.setMinimumHeight(42)
 
         self._health_btn = QPushButton("  Check Recipe")
         self._health_btn.setObjectName("ghost-btn")
-        self._health_btn.setIcon(qta.icon("fa5s.stethoscope", color="#34d399"))
+        self._health_btn.setIcon(qta.icon("fa5s.stethoscope", color=theme_manager.c("#8d867d", "#756d63")))
         self._health_btn.setIconSize(QSize(12, 12))
         self._health_btn.setFixedHeight(42)
         self._health_btn.setToolTip("Run quality checks on the open recipe")
@@ -2001,19 +2072,25 @@ class RecipesView(QWidget):
         self._bulk_btn.setToolTip("Apply one action to all currently filtered saved recipes")
         self._bulk_btn.clicked.connect(self._run_bulk_tools)
 
-        action_row.addWidget(self._search_input)
-        action_row.addWidget(search_btn)
-        action_row.addWidget(create_btn)
-        action_row.addWidget(saved_btn)
-        action_row.addWidget(self._ask_dishy_btn)
-        action_row.addWidget(self._health_btn)
-        action_row.addWidget(self._bulk_btn)
-        outer.addLayout(action_row)
+        toolbar = PageToolbar(self._scaffold, density="compact")
+        toolbar.add_left(self._search_input, 1)
+        toolbar.add_left(search_btn)
+        toolbar.set_primary_action(create_btn)
+        toolbar.add_secondary_action(saved_btn)
+        toolbar.add_secondary_action(self._filter_btn)
+        toolbar.set_overflow_actions(
+            [
+                {"label": "Ask Dishy", "handler": self._ask_dishy_for_recipe},
+                {"label": "Check recipe", "handler": self._run_health_check_current},
+                {"label": "Bulk edit", "handler": self._run_bulk_tools},
+            ]
+        )
+        self._scaffold.set_toolbar(toolbar)
 
         # Status
         self._status = QLabel("")
         self._status.setObjectName("card-body")
-        outer.addWidget(self._status)
+        self._scaffold.body_layout().addWidget(self._status)
 
         # Stack: 0=saved home, 1=search results, 2=detail, 3=create
         self._stack = QStackedWidget()
@@ -2021,7 +2098,7 @@ class RecipesView(QWidget):
         self._stack.addWidget(self._build_results_page())  # 1
         self._stack.addWidget(self._build_detail_page())   # 2
         self._stack.addWidget(self._build_create_page())   # 3
-        outer.addWidget(self._stack, 1)
+        self._scaffold.body_layout().addWidget(self._stack, 1)
 
         self._load_saved_recipes()
 
@@ -2029,73 +2106,50 @@ class RecipesView(QWidget):
 
     def _build_saved_page(self) -> QWidget:
         wrapper = QWidget()
-        wrapper.setStyleSheet("background: transparent;")
+        wrapper.setObjectName("recipe-stream-shell")
         wl = QVBoxLayout(wrapper)
         wl.setContentsMargins(0, 0, 0, 0)
-        wl.setSpacing(8)
+        wl.setSpacing(14)
 
-        # ── Local recipe search ───────────────────────────────────────────────
-        local_row = QHBoxLayout()
-        local_row.setSpacing(8)
-        local_row.setContentsMargins(0, 0, 0, 0)
-
-        search_ic = QLabel()
-        search_ic.setPixmap(qta.icon("fa5s.search", color=theme_manager.c("#555555", "#888888")).pixmap(QSize(13, 13)))
-        search_ic.setStyleSheet("background: transparent;")
+        intro = QWidget()
+        intro.setObjectName("recipe-panel")
+        intro_layout = QVBoxLayout(intro)
+        intro_layout.setContentsMargins(18, 16, 18, 16)
+        intro_layout.setSpacing(10)
+        intro_overline = QLabel("Saved Library")
+        intro_overline.setObjectName("recipe-overline")
+        self._saved_summary = QLabel("Your saved recipes live here. Use the main search bar for web discovery.")
+        self._saved_summary.setObjectName("recipe-row-body")
+        self._saved_summary.setWordWrap(True)
+        intro_layout.addWidget(intro_overline)
+        intro_layout.addWidget(self._saved_summary)
 
         self._local_search = QLineEdit()
-        self._local_search.setPlaceholderText("Search saved recipes…")
+        self._local_search.setPlaceholderText("Refine your saved recipes")
         self._local_search.setClearButtonEnabled(True)
-        self._local_search.setFixedHeight(32)
-        self._local_search.setStyleSheet(
-            f"QLineEdit {{ background: {theme_manager.c('#111111', '#ffffff')};"
-            f" color: {theme_manager.c('#e8e8e8', '#1a1a1a')};"
-            f" border: 1px solid {theme_manager.c('#222222', '#e0e0e0')};"
-            " border-radius: 6px; padding: 0 10px; font-size: 13px; }"
-            "QLineEdit:focus { border-color: #7c6af7; }"
-        )
+        self._local_search.setFixedHeight(34)
+        self._local_search.setStyleSheet(input_style(height=34, radius=12))
         self._local_search.textChanged.connect(self._load_saved_recipes)
+        intro_layout.addWidget(self._local_search)
+        wl.addWidget(intro)
 
-        local_row.addWidget(search_ic)
-        local_row.addWidget(self._local_search, 1)
-        wl.addLayout(local_row)
-
-        # ── Tag filter bar ────────────────────────────────────────────────────
         self._active_tag: str | None = None
-        tag_scroll = QScrollArea()
-        tag_scroll.setFixedHeight(40)
-        tag_scroll.setWidgetResizable(True)
-        tag_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        tag_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        tag_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        self._tag_bar_inner = QWidget()
-        self._tag_bar_inner.setStyleSheet("background: transparent;")
-        self._tag_bar_layout = QHBoxLayout(self._tag_bar_inner)
-        self._tag_bar_layout.setContentsMargins(0, 0, 0, 0)
-        self._tag_bar_layout.setSpacing(6)
-        self._tag_bar_layout.addStretch()
-        tag_scroll.setWidget(self._tag_bar_inner)
-        self._tag_scroll = tag_scroll
-        wl.addWidget(tag_scroll)
 
-        # ── Recipe card grid ──────────────────────────────────────────────────
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         self._saved_container = QWidget()
-        self._saved_container.setStyleSheet("background: transparent;")
+        self._saved_container.setObjectName("recipe-stream-shell")
 
         outer_vl = QVBoxLayout(self._saved_container)
         outer_vl.setContentsMargins(0, 4, 0, 20)
         outer_vl.setSpacing(0)
 
         self._grid_widget = QWidget()
-        self._grid_widget.setStyleSheet("background: transparent;")
-        self._saved_layout = QGridLayout(self._grid_widget)
-        self._saved_layout.setContentsMargins(0, 0, 4, 0)
-        self._saved_layout.setSpacing(14)
-        for col in range(RecipeCard._GRID_COLS):
-            self._saved_layout.setColumnStretch(col, 1)
+        self._grid_widget.setObjectName("recipe-stream-shell")
+        self._saved_layout = QVBoxLayout(self._grid_widget)
+        self._saved_layout.setContentsMargins(0, 0, 6, 0)
+        self._saved_layout.setSpacing(10)
 
         outer_vl.addWidget(self._grid_widget)
         outer_vl.addStretch()
@@ -2132,10 +2186,10 @@ class RecipesView(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         self._results_container = QWidget()
-        self._results_container.setStyleSheet("background: transparent;")
+        self._results_container.setObjectName("recipe-stream-shell")
         self._results_layout = QVBoxLayout(self._results_container)
         self._results_layout.setContentsMargins(0, 0, 8, 0)
-        self._results_layout.setSpacing(8)
+        self._results_layout.setSpacing(10)
         self._results_layout.addStretch()
         scroll.setWidget(self._results_container)
         wl.addWidget(scroll, 1)
@@ -2161,7 +2215,7 @@ class RecipesView(QWidget):
         layout.addWidget(back_btn)
 
         self._detail_card = QWidget()
-        self._detail_card.setObjectName("plan-card")
+        self._detail_card.setObjectName("recipe-panel")
         self._detail_layout = QVBoxLayout(self._detail_card)
         self._detail_layout.setContentsMargins(28, 24, 28, 28)
         self._detail_layout.setSpacing(18)
@@ -2197,8 +2251,6 @@ class RecipesView(QWidget):
         except Exception:
             all_recipes = []
 
-        # ── Rebuild tag filter bar ────────────────────────────────────────────
-        # Meal-type chips always pinned; Online/Dishy shown only if any recipe has them
         _MEAL_CHIPS = ["Breakfast", "Lunch", "Dinner", "Snack", "Dessert"]
         _SPECIAL_ORDER = ["Online", "Dishy"]
         recipes_tags_flat: set[str] = set()
@@ -2209,52 +2261,11 @@ class RecipesView(QWidget):
             except Exception:
                 pass
         extra_tags = [t for t in _SPECIAL_ORDER if t in recipes_tags_flat]
-
-        # Clear old chips (keep the trailing stretch)
-        while self._tag_bar_layout.count() > 1:
-            item = self._tag_bar_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        self._tag_scroll.setFixedHeight(40)
-        all_chip = QPushButton("All")
-        all_chip.setCheckable(True)
-        all_chip.setChecked(self._active_tag is None)
-        all_chip.setFixedHeight(28)
-        all_chip.setStyleSheet(self._tag_chip_style(self._active_tag is None))
-        all_chip.clicked.connect(lambda: self._set_tag_filter(None))
-        self._tag_bar_layout.insertWidget(0, all_chip)
-        _MEAL_SET = set(_MEAL_CHIPS)
-        for idx, tag in enumerate(_MEAL_CHIPS + extra_tags, 1):
-            active    = self._active_tag == tag
-            is_meal   = tag in _MEAL_SET
-            is_dishy  = tag == "Dishy"
-            is_online = tag == "Online"
-            chip = QPushButton(f"  {tag}" if (is_dishy or is_online) else tag)
-            chip.setCheckable(True)
-            chip.setChecked(active)
-            chip.setFixedHeight(28)
-            if is_dishy:
-                chip.setIcon(qta.icon("fa5s.robot", color="#34d399"))
-                chip.setIconSize(QSize(11, 11))
-                chip.setStyleSheet(self._dishy_chip_style(active))
-            elif is_online:
-                chip.setIcon(qta.icon("fa5s.globe", color="#4fc3f7"))
-                chip.setIconSize(QSize(11, 11))
-                chip.setStyleSheet(self._online_chip_style(active))
-            elif is_meal:
-                chip.setStyleSheet(self._meal_chip_style(active))
-            else:
-                chip.setStyleSheet(self._tag_chip_style(active))
-            chip.clicked.connect(lambda _, t=tag: self._set_tag_filter(t))
-            self._tag_bar_layout.insertWidget(idx, chip)
-
-        # Visual separator between meal chips and other tags
-        if extra_tags:
-            sep = QWidget()
-            sep.setFixedSize(1, 20)
-            sep.setStyleSheet(f"background: {theme_manager.c('#282828', '#cccccc')};")
-            self._tag_bar_layout.insertWidget(len(_MEAL_CHIPS) + 1, sep)
+        self._filter_btn.set_actions(
+            [{"label": "All saved recipes", "handler": lambda: self._set_tag_filter(None)}] +
+            [{"label": tag, "handler": lambda t=tag: self._set_tag_filter(t)} for tag in (_MEAL_CHIPS + extra_tags)]
+        )
+        self._filter_btn.setText(f"Filter: {self._active_tag}" if self._active_tag else "Filter")
 
         # ── Filter by tag ─────────────────────────────────────────────────────
         if self._active_tag:
@@ -2313,10 +2324,12 @@ class RecipesView(QWidget):
                 msg = "No recipes match that tag."
             else:
                 msg = "No saved recipes yet.\nSearch the web or create your own!"
-            ph = QLabel(msg)
-            ph.setObjectName("placeholder-text")
-            ph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._saved_layout.addWidget(ph, 0, 0, 1, RecipeCard._GRID_COLS)
+            empty_action = QPushButton("Create Recipe")
+            empty_action.setObjectName("ghost-btn")
+            empty_action.clicked.connect(self._start_create)
+            self._saved_layout.addWidget(EmptyStateCard("Recipe Library", msg, icon="*", action=empty_action))
+            self._saved_layout.addStretch()
+            self._saved_summary.setText("Your saved recipes live here. Use the main search bar for web discovery.")
             self._status.setText("")
             return
 
@@ -2330,8 +2343,13 @@ class RecipesView(QWidget):
         else:
             suffix = ""
         self._status.setText(f"{total} saved recipe{'s' if total != 1 else ''}{suffix}")
+        summary = f"{shown} of {total} recipes"
+        if self._active_tag:
+            summary += f" in {self._active_tag}"
+        if local_q:
+            summary += f" matching “{local_q}”"
+        self._saved_summary.setText(summary)
 
-        COLS = RecipeCard._GRID_COLS
         for idx, r in enumerate(recipes):
             rec_dict = dict(r)
             recipe_id = rec_dict["id"]
@@ -2347,6 +2365,7 @@ class RecipesView(QWidget):
                     self._current_recipe = data
                     self._current_recipe_db_id = rd["id"]
                     self._current_recipe_is_fav = bool(rd.get("is_favourite", 0))
+                    self._detail_scale_servings = None
                     self._came_from_search = False
                     self._populate_detail(data, db_id=rd["id"],
                                           is_fav=bool(rd.get("is_favourite", 0)))
@@ -2366,78 +2385,9 @@ class RecipesView(QWidget):
                             self._sync_fn()
                 return _del
 
-            card = RecipeCard(rec_dict, on_select=_make_select(), on_delete=_make_delete())
-            self._saved_layout.addWidget(card, idx // COLS, idx % COLS)
-
-    def _tag_chip_style(self, active: bool) -> str:
-        if active:
-            return (
-                "QPushButton { background-color: rgba(255,107,53,0.15); color: #ff6b35;"
-                " border-radius: 6px; border: 1px solid rgba(255,107,53,0.4);"
-                " font-size: 11px; font-weight: 600; padding: 0 12px; }"
-            )
-        bg     = theme_manager.c("#141414", "#f0f0f0")
-        fg     = theme_manager.c("#666666", "#555555")
-        border = theme_manager.c("#1e1e1e", "#cccccc")
-        hover  = theme_manager.c("#1e1e1e", "#e4e4e4")
-        return (
-            f"QPushButton {{ background-color: {bg}; color: {fg};"
-            f" border-radius: 6px; border: 1px solid {border};"
-            " font-size: 11px; font-weight: 500; padding: 0 12px; }"
-            f"QPushButton:hover {{ background-color: {hover}; border-color: rgba(255,107,53,0.3); }}"
-        )
-
-    def _meal_chip_style(self, active: bool) -> str:
-        """Style for meal-type chips (Breakfast/Lunch/Dinner/Snack/Dessert) — teal accent."""
-        if active:
-            return (
-                "QPushButton { background-color: rgba(76,175,138,0.18); color: #4caf8a;"
-                " border-radius: 6px; border: 1px solid rgba(76,175,138,0.5);"
-                " font-size: 11px; font-weight: 700; padding: 0 12px; }"
-            )
-        bg     = theme_manager.c("#0f1a16", "#f0faf5")
-        fg     = "#4caf8a"
-        border = theme_manager.c("rgba(76,175,138,0.25)", "rgba(76,175,138,0.35)")
-        return (
-            f"QPushButton {{ background-color: {bg}; color: {fg};"
-            f" border-radius: 6px; border: 1px solid {border};"
-            " font-size: 11px; font-weight: 600; padding: 0 12px; }"
-            "QPushButton:hover { background-color: rgba(76,175,138,0.12); }"
-        )
-
-    def _online_chip_style(self, active: bool) -> str:
-        """Style for the Online tag chip — sky blue accent."""
-        if active:
-            return (
-                "QPushButton { background-color: rgba(79,195,247,0.2); color: #4fc3f7;"
-                " border-radius: 6px; border: 1px solid rgba(79,195,247,0.6);"
-                " font-size: 11px; font-weight: 700; padding: 0 10px; }"
-            )
-        bg     = theme_manager.c("#071b24", "#eaf7fd")
-        border = theme_manager.c("rgba(79,195,247,0.3)", "rgba(79,195,247,0.4)")
-        return (
-            f"QPushButton {{ background-color: {bg}; color: #4fc3f7;"
-            f" border-radius: 6px; border: 1px solid {border};"
-            " font-size: 11px; font-weight: 600; padding: 0 10px; }"
-            "QPushButton:hover { background-color: rgba(79,195,247,0.12); }"
-        )
-
-    def _dishy_chip_style(self, active: bool) -> str:
-        """Style for the Dishy AI tag chip — Dishy green accent."""
-        if active:
-            return (
-                "QPushButton { background-color: rgba(52,211,153,0.2); color: #34d399;"
-                " border-radius: 6px; border: 1px solid rgba(52,211,153,0.6);"
-                " font-size: 11px; font-weight: 700; padding: 0 10px; }"
-            )
-        bg     = theme_manager.c("#0a1f17", "#edfaf4")
-        border = theme_manager.c("rgba(52,211,153,0.3)", "rgba(52,211,153,0.4)")
-        return (
-            f"QPushButton {{ background-color: {bg}; color: #34d399;"
-            f" border-radius: 6px; border: 1px solid {border};"
-            " font-size: 11px; font-weight: 600; padding: 0 10px; }"
-            "QPushButton:hover { background-color: rgba(52,211,153,0.12); }"
-        )
+            row = SavedRecipeRow(rec_dict, on_select=_make_select(), on_delete=_make_delete())
+            self._saved_layout.addWidget(row)
+        self._saved_layout.addStretch()
 
     def _set_tag_filter(self, tag: str | None):
         self._active_tag = tag
@@ -2664,6 +2614,7 @@ class RecipesView(QWidget):
         self._current_recipe = dict(recipe)
         self._current_recipe_db_id = None
         self._current_recipe_is_fav = False
+        self._detail_scale_servings = None
         self._came_from_search = True
         self._populate_detail(self._current_recipe, db_id=None, is_fav=False)
         self._stack.setCurrentIndex(2)
@@ -2714,6 +2665,7 @@ class RecipesView(QWidget):
         if current_url != url:
             return
         self._current_recipe = dict(recipe)
+        self._detail_scale_servings = None
         self._populate_detail(
             self._current_recipe,
             db_id=self._current_recipe_db_id,
@@ -2758,12 +2710,25 @@ class RecipesView(QWidget):
             return
         if url in self._nutrition_inflight_urls:
             return
+        work_key = f"recipes.nutrition:{url}"
 
         row = self._result_rows.get(url)
         if row:
             row.set_nutrition_state("loading")
         self._nutrition_error_urls.discard(url)
         self._nutrition_inflight_urls.add(url)
+        vis = self._visibility_service()
+        nutrition_work = None
+        if vis is not None:
+            nutrition_work = vis.start_work(
+                work_key,
+                "ai",
+                "recipes",
+                "Dishy nutrition is running",
+                "Scraping and analysing recipe nutrition.",
+                timeout_seconds=180,
+                attention_reason="ai_in_progress",
+            )
 
         host = urlparse(url).netloc.replace("www.", "") or "the web"
         if block_ui:
@@ -2827,12 +2792,35 @@ class RecipesView(QWidget):
 
                 # Enhance metadata after nutrition completes (non-blocking).
                 if recipe and not recipe.get("description"):
+                    enrichment_work = None
+                    if vis is not None:
+                        enrichment_work = vis.start_work(
+                            f"recipes.enrichment:{url}",
+                            "ai",
+                            "recipes",
+                            "Enriching recipe details",
+                            "Adding summary and tags.",
+                            timeout_seconds=180,
+                            attention_reason="ai_in_progress",
+                        )
+
+                    def _on_enrichment_done(enrichment, u=url):
+                        if enrichment_work is not None:
+                            enrichment_work.finish()
+                        self._on_enriched(u, enrichment)
+
+                    def _on_enrichment_error(_err: str, u=url):
+                        if enrichment_work is not None:
+                            enrichment_work.fail(_err)
+
                     run_async(
                         self._claude.enrich_scraped_recipe, dict(recipe),
-                        on_result=lambda enrichment, u=url: self._on_enriched(u, enrichment),
-                        on_error=lambda _err: None,
+                        on_result=_on_enrichment_done,
+                        on_error=_on_enrichment_error,
                     )
             finally:
+                if nutrition_work is not None:
+                    nutrition_work.finish()
                 self._close_nutrition_loading_dialog(url)
 
         def _error(_err: str):
@@ -2856,6 +2844,8 @@ class RecipesView(QWidget):
                     "Try again or choose a different result.",
                 )
             finally:
+                if nutrition_work is not None:
+                    nutrition_work.fail(_err)
                 self._close_nutrition_loading_dialog(url)
 
         run_async(_work, on_result=_done, on_error=_error)
@@ -2889,6 +2879,7 @@ class RecipesView(QWidget):
             current_url = str(self._current_recipe.get("url", "") or "").strip()
             if current_url == url:
                 self._current_recipe = dict(recipe)
+                self._detail_scale_servings = None
                 self._populate_detail(
                     self._current_recipe,
                     db_id=self._current_recipe_db_id,
@@ -2931,6 +2922,18 @@ class RecipesView(QWidget):
     # ── detail page ───────────────────────────────────────────────────────────
 
     def _populate_detail(self, recipe: dict, db_id: int | None, is_fav: bool):
+        base_recipe = dict(recipe or {})
+        try:
+            base_servings = max(1, int(float(str(base_recipe.get("servings") or base_recipe.get("yields") or 1).split()[0])))
+        except Exception:
+            base_servings = 1
+        active_servings = int(self._detail_scale_servings or base_servings or 1)
+        if active_servings != base_servings:
+            recipe = scale_recipe(base_recipe, active_servings)
+        else:
+            recipe = dict(base_recipe)
+        report = validate_recipe(base_recipe)
+
         # Replace _detail_card entirely to guarantee all nested widgets are gone.
         # Manual layout clearing only goes 2 levels deep; ingredients/instructions
         # are 3 levels deep, leaving orphaned QLabels painted on top of the new content.
@@ -2941,23 +2944,22 @@ class RecipesView(QWidget):
         self._detail_card.deleteLater()
 
         self._detail_card = QWidget()
-        self._detail_card.setObjectName("plan-card")
+        self._detail_card.setObjectName("recipe-panel")
         self._detail_layout = QVBoxLayout(self._detail_card)
         self._detail_layout.setContentsMargins(28, 24, 28, 28)
         self._detail_layout.setSpacing(18)
         parent_layout.insertWidget(idx, self._detail_card)
 
-        colour = recipe.get("colour", "#ff6b35")
         icon_name = recipe.get("icon", "fa5s.utensils")
 
         # 1. Title row
         title_row = QHBoxLayout()
         recipe_icon = QLabel()
-        recipe_icon.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(24, 24)))
+        recipe_icon.setPixmap(qta.icon(icon_name, color=theme_manager.c("#f1ece5", "#2d241c")).pixmap(QSize(22, 22)))
         recipe_icon.setStyleSheet("background: transparent;")
         title_lbl = QLabel(recipe.get("title", "Untitled Recipe"))
         title_lbl.setStyleSheet(
-            "background: transparent; font-size: 20px; font-weight: 700;"
+            f"background: transparent; color: {theme_manager.c('#f1ece5', '#181510')}; font-size: 20px; font-weight: 700;"
         )
         title_lbl.setWordWrap(True)
         title_row.addWidget(recipe_icon)
@@ -2969,17 +2971,65 @@ class RecipesView(QWidget):
         meta_row = QHBoxLayout()
         meta_row.setSpacing(8)
         if recipe.get("host"):
-            meta_row.addWidget(_meta_chip("fa5s.globe", recipe["host"]))
+            meta_row.addWidget(_apply_tooltip(_meta_chip("fa5s.globe", recipe["host"]), _source_tooltip(recipe["host"])))
         total = recipe.get("total_time") or (
             (recipe.get("prep_time", 0) or 0) + (recipe.get("cook_time", 0) or 0)
         )
         if total:
-            meta_row.addWidget(_meta_chip("fa5s.clock", f"{total} min"))
+            meta_row.addWidget(_apply_tooltip(_meta_chip("fa5s.clock", f"{total} min"), _time_tooltip(total)))
         if recipe.get("yields") or recipe.get("servings"):
-            meta_row.addWidget(_meta_chip("fa5s.users",
-                                          str(recipe.get("yields") or recipe.get("servings", ""))))
+            servings_label = str(recipe.get("yields") or recipe.get("servings", ""))
+            meta_row.addWidget(_apply_tooltip(_meta_chip("fa5s.users", servings_label), _servings_tooltip(servings_label)))
+        score = int(report.get("score", 0) or 0)
+        meta_row.addWidget(_apply_tooltip(_meta_chip("fa5s.clipboard-check", f"{score}/100 {health_label(score)}"), _health_score_tooltip(score)))
         meta_row.addStretch()
         self._detail_layout.addLayout(meta_row)
+
+        scale_row = QHBoxLayout()
+        scale_row.setSpacing(8)
+        scale_lbl = QLabel("Scale recipe")
+        scale_lbl.setStyleSheet(
+            f"background: transparent; color: {theme_manager.c('#666666', '#777777')}; font-size: 12px; font-weight: 700;"
+        )
+        scale_row.addWidget(scale_lbl)
+        for servings_target in sorted({base_servings, max(2, base_servings), max(4, base_servings * 2)}):
+            btn = QPushButton(f"{servings_target} servings")
+            btn.setObjectName("ghost-btn")
+            btn.setFixedHeight(30)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            if int(servings_target) == int(active_servings):
+                btn.setProperty("active", True)
+                btn.setObjectName("chip-btn")
+            else:
+                btn.setObjectName("chip-btn")
+            btn.clicked.connect(
+                lambda _checked=False, s=servings_target, r=base_recipe, rid=db_id, fav=is_fav: (
+                    setattr(self, "_detail_scale_servings", s),
+                    self._populate_detail(r, rid, fav),
+                )
+            )
+            scale_row.addWidget(btn)
+        reset_btn = QPushButton("Reset")
+        reset_btn.setObjectName("ghost-btn")
+        reset_btn.setFixedHeight(30)
+        reset_btn.clicked.connect(
+            lambda: (
+                setattr(self, "_detail_scale_servings", base_servings),
+                self._populate_detail(base_recipe, db_id, is_fav),
+            )
+        )
+        scale_row.addWidget(reset_btn)
+        scale_row.addStretch()
+        self._detail_layout.addLayout(scale_row)
+        if active_servings != base_servings:
+            scale_note = QLabel(
+                f"Scaled from {base_servings} to {active_servings} servings. Ingredient amounts update here while per-serving nutrition stays consistent."
+            )
+            scale_note.setWordWrap(True)
+            scale_note.setStyleSheet(
+                f"background: transparent; color: {theme_manager.c('#666666', '#777777')}; font-size: 11px;"
+            )
+            self._detail_layout.addWidget(scale_note)
 
         url = recipe.get("url", "")
         if url:
@@ -3003,7 +3053,7 @@ class RecipesView(QWidget):
                 row.setSpacing(8)
                 dot = QLabel("·")
                 dot.setStyleSheet(
-                    f"background: transparent; color: {colour};"
+                    "background: transparent; color: #ff6b35;"
                     " font-size: 20px; font-weight: 700;"
                 )
                 dot.setFixedWidth(16)
@@ -3027,11 +3077,17 @@ class RecipesView(QWidget):
                     )
                     if kcal_v:
                         kl = QLabel(f"{round(kcal_v)} kcal")
-                        kl.setStyleSheet(f"background: rgba(255,107,53,0.10); color: #ff6b35;{_pill_style}")
+                        kl.setStyleSheet(
+                            f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+                            f" color: {theme_manager.c('#a39c93', '#7c7368')};{_pill_style}"
+                        )
                         row.addWidget(kl)
                     if prot_v:
                         pl2 = QLabel(f"{round(prot_v, 1)}g prot")
-                        pl2.setStyleSheet(f"background: rgba(76,175,138,0.10); color: #4caf8a;{_pill_style}")
+                        pl2.setStyleSheet(
+                            f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+                            f" color: {theme_manager.c('#a39c93', '#7c7368')};{_pill_style}"
+                        )
                         row.addWidget(pl2)
                     if fat_v or carb_v:
                         fc_lbl = QLabel(f"{round(fat_v,1)}g fat · {round(carb_v,1)}g carbs")
@@ -3058,7 +3114,7 @@ class RecipesView(QWidget):
                 num.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 num.setFixedSize(32, 32)
                 num.setStyleSheet(
-                    f"background-color: rgba(255,107,53,0.12); color: {colour};"
+                    "background-color: rgba(255,107,53,0.10); color: #ff6b35;"
                     " font-size: 13px; font-weight: 700; border-radius: 7px;"
                 )
                 lbl = QLabel(step)
@@ -3104,40 +3160,48 @@ class RecipesView(QWidget):
                 is_meal   = tag in _MEAL_SET
                 if is_dishy or is_online:
                     _ic_name = "fa5s.robot" if is_dishy else "fa5s.globe"
-                    _colour  = "#34d399"    if is_dishy else "#4fc3f7"
-                    _bg      = "rgba(52,211,153,0.12)" if is_dishy else "rgba(79,195,247,0.12)"
                     _label   = "Dishy"      if is_dishy else "Online"
                     chip_w = QWidget()
                     chip_w.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-                    chip_w.setStyleSheet(f"background: {_bg}; border-radius: 4px;")
+                    chip_w.setStyleSheet(
+                        f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+                        f"border: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.05)')};"
+                        " border-radius: 12px;"
+                    )
                     chip_hl = QHBoxLayout(chip_w)
                     chip_hl.setContentsMargins(7, 3, 9, 3)
                     chip_hl.setSpacing(4)
                     ic = QLabel()
-                    ic.setPixmap(qta.icon(_ic_name, color=_colour).pixmap(QSize(10, 10)))
+                    ic.setPixmap(qta.icon(_ic_name, color=theme_manager.c("#a39c93", "#7c7368")).pixmap(QSize(10, 10)))
                     ic.setStyleSheet("background: transparent;")
                     txt = QLabel(_label)
                     txt.setStyleSheet(
-                        f"color: {_colour}; font-size: 11px; font-weight: 700;"
+                        f"color: {theme_manager.c('#a39c93', '#7c7368')}; font-size: 11px; font-weight: 700;"
                         " background: transparent;"
                     )
                     chip_hl.addWidget(ic)
                     chip_hl.addWidget(txt)
+                    _apply_tooltip(chip_w, _recipe_tag_tooltip(tag))
                     tag_row.addWidget(chip_w)
                 elif is_meal:
                     chip = QLabel(tag)
                     chip.setStyleSheet(
-                        "background: rgba(76,175,138,0.12); color: #4caf8a;"
-                        " border: 1px solid rgba(76,175,138,0.3); border-radius: 4px;"
+                        f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+                        f" color: {theme_manager.c('#a39c93', '#7c7368')};"
+                        f" border: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.05)')}; border-radius: 12px;"
                         " padding: 3px 10px; font-size: 11px; font-weight: 600;"
                     )
+                    _apply_tooltip(chip, _recipe_tag_tooltip(tag))
                     tag_row.addWidget(chip)
                 else:
                     chip = QLabel(tag)
                     chip.setStyleSheet(
-                        f"background-color: {theme_manager.c('rgba(255,107,53,0.1)', 'rgba(255,107,53,0.12)')};"
-                        " color: #ff6b35; border-radius: 4px; padding: 3px 10px; font-size: 11px;"
+                        f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+                        f" color: {theme_manager.c('#a39c93', '#7c7368')};"
+                        f" border: 1px solid {theme_manager.c('rgba(255,255,255,0.06)', 'rgba(0,0,0,0.05)')};"
+                        " border-radius: 12px; padding: 3px 10px; font-size: 11px;"
                     )
+                    _apply_tooltip(chip, _recipe_tag_tooltip(tag))
                     tag_row.addWidget(chip)
             tag_row.addStretch()
             self._detail_layout.addLayout(tag_row)

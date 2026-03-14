@@ -6,18 +6,20 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QScrollArea, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QSize, QRectF
+from PySide6.QtCore import Qt, QSize, QRectF, QTimer
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
 
 from api.claude_ai import ClaudeAI
 from models.database import Database
 from utils.data_service import get_db
+from utils.nutrition_coach import build_nutrition_trend
 from utils.workers import run_async
 from utils.macro_goals import MACRO_SPECS, get_macro_goals, get_broadcaster
+from widgets.page_scaffold import PageScaffold, StatStrip
 
 _claude = ClaudeAI()
 
-_SECTION_COLOUR = "#e05c7a"
+_SECTION_COLOUR = "#ff6b35"
 
 
 def _week_start() -> str:
@@ -75,7 +77,6 @@ class MacroRing(QWidget):
             painter.setPen(fg_pen)
             painter.drawArc(rect, 90 * 16, -span)
 
-        cx = w / 2
         cy = h / 2
 
         val_size = max(10, int(s * 0.22))
@@ -154,11 +155,19 @@ class NutritionView(QWidget):
         content.setStyleSheet("background: transparent;")
         content.setMinimumHeight(780)  # prevents row_b from crushing at small window heights
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(28, 20, 28, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        layout.addLayout(self._build_header())
-        layout.addLayout(self._build_stat_row())
+        self._scaffold = PageScaffold(
+            "Nutrition",
+            datetime.now().strftime("%A, %d %B %Y"),
+            eyebrow="Food Operations",
+            parent=content,
+            quiet_header=True,
+        )
+        self._scaffold.set_stats(self._build_stat_row())
+        layout.addWidget(self._scaffold)
+        body_layout = self._scaffold.body_layout()
 
         # Row A — rings (wider) | today's plan
         row_a = QHBoxLayout()
@@ -169,7 +178,7 @@ class NutritionView(QWidget):
         plan_card.setMinimumHeight(200)
         row_a.addWidget(rings_card, 3)
         row_a.addWidget(plan_card, 2)
-        layout.addLayout(row_a)
+        body_layout.addLayout(row_a)
 
         # Row B — food log | weekly chart | right column (quick add + recently logged)
         row_b = QHBoxLayout()
@@ -188,10 +197,11 @@ class NutritionView(QWidget):
         right_col_layout.setContentsMargins(0, 0, 0, 0)
         right_col_layout.setSpacing(12)
         right_col_layout.addWidget(self._build_quick_add_card(), 3)
+        right_col_layout.addWidget(self._build_coach_card(), 2)
         right_col_layout.addWidget(self._build_recent_foods_card(), 2)
         row_b.addWidget(right_col, 4)
 
-        layout.addLayout(row_b, 1)
+        body_layout.addLayout(row_b, 1)
 
         scroll.setWidget(content)
         self._outer.addWidget(scroll)
@@ -199,37 +209,7 @@ class NutritionView(QWidget):
 
     # ── Header ───────────────────────────────────────────────────────────────
 
-    def _build_header(self) -> QHBoxLayout:
-        hl = QHBoxLayout()
-        left = QVBoxLayout()
-        left.setSpacing(2)
-        left.setContentsMargins(0, 0, 0, 0)
-        title = QLabel("Nutrition")
-        title.setObjectName("page-title")
-        date_lbl = QLabel(datetime.now().strftime("%A, %d %B %Y"))
-        date_lbl.setObjectName("page-date")
-        left.addWidget(title)
-        left.addWidget(date_lbl)
-        hl.addLayout(left)
-        hl.addStretch()
-        robot_ic = QLabel()
-        robot_ic.setPixmap(qta.icon("fa5s.robot", color="#34d399").pixmap(QSize(14, 14)))
-        robot_ic.setStyleSheet("background: transparent;")
-        badge_lbl = QLabel("Powered by Dishy")
-        badge_lbl.setStyleSheet(
-            "background: rgba(52,211,153,0.12); color: #34d399;"
-            " border-radius: 6px; padding: 5px 14px;"
-            " font-size: 12px; font-weight: 700;"
-            " border: 1px solid rgba(52,211,153,0.25);"
-        )
-        hl.addWidget(robot_ic)
-        hl.addSpacing(7)
-        hl.addWidget(badge_lbl)
-        return hl
-
-    # ── Stat tiles ───────────────────────────────────────────────────────────
-
-    def _build_stat_row(self) -> QHBoxLayout:
+    def _build_stat_row(self) -> StatStrip:
         today_str = datetime.now().strftime("%Y-%m-%d")
         # Planned totals come from today's meal plan (same source as Planned Meals).
         slots  = self._db.get_today_meal_plan_with_nutrition()
@@ -248,57 +228,32 @@ class NutritionView(QWidget):
         week_days   = max(week_data["days"], 1)
         week_avg    = week_data["kcal"] / week_days
 
-        def _tile(icon_name: str, value: str, label: str, colour: str) -> QWidget:
-            tile = QWidget()
-            tile.setObjectName("stat-card")
-            tile.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            hl2 = QHBoxLayout(tile)
-            hl2.setContentsMargins(16, 10, 16, 10)
-            hl2.setSpacing(10)
-            ic = QLabel()
-            ic.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(18, 18)))
-            ic.setStyleSheet("background: transparent;")
-            ic.setFixedSize(18, 18)
-            vl = QVBoxLayout()
-            vl.setSpacing(1)
-            v_lbl = QLabel(value)
-            v_lbl.setObjectName("stat-value")
-            l_lbl = QLabel(label)
-            l_lbl.setObjectName("stat-label")
-            vl.addWidget(v_lbl)
-            vl.addWidget(l_lbl)
-            hl2.addWidget(ic)
-            hl2.addLayout(vl)
-            hl2.addStretch()
-            return tile
-
-        hl = QHBoxLayout()
-        hl.setSpacing(12)
-        hl.addWidget(_tile(
-            "fa5s.fire",
+        strip = StatStrip(self, density="compact")
+        strip.add_stat(
+            "kcal",
             f"{int(planned_totals['kcal'])} / {int(goals['kcal'])} kcal",
             "Planned calories today",
             "#ff6b35",
-        ))
-        hl.addWidget(_tile(
-            "fa5s.dumbbell",
+        )
+        strip.add_stat(
+            "protein",
             f"{planned_totals['protein_g']:.0f}g / {int(goals['protein_g'])}g",
             "Planned protein today",
-            "#4fc3f7",
-        ))
-        hl.addWidget(_tile(
-            "fa5s.clipboard-check",
+            "#ff6b35",
+        )
+        strip.add_stat(
+            "logged",
             f"{int(logged_kcal)} kcal",
             "Logged today (consumed)",
-            "#34d399",
-        ))
-        hl.addWidget(_tile(
-            "fa5s.chart-line",
+            "#ff6b35",
+        )
+        strip.add_stat(
+            "avg",
             f"{int(week_avg)} kcal / day",
             "Week avg (logged)",
-            "#c084fc",
-        ))
-        return hl
+            "#ff6b35",
+        )
+        return strip
 
     # ── Today's intake rings ─────────────────────────────────────────────────
 
@@ -321,7 +276,7 @@ class NutritionView(QWidget):
         )
         today_badge = QLabel(datetime.now().strftime("%a %d %b"))
         today_badge.setStyleSheet(
-            "background: rgba(224,92,122,0.12); color: #e05c7a;"
+            "background: rgba(255,107,53,0.10); color: #ff6b35;"
             " border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 600;"
         )
         hdr.addWidget(ic)
@@ -344,7 +299,7 @@ class NutritionView(QWidget):
 
             name_lbl = QLabel(label)
             name_lbl.setStyleSheet(
-                f"background: transparent; color: {colour}; font-size: 12px; font-weight: 700;"
+                f"background: transparent; color: {theme_manager.c('#8d867d', '#756d63')}; font-size: 12px; font-weight: 700;"
             )
             name_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
             col.addWidget(name_lbl)
@@ -385,7 +340,7 @@ class NutritionView(QWidget):
 
         hdr = QHBoxLayout()
         ic = QLabel()
-        ic.setPixmap(qta.icon("fa5s.utensils", color="#4caf8a").pixmap(QSize(14, 14)))
+        ic.setPixmap(qta.icon("fa5s.utensils", color=theme_manager.c("#8d867d", "#756d63")).pixmap(QSize(14, 14)))
         ic.setStyleSheet("background: transparent;")
         hdr_lbl = QLabel("TODAY'S PLAN")
         hdr_lbl.setStyleSheet(
@@ -415,10 +370,10 @@ class NutritionView(QWidget):
             meals_today = {}
 
         meal_defs = [
-            ("breakfast", "fa5s.egg",            "Breakfast", "#ff9a5c"),
-            ("lunch",     "fa5s.utensils",       "Lunch",     "#34d399"),
-            ("dinner",    "fa5s.concierge-bell", "Dinner",    "#60a5fa"),
-            ("snack",     "fa5s.apple-alt",      "Snack",     "#f0a500"),
+            ("breakfast", "fa5s.egg",            "Breakfast", "#ff6b35"),
+            ("lunch",     "fa5s.utensils",       "Lunch",     "#ff6b35"),
+            ("dinner",    "fa5s.concierge-bell", "Dinner",    "#ff6b35"),
+            ("snack",     "fa5s.apple-alt",      "Snack",     "#ff6b35"),
         ]
 
         total_plan_kcal = 0.0
@@ -514,9 +469,8 @@ class NutritionView(QWidget):
 
         if kcal_str:
             kcal_lbl = QLabel(kcal_str)
-            r, g, b = int(colour[1:3], 16), int(colour[3:5], 16), int(colour[5:7], 16)
             kcal_lbl.setStyleSheet(
-                f"background: rgba({r},{g},{b},0.13); color: {colour};"
+                f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')}; color: {theme_manager.c('#8d867d', '#756d63')};"
                 " border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600;"
             )
             rl.addWidget(kcal_lbl)
@@ -591,7 +545,7 @@ class NutritionView(QWidget):
 
         hdr = QHBoxLayout()
         ic = QLabel()
-        ic.setPixmap(qta.icon("fa5s.chart-bar", color="#4fc3f7").pixmap(QSize(14, 14)))
+        ic.setPixmap(qta.icon("fa5s.chart-bar", color=theme_manager.c("#8d867d", "#756d63")).pixmap(QSize(14, 14)))
         ic.setStyleSheet("background: transparent;")
         hdr_lbl = QLabel("THIS WEEK")
         hdr_lbl.setStyleSheet(
@@ -647,7 +601,7 @@ class NutritionView(QWidget):
             # kcal value above bar (only if > 0)
             kcal_lbl = QLabel(str(int(kcal)) if kcal > 0 else "—")
             kcal_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-            kcal_colour = "#e05c7a" if (is_today and kcal > 0) else theme_manager.c("#555555", "#999999")
+            kcal_colour = "#ff6b35" if (is_today and kcal > 0) else theme_manager.c("#555555", "#999999")
             kcal_lbl.setStyleSheet(
                 f"background: transparent; color: {kcal_colour};"
                 f" font-size: {'10px; font-weight: 700' if is_today else '9px'};"
@@ -669,8 +623,8 @@ class NutritionView(QWidget):
             spacer_widget.setStyleSheet("background: transparent;")
             br_layout.addWidget(spacer_widget)
 
-            bar_colour = "#e05c7a" if is_today else (
-                "#4fc3f7" if kcal >= GOAL_KCAL else theme_manager.c("#2a2a2a", "#d0d0e0")
+            bar_colour = "#ff6b35" if is_today else (
+                theme_manager.c("#3a414a", "#d7ccbf") if kcal >= GOAL_KCAL else theme_manager.c("#242a31", "#e3d9cf")
             )
             bar = QWidget()
             bar.setFixedHeight(bar_h)
@@ -680,7 +634,7 @@ class NutritionView(QWidget):
             col_layout.addWidget(bar_region)
 
             # Day label + date number
-            today_colour = "#e05c7a" if is_today else theme_manager.c("#555555", "#888888")
+            today_colour = "#ff6b35" if is_today else theme_manager.c("#555555", "#888888")
             day_lbl = QLabel(day_label)
             day_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
             day_lbl.setStyleSheet(
@@ -722,8 +676,8 @@ class NutritionView(QWidget):
 
         for val_str, lbl_str, colour in [
             (f"{int(total_kcal):,}", "week total", "#ff6b35"),
-            (f"{int(avg_kcal)}/day",  "avg kcal",   "#4fc3f7"),
-            (f"{days_logged}/7",      "days logged", "#aed581"),
+            (f"{int(avg_kcal)}/day",  "avg kcal",   "#ff6b35"),
+            (f"{days_logged}/7",      "days logged", "#ff6b35"),
         ]:
             vl = QVBoxLayout()
             vl.setSpacing(1)
@@ -748,7 +702,7 @@ class NutritionView(QWidget):
         # Goal vs avg indicator
         if days_logged > 0:
             arrow = "▲" if diff >= 0 else "▼"
-            diff_colour = "#e05c7a" if diff > 100 else ("#4fc3f7" if diff < -50 else "#aed581")
+            diff_colour = "#ff6b35" if abs(diff) > 50 else theme_manager.c("#8d867d", "#756d63")
             goal_lbl = QLabel(
                 f"{arrow} {abs(int(diff))} kcal {'above' if diff >= 0 else 'under'} daily goal ({int(GOAL_KCAL):,})"
             )
@@ -757,6 +711,79 @@ class NutritionView(QWidget):
             )
             layout.addWidget(goal_lbl)
 
+        return card
+
+    def _build_coach_card(self) -> QWidget:
+        trend = build_nutrition_trend(self._db, days=7)
+
+        card = QWidget()
+        card.setObjectName("card")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
+
+        hdr = QHBoxLayout()
+        ic = QLabel()
+        ic.setPixmap(qta.icon("fa5s.chart-line", color=theme_manager.c("#8d867d", "#756d63")).pixmap(QSize(14, 14)))
+        ic.setStyleSheet("background: transparent;")
+        title = QLabel("WEEKLY SUMMARY")
+        title.setStyleSheet(
+            f"background: transparent; color: {theme_manager.c('#888888', '#666666')};"
+            " font-size: 13px; font-weight: 700; letter-spacing: 1px;"
+        )
+        badge = QLabel(f"{trend.get('adherence_days', 0)}/{max(trend.get('tracked_days', 0), 1)} on target")
+        badge.setStyleSheet(
+            "background: rgba(255,107,53,0.10); color: #ff6b35;"
+            " border-radius: 5px; padding: 2px 8px; font-size: 10px; font-weight: 700;"
+        )
+        hdr.addWidget(ic)
+        hdr.addSpacing(6)
+        hdr.addWidget(title)
+        hdr.addStretch()
+        hdr.addWidget(badge)
+        layout.addLayout(hdr)
+
+        summary = QLabel(str(trend.get("summary") or ""))
+        summary.setWordWrap(True)
+        summary.setStyleSheet(
+            f"background: transparent; color: {theme_manager.c('#e0e0e0', '#1a1a1a')}; font-size: 13px; font-weight: 600;"
+        )
+        layout.addWidget(summary)
+
+        action = QLabel(str(trend.get("action") or ""))
+        action.setWordWrap(True)
+        action.setStyleSheet(
+            f"background: transparent; color: {theme_manager.c('#777777', '#666666')}; font-size: 12px;"
+        )
+        layout.addWidget(action)
+
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(8)
+        for value, label, colour in [
+            (f"{int(trend.get('avg_kcal', 0))}", "avg kcal", "#ff6b35"),
+            (f"{int(trend.get('avg_protein_g', 0))}g", "avg protein", "#ff6b35"),
+            (f"{trend.get('protein_hit_days', 0)}", "protein hit days", "#ff6b35"),
+        ]:
+            tile = QWidget()
+            tile.setStyleSheet(
+                f"background: {theme_manager.c('rgba(255,255,255,0.04)', 'rgba(0,0,0,0.04)')};"
+                f"border: 1px solid {theme_manager.c('#1e1e1e', '#e8e8e8')}; border-radius: 8px;"
+            )
+            tl = QVBoxLayout(tile)
+            tl.setContentsMargins(10, 8, 10, 8)
+            tl.setSpacing(2)
+            val_lbl = QLabel(value)
+            val_lbl.setStyleSheet(
+                f"background: transparent; color: {theme_manager.c('#f1ece5', '#201913')}; font-size: 15px; font-weight: 700;"
+            )
+            sub_lbl = QLabel(label)
+            sub_lbl.setStyleSheet(
+                f"background: transparent; color: {theme_manager.c('#666666', '#777777')}; font-size: 10px; font-weight: 600;"
+            )
+            tl.addWidget(val_lbl)
+            tl.addWidget(sub_lbl)
+            stats_row.addWidget(tile, 1)
+        layout.addLayout(stats_row)
         return card
 
     # ── Quick Add ────────────────────────────────────────────────────────────
@@ -771,18 +798,18 @@ class NutritionView(QWidget):
         # Header
         hdr = QHBoxLayout()
         robot_ic = QLabel()
-        robot_ic.setPixmap(qta.icon("fa5s.robot", color="#34d399").pixmap(QSize(14, 14)))
+        robot_ic.setPixmap(qta.icon("fa5s.plus-circle", color=theme_manager.c("#8d867d", "#756d63")).pixmap(QSize(14, 14)))
         robot_ic.setStyleSheet("background: transparent;")
         hdr_lbl = QLabel("QUICK ADD")
         hdr_lbl.setStyleSheet(
             f"background: transparent; color: {theme_manager.c('#888888', '#666666')};"
             " font-size: 13px; font-weight: 700; letter-spacing: 1px;"
         )
-        ai_badge = QLabel("AI")
+        ai_badge = QLabel("Quick Add")
         ai_badge.setStyleSheet(
-            "background: rgba(52,211,153,0.15); color: #34d399;"
+            "background: rgba(255,107,53,0.10); color: #ff6b35;"
             " border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 700;"
-            " border: 1px solid rgba(52,211,153,0.3);"
+            " border: 1px solid rgba(255,107,53,0.22);"
         )
         hdr.addWidget(robot_ic)
         hdr.addSpacing(6)
@@ -791,7 +818,7 @@ class NutritionView(QWidget):
         hdr.addWidget(ai_badge)
         layout.addLayout(hdr)
 
-        sub_lbl = QLabel("Log food not in your plan\nDishy works out the macros")
+        sub_lbl = QLabel("Log food not in your plan and keep the estimate flow lightweight.")
         sub_lbl.setStyleSheet(
             f"background: transparent; color: {theme_manager.c('#555555', '#888888')}; font-size: 12px;"
         )
@@ -811,19 +838,16 @@ class NutritionView(QWidget):
         ic_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         self._quick_input = QLineEdit()
         self._quick_input.setPlaceholderText("e.g. 2 eggs, bowl of oats…")
-        self._quick_input.setStyleSheet(
-            f"background: transparent; border: none; padding: 0; font-size: 12px;"
-            f" color: {theme_manager.c('#e8e8e8', '#1a1a1a')};"
-        )
+        self._quick_input.setStyleSheet("background: transparent; border: none; padding: 0; font-size: 12px;")
         send_btn = QPushButton()
         send_btn.setFixedSize(30, 30)
         send_btn.setIcon(qta.icon("fa5s.paper-plane", color="#ffffff"))
         send_btn.setIconSize(QSize(12, 12))
         send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         send_btn.setStyleSheet(
-            "QPushButton { background: #34d399; border-radius: 7px; border: none; }"
-            "QPushButton:hover { background: #4ae3a8; }"
-            "QPushButton:pressed { background: #2ac48a; }"
+            "QPushButton { background: #ff6b35; border-radius: 7px; border: none; }"
+            "QPushButton:hover { background: #f06a38; }"
+            "QPushButton:pressed { background: #db5d2d; }"
         )
         self._quick_add_btn = send_btn
         self._quick_input.returnPressed.connect(self._quick_search)
@@ -892,9 +916,9 @@ class NutritionView(QWidget):
         add_btn.setMinimumWidth(130)
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.setStyleSheet(
-            "QPushButton { background: #34d399; color: #0a0a0a; border-radius: 7px;"
+            "QPushButton { background: #ff6b35; color: #ffffff; border-radius: 7px;"
             "  border: none; font-size: 12px; font-weight: 700; padding: 0 14px; }"
-            "QPushButton:hover { background: #4ae3a8; }"
+            "QPushButton:hover { background: #f06a38; }"
         )
         add_btn.clicked.connect(self._add_to_today)
         add_row.addWidget(add_btn)
@@ -913,7 +937,7 @@ class NutritionView(QWidget):
 
         hdr = QHBoxLayout()
         ic = QLabel()
-        ic.setPixmap(qta.icon("fa5s.history", color="#c084fc").pixmap(QSize(13, 13)))
+        ic.setPixmap(qta.icon("fa5s.history", color=theme_manager.c("#8d867d", "#756d63")).pixmap(QSize(13, 13)))
         ic.setStyleSheet("background: transparent;")
         hdr_lbl = QLabel("RECENTLY LOGGED")
         hdr_lbl.setStyleSheet(
@@ -988,10 +1012,10 @@ class NutritionView(QWidget):
         add_btn.setFixedSize(28, 28)
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.setStyleSheet(
-            "QPushButton { background: rgba(192,132,252,0.15); color: #c084fc;"
-            " border: 1px solid rgba(192,132,252,0.35); border-radius: 6px;"
+            f"QPushButton {{ background: {theme_manager.c('#14181c', '#f2ebe2')}; color: {theme_manager.c('#8d867d', '#756d63')};"
+            f" border: 1px solid {theme_manager.c('#2a3037', '#ddd1c4')}; border-radius: 6px;"
             " font-size: 14px; font-weight: 700; }"
-            "QPushButton:hover { background: rgba(192,132,252,0.3); }"
+            "QPushButton:hover { background: rgba(255,107,53,0.08); border-color: rgba(255,107,53,0.22); }"
         )
         food_data = {k: entry[k] for k in ("food_name", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g")}
         add_btn.clicked.connect(lambda _, d=food_data: self._readd_food(d))
@@ -1061,23 +1085,23 @@ class NutritionView(QWidget):
                     item.widget().deleteLater()
             for val, label, colour in [
                 (kcal, "kcal",    "#ff6b35"),
-                (prot, "protein", "#4fc3f7"),
-                (carb, "carbs",   "#aed581"),
-                (fat,  "fat",     "#ffb74d"),
+                (prot, "protein", "#ff6b35"),
+                (carb, "carbs",   "#ff6b35"),
+                (fat,  "fat",     "#ff6b35"),
             ]:
-                r, g, b = int(colour[1:3], 16), int(colour[3:5], 16), int(colour[5:7], 16)
                 tile = QWidget()
                 tile.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 tile.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
                 tile.setStyleSheet(
-                    f"background: rgba({r},{g},{b},0.10); border-radius: 7px; border: none;"
+                    f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+                    f" border: 1px solid {theme_manager.c('#2a3037', '#ddd1c4')}; border-radius: 7px;"
                 )
                 tl = QVBoxLayout(tile)
                 tl.setContentsMargins(4, 8, 4, 8)
                 tl.setSpacing(2)
                 v_lbl = QLabel(f"{round(val)}" if label == "kcal" else f"{round(val, 1)}")
                 v_lbl.setStyleSheet(
-                    f"color: {colour}; font-size: 16px; font-weight: 800;"
+                    f"color: {theme_manager.c('#f1ece5', '#201913')}; font-size: 16px; font-weight: 800;"
                     " background: transparent; border: none;"
                 )
                 l_lbl = QLabel(label)
@@ -1204,14 +1228,15 @@ class NutritionView(QWidget):
         pills_row.setContentsMargins(0, 0, 0, 0)
         for val, lbl_text, colour in [
             (entry["kcal"],      "kcal", "#ff6b35"),
-            (entry["protein_g"], "P",    "#4fc3f7"),
-            (entry["carbs_g"],   "C",    "#aed581"),
-            (entry["fat_g"],     "F",    "#ffb74d"),
+            (entry["protein_g"], "P",    "#ff6b35"),
+            (entry["carbs_g"],   "C",    "#ff6b35"),
+            (entry["fat_g"],     "F",    "#ff6b35"),
         ]:
-            r, g, b = int(colour[1:3], 16), int(colour[3:5], 16), int(colour[5:7], 16)
             pill = QLabel(f"{float(val or 0):.0f}{lbl_text}")
             pill.setStyleSheet(
-                f"background: rgba({r},{g},{b},0.13); color: {colour};"
+                f"background: {theme_manager.c('rgba(255,255,255,0.03)', 'rgba(0,0,0,0.03)')};"
+                f"color: {theme_manager.c('#8d867d', '#756d63')};"
+                f"border: 1px solid {theme_manager.c('#2a3037', '#ddd1c4')};"
                 " border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 700;"
             )
             pills_row.addWidget(pill)
@@ -1251,6 +1276,41 @@ class NutritionView(QWidget):
 
     def refresh(self):
         self._rebuild_content()
+
+    def activate_quick_add(self, query: str = "") -> None:
+        """Palette-safe entrypoint for the quick-add nutrition flow."""
+        if self._quick_input is None:
+            self._rebuild_content()
+        if self._quick_input is None:
+            return
+        self._quick_input.setText(query)
+        QTimer.singleShot(0, lambda: self._quick_input.setFocus(Qt.FocusReason.ShortcutFocusReason))
+
+    def request_quick_estimate(self, query: str, on_result, on_error) -> None:
+        """Run the existing Dishy quick-estimate path for palette quick add."""
+        run_async(
+            _claude.lookup_nutrition,
+            str(query or "").strip(),
+            on_result=on_result,
+            on_error=on_error,
+        )
+
+    def save_estimate_to_today(self, data: dict) -> bool:
+        if not data:
+            return False
+        today = datetime.now().strftime("%Y-%m-%d")
+        self._db.add_nutrition_log(
+            today,
+            data.get("food_name", "Unknown")[:80],
+            float(data.get("kcal", 0)),
+            float(data.get("protein_g", 0)),
+            float(data.get("carbs_g", 0)),
+            float(data.get("fat_g", 0)),
+            float(data.get("fiber_g", 0)),
+            float(data.get("sugar_g", 0)),
+        )
+        self._refresh_log()
+        return True
 
     def apply_theme(self, _mode: str):
         self._rebuild_content()

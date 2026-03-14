@@ -8,7 +8,7 @@ from __future__ import annotations
 import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QLineEdit, QSizePolicy, QComboBox,
+    QLineEdit, QComboBox,
 )
 from PySide6.QtCore import Qt, QSize, QTimer, Signal
 

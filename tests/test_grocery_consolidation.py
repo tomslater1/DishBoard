@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from utils.grocery_consolidation import consolidate_rows
+from utils.grocery_consolidation import build_shopping_overview, consolidate_rows
 
 
 class TestGroceryConsolidation(unittest.TestCase):
@@ -17,6 +17,16 @@ class TestGroceryConsolidation(unittest.TestCase):
         self.assertEqual(len(merged), 2)
         names = sorted((r["name"].lower() for r in merged))
         self.assertEqual(names, ["milk", "tomatoes"])
+
+    def test_build_overview_counts_overlap_and_cost(self):
+        rows = [
+            {"name": "Milk", "quantity": "2", "unit": "l"},
+            {"name": "Tomatoes", "quantity": "3", "unit": ""},
+        ]
+        pantry = [{"name": "milk"}]
+        overview = build_shopping_overview(rows, pantry)
+        self.assertEqual(overview["pantry_overlap_count"], 1)
+        self.assertGreater(overview["estimated_cost"], 0)
 
 
 if __name__ == "__main__":

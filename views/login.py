@@ -14,11 +14,10 @@ The login card uses an inner QStackedWidget with 3 pages:
 from __future__ import annotations
 
 import os
-import webbrowser
 
 import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, QTimer, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QFrame, QStackedWidget,

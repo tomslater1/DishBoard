@@ -8,7 +8,7 @@ Model: claude-haiku-4-5-20251001
 import os
 import logging
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 import anthropic
 
 from utils.assets import load_text_asset
@@ -186,8 +186,13 @@ class ClaudeAI:
             return response.content[0].text
         except Exception as exc:
             try:
-                from utils.telemetry import capture_exception
+                from utils.telemetry import capture_exception, track_event
 
+                track_event(
+                    "ai.request_failed",
+                    {"model": self.MODEL, "surface": "single_turn", "error": str(exc)[:200]},
+                    user_id=user_id,
+                )
                 capture_exception(exc, context={"model": self.MODEL, "surface": "single_turn"}, user_id=user_id)
             except Exception:
                 pass
@@ -222,8 +227,13 @@ class ClaudeAI:
             return "\n".join(chunks).strip()
         except Exception as exc:
             try:
-                from utils.telemetry import capture_exception
+                from utils.telemetry import capture_exception, track_event
 
+                track_event(
+                    "ai.request_failed",
+                    {"model": self.MODEL, "surface": "fast_json", "error": str(exc)[:200]},
+                    user_id=user_id,
+                )
                 capture_exception(exc, context={"model": self.MODEL, "surface": "fast_json"}, user_id=user_id)
             except Exception:
                 pass
@@ -311,8 +321,13 @@ class ClaudeAI:
                 )
             except Exception as exc:
                 try:
-                    from utils.telemetry import capture_exception
+                    from utils.telemetry import capture_exception, track_event
 
+                    track_event(
+                        "ai.request_failed",
+                        {"model": self.TOOLS_MODEL, "surface": "tools_turn", "error": str(exc)[:200]},
+                        user_id=user_id,
+                    )
                     capture_exception(
                         exc,
                         context={"model": self.TOOLS_MODEL, "surface": "tools_turn"},

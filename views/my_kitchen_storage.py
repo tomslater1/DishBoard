@@ -1,7 +1,7 @@
 """My Kitchen — Pantry, Fridge, and Freezer tracker."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 import qtawesome as qta
 from PySide6.QtWidgets import (
@@ -9,8 +9,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QFrame, QSizePolicy, QDialog, QLineEdit,
     QComboBox, QDateEdit,
 )
-from PySide6.QtCore import Qt, QSize, QDate, QObject, Signal as _Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QSize, QDate, QObject, QTimer, Signal as _Signal
 
 
 # ── Pantry change broadcaster ─────────────────────────────────────────────────
@@ -30,6 +29,8 @@ from utils.theme import manager as theme_manager
 from utils.themed_dialog import ThemedMessageBox
 from utils.data_service import get_db
 from models.database import Database
+from widgets.page_scaffold import EmptyStateCard, PageScaffold, PageToolbar, SegmentedTabs, StatStrip, StatusBanner
+from widgets.primary_button import PrimaryButton
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -336,6 +337,7 @@ class _PantryItemRow(QWidget):
         self._db = db
         self._trigger_sync = trigger_sync
         self._on_refresh = on_refresh
+        self._highlighted = False
         self.setFixedHeight(48)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._build()
@@ -344,8 +346,6 @@ class _PantryItemRow(QWidget):
         dark = theme_manager.mode == "dark"
         text_col = "#f0f0f0" if dark else "#1a1a1a"
         muted_col = "#888888" if dark else "#666666"
-        card_bg = theme_manager.c("#111111", "#ffffff")
-        border_col = theme_manager.c("#1e1e1e", "#e0e0e0")
 
         if self.layout():
             QWidget().setLayout(self.layout())
@@ -421,9 +421,7 @@ class _PantryItemRow(QWidget):
         del_btn.leaveEvent = lambda _: del_btn.setIcon(qta.icon("fa5s.times", color="#555555"))
         row.addWidget(del_btn)
 
-        self.setStyleSheet(
-            f"_PantryItemRow{{background:transparent}}"
-        )
+        self._apply_highlight_style()
 
     def _on_edit(self):
         dlg = _AddItemDialog(self._db, self._item.get("storage", "Pantry"),
@@ -442,6 +440,23 @@ class _PantryItemRow(QWidget):
             self._trigger_sync()
         if self._on_refresh:
             self._on_refresh()
+
+    def highlight_temporarily(self, duration_ms: int = 1800):
+        self._highlighted = True
+        self._apply_highlight_style()
+        QTimer.singleShot(duration_ms, self._clear_highlight)
+
+    def _clear_highlight(self):
+        self._highlighted = False
+        self._apply_highlight_style()
+
+    def _apply_highlight_style(self):
+        self.setStyleSheet(
+            (
+                f"background:{theme_manager.c('rgba(255,107,53,0.10)', 'rgba(255,107,53,0.08)')};"
+                "border-radius:8px;"
+            ) if self._highlighted else "background:transparent; border-radius:8px;"
+        )
 
 
 # ── Panel for one storage section ─────────────────────────────────────────────
@@ -466,6 +481,7 @@ class _StoragePanel(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("background:transparent;border:none")
+        self._scroll = scroll
 
         # parent=scroll so it's owned — never a floating window
         self._content = QWidget(scroll)
@@ -474,14 +490,11 @@ class _StoragePanel(QWidget):
         self._vbox.setContentsMargins(0, 4, 0, 8)
         self._vbox.setSpacing(0)
 
-        self._empty_lbl = QLabel(
-            f"Nothing in your {self._storage} yet.\nUse '+ Add Item' to get started.",
-            self._content,
-        )
-        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        muted = theme_manager.c("#888888", "#666666")
-        self._empty_lbl.setStyleSheet(
-            f"color:{muted};font-size:14px;background:transparent;padding:40px 20px"
+        self._empty_lbl = EmptyStateCard(
+            f"Nothing in your {self._storage} yet",
+            "Use Add Item to start building a cleaner live inventory for Dishy.",
+            icon=self._storage[0],
+            parent=self._content,
         )
         self._vbox.addWidget(self._empty_lbl)
         self._vbox.addStretch()
@@ -567,6 +580,15 @@ class _StoragePanel(QWidget):
                 count += 1
         return count
 
+    def focus_item(self, item_id: int) -> bool:
+        for row in self._rows:
+            if int(row._item.get("id") or 0) != int(item_id):
+                continue
+            self._scroll.ensureWidgetVisible(row, 0, 80)
+            row.highlight_temporarily()
+            return True
+        return False
+
 
 # ── Main view ─────────────────────────────────────────────────────────────────
 
@@ -587,87 +609,44 @@ class MyKitchenStorageView(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(36, 32, 36, 24)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Header ────────────────────────────────────────────────────────────
-        hdr = QHBoxLayout()
-        hdr.setSpacing(12)
+        self._scaffold = PageScaffold(
+            "My Kitchen",
+            "Keep Pantry, Fridge, and Freezer organised so Dishy can plan around what you already have.",
+            eyebrow="Food Operations",
+            parent=self,
+            quiet_header=True,
+        )
+        root.addWidget(self._scaffold)
 
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-        title_lbl = QLabel("My Kitchen")
-        title_lbl.setObjectName("page-title")
-        sub_lbl = QLabel("Track what you have — Dishy uses this automatically")
-        sub_lbl.setObjectName("page-date")
-        title_col.addWidget(title_lbl)
-        title_col.addWidget(sub_lbl)
-
-        self._add_btn = QPushButton("  + Add Item")
-        self._add_btn.setFixedHeight(38)
-        self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._add_btn = PrimaryButton("  Add Item")
         self._add_btn.setIcon(qta.icon("fa5s.plus", color="#ffffff"))
         self._add_btn.setIconSize(QSize(12, 12))
         self._add_btn.clicked.connect(self._on_add_item)
+        self._scaffold.set_header_action(self._add_btn)
 
-        hdr.addLayout(title_col, 1)
-        hdr.addWidget(self._add_btn)
-        root.addLayout(hdr)
-        root.addSpacing(16)
+        toolbar = PageToolbar(self._scaffold)
+        self._tabs = SegmentedTabs([(storage, storage) for storage, _color, _icon in _TABS], self._scaffold)
+        self._tabs.tab_changed.connect(self._switch_tab)
+        toolbar.add_left(self._tabs)
+        self._scaffold.set_toolbar(toolbar)
 
-        # ── Stats strip ───────────────────────────────────────────────────────
-        self._stat_bar = QWidget()
-        self._stat_bar.setObjectName("stat-bar")
-        sb = QHBoxLayout(self._stat_bar)
-        sb.setContentsMargins(16, 12, 16, 12)
-        sb.setSpacing(0)
+        self._kitchen_banner = StatusBanner(
+            "This stock view powers pantry-aware planning, shopping overlap checks, and waste-reduction suggestions.",
+            "system",
+            self._scaffold,
+        )
+        self._scaffold.set_banner(self._kitchen_banner)
 
-        def _chip(val, lbl, col):
-            w = QWidget(self._stat_bar)
-            v = QVBoxLayout(w)
-            v.setContentsMargins(0, 0, 0, 0)
-            v.setSpacing(2)
-            v.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            n = QLabel(val, w)
-            n.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            n.setStyleSheet(f"color:{col};font-size:22px;font-weight:700;background:transparent")
-            t = QLabel(lbl, w)
-            t.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            t.setStyleSheet("font-size:11px;font-weight:500;color:#888888;background:transparent")
-            v.addWidget(n)
-            v.addWidget(t)
-            return w, n
-
-        self._w_total,   self._n_total   = _chip("0", "total items",    "#e8924a")
-        self._w_expiring, self._n_expiring = _chip("0", "expiring soon",  "#f0a500")
-        self._w_pantry,  self._n_pantry  = _chip("0", "in pantry",      "#e8924a")
-        self._w_fridge,  self._n_fridge  = _chip("0", "in fridge",      "#4fc3f7")
-        self._w_freezer, self._n_freezer = _chip("0", "in freezer",     "#60a5fa")
-        for w in (self._w_total, self._w_expiring, self._w_pantry, self._w_fridge, self._w_freezer):
-            sb.addWidget(w, 1)
-
-        root.addWidget(self._stat_bar)
-        root.addSpacing(16)
-
-        # ── Tab bar ───────────────────────────────────────────────────────────
-        tab_row = QHBoxLayout()
-        tab_row.setSpacing(8)
-        tab_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        for storage, color, icon_name in _TABS:
-            btn = QPushButton()
-            btn.setText(f"  {storage}")
-            btn.setIcon(qta.icon(icon_name, color="#ffffff"))
-            btn.setIconSize(QSize(13, 13))
-            btn.setFixedHeight(36)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setCheckable(True)
-            btn.setChecked(storage == self._current_tab)
-            btn.clicked.connect(lambda checked=False, s=storage: self._switch_tab(s))
-            self._tab_buttons[storage] = btn
-            tab_row.addWidget(btn)
-        tab_row.addStretch()
-        root.addLayout(tab_row)
-        root.addSpacing(12)
+        self._stat_bar = StatStrip(self._scaffold, density="compact", max_visible=5)
+        self._n_total = self._stat_bar.add_stat("total", "0", "Total items", "#e8924a")["value"]
+        self._n_expiring = self._stat_bar.add_stat("expiring", "0", "Expiring soon", "#f0a500")["value"]
+        self._n_pantry = self._stat_bar.add_stat("pantry", "0", "In pantry", "#e8924a")["value"]
+        self._n_fridge = self._stat_bar.add_stat("fridge", "0", "In fridge", "#4fc3f7")["value"]
+        self._n_freezer = self._stat_bar.add_stat("freezer", "0", "In freezer", "#60a5fa")["value"]
+        self._scaffold.set_stats(self._stat_bar)
 
         # ── Stacked content ───────────────────────────────────────────────────
         from PySide6.QtWidgets import QStackedWidget
@@ -677,71 +656,69 @@ class MyKitchenStorageView(QWidget):
             self._panels[storage] = panel
             self._stack.addWidget(panel)
         self._stack.setCurrentIndex(0)
-        root.addWidget(self._stack, 1)
-        root.addSpacing(12)
-
-        # ── Ask Dishy button ──────────────────────────────────────────────────
-        dishy_row = QHBoxLayout()
-        dishy_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._dishy_btn = QPushButton("  Ask Dishy")
-        self._dishy_btn.setObjectName("ghost-btn")
-        self._dishy_btn.setIcon(qta.icon("fa5s.comment-dots", color="#34d399"))
-        self._dishy_btn.setIconSize(QSize(13, 13))
-        self._dishy_btn.setFixedHeight(38)
-        self._dishy_btn.clicked.connect(self._on_ask_dishy)
-        dishy_row.addWidget(self._dishy_btn)
-        root.addLayout(dishy_row)
-
-        self._style_chrome()
-
-    def _style_chrome(self):
-        dark = theme_manager.mode == "dark"
-        bg = "#0f0f0f" if dark else "#ffffff"
-        border = "#1e1e1e" if dark else "#eeeeee"
-        self._stat_bar.setStyleSheet(
-            f"QWidget#stat-bar{{background:{bg};border:1px solid {border};border-radius:12px}}"
-        )
-        self._add_btn.setStyleSheet(
-            "QPushButton{background:#e8924a;border:none;border-radius:8px;"
-            "color:#ffffff;font-size:13px;font-weight:600;padding:0 14px}"
-            "QPushButton:hover{background:#f0a060}"
-        )
-        for storage, color, icon_name in _TABS:
-            btn = self._tab_buttons[storage]
-            if btn.isChecked():
-                btn.setStyleSheet(
-                    f"QPushButton{{background:{color};border:none;border-radius:18px;"
-                    f"color:#ffffff;font-size:13px;font-weight:600;padding:0 16px}}"
-                )
-            else:
-                unchecked_bg = theme_manager.c("rgba(255,255,255,0.05)", "rgba(0,0,0,0.05)")
-                unchecked_txt = theme_manager.c("#888888", "#666666")
-                btn.setStyleSheet(
-                    f"QPushButton{{background:{unchecked_bg};border:1px solid "
-                    f"{theme_manager.c('#2a2a2a', '#dddddd')};border-radius:18px;"
-                    f"color:{unchecked_txt};font-size:13px;padding:0 16px}}"
-                    f"QPushButton:hover{{background:{theme_manager.c('rgba(255,255,255,0.08)', 'rgba(0,0,0,0.08)')}}}"
-                )
+        self._tabs.set_current(self._current_tab)
+        self._scaffold.body_layout().addWidget(self._stack, 1)
 
     def _switch_tab(self, storage: str):
         self._current_tab = storage
-        for s, _, _ in _TABS:
-            self._tab_buttons[s].setChecked(s == storage)
+        if self._tabs.current_key() != storage:
+            self._tabs.set_current(storage)
         idx = {"Pantry": 0, "Fridge": 1, "Freezer": 2}[storage]
         self._stack.setCurrentIndex(idx)
-        self._style_chrome()
+        self._kitchen_banner.set_variant("system")
+        self._kitchen_banner.set_text(
+            f"{storage} shows what you currently have there, so Dishy can avoid duplicate shopping and make better meal suggestions."
+        )
+
+    def show_root_page(self):
+        """Return My Kitchen to its default Pantry tab."""
+        self._switch_tab("Pantry")
 
     def _on_add_item(self):
-        dlg = _AddItemDialog(self._db, self._current_tab, parent=self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
+        if self._open_add_item_dialog(self._current_tab):
             get_pantry_broadcaster().pantry_changed.emit()
             if self._trigger_sync:
                 self._trigger_sync()
             self.refresh()
 
-    def _on_ask_dishy(self):
-        if self._ask_dishy_fn:
-            self._ask_dishy_fn("What's in my kitchen? What can I make with what I have?")
+    def activate_storage(self, storage: str = "Pantry") -> None:
+        """Palette-safe entrypoint for a specific storage tab."""
+        self._switch_tab(storage if storage in {"Pantry", "Fridge", "Freezer"} else "Pantry")
+
+    def activate_add_item(self, storage: str = "Pantry") -> None:
+        """Palette-safe entrypoint for adding a pantry item."""
+        self.activate_storage(storage)
+        QTimer.singleShot(0, lambda: self._on_add_item())
+
+    def focus_item(self, item_id: int) -> bool:
+        items = self._db.get_pantry_items()
+        target = next((item for item in items if int(item.get("id") or 0) == int(item_id)), None)
+        if not target:
+            return False
+        storage = str(target.get("storage") or "Pantry")
+        self.activate_storage(storage)
+        self.refresh()
+        panel = self._panels.get(storage)
+        return bool(panel and panel.focus_item(item_id))
+
+    def save_item_from_palette(
+        self,
+        name: str,
+        quantity=None,
+        unit: str = "",
+        storage: str = "Pantry",
+        expiry_date: str | None = None,
+    ) -> int:
+        item_id = self._db.add_pantry_item(name, quantity, unit, storage, expiry_date)
+        get_pantry_broadcaster().pantry_changed.emit()
+        if self._trigger_sync:
+            self._trigger_sync()
+        self.refresh()
+        return int(item_id or 0)
+
+    def _open_add_item_dialog(self, storage: str) -> bool:
+        dlg = _AddItemDialog(self._db, storage, parent=self)
+        return dlg.exec() == QDialog.DialogCode.Accepted
 
     def refresh(self):
         self._load()
@@ -769,6 +746,5 @@ class MyKitchenStorageView(QWidget):
             panel.load()
 
     def apply_theme(self, _mode=None):
-        self._style_chrome()
         for panel in self._panels.values():
             panel.load()

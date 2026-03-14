@@ -9,32 +9,6 @@ _HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     )
 }
-
-
-def check_scrapeable(url: str) -> bool:
-    """Quick check: fetch the URL and return True if recipe content can be extracted."""
-    try:
-        resp = requests.get(url, headers=_HEADERS, timeout=10, verify=certifi.where())
-        resp.raise_for_status()
-        scraper = scrape_html(resp.text, org_url=url)
-
-        def _safe(fn):
-            try:
-                return fn()
-            except Exception:
-                return None
-
-        ingredients  = _safe(scraper.ingredients) or []
-        instructions = _safe(scraper.instructions_list) or []
-        if not instructions:
-            raw = _safe(scraper.instructions) or ""
-            instructions = [s.strip() for s in raw.split("\n") if s.strip()]
-
-        return bool(ingredients or instructions)
-    except Exception:
-        return False
-
-
 def scrape_recipe(url: str) -> dict:
     """Scrape a recipe from a URL using recipe-scrapers. Returns a structured dict."""
     resp = requests.get(url, headers=_HEADERS, timeout=15, verify=certifi.where())

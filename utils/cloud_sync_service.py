@@ -187,6 +187,11 @@ class CloudSyncBackgroundService(QObject):
         import asyncio
         try:
             from auth.supabase_client import get_client
+            from auth.session_manager import ensure_valid_session
+
+            session_info = ensure_valid_session(min_ttl_seconds=180)
+            if not session_info:
+                return
             sb = get_client()
             if not sb:
                 return
@@ -194,8 +199,11 @@ class CloudSyncBackgroundService(QObject):
             # Obtain current user_id to filter by
             session = sb.auth.get_session()
             if not session or not session.session:
-                return
-            user_id = str(session.session.user.id)
+                user_id = str((session_info.get("user") or {}).get("id") or "")
+                if not user_id:
+                    return
+            else:
+                user_id = str(session.session.user.id)
 
             channel = sb.channel("dishboard-changes")
             self._rt_channel = channel

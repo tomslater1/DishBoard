@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from models.database import Database
 
@@ -166,19 +166,3 @@ def generate_scheduled_notifications(db: Database, user_id: str | None = None, *
 
 def cleanup_old_notifications(db: Database, *, older_than_days: int = 30) -> int:
     return db.delete_old_read_notifications(older_than_days)
-
-
-def seed_test_notification(db: Database, user_id: str | None = None) -> int | None:
-    uid = _active_user_id(db, user_id)
-    if not uid:
-        return None
-    key = f"test:{uid}:{date.today().isoformat()}"
-    return add_notification(
-        db,
-        "test",
-        "Notification test",
-        "DishBoard notifications are active.",
-        severity="info",
-        dedupe_key=key,
-        user_id=uid,
-    )

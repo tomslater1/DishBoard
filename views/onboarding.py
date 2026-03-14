@@ -1,683 +1,849 @@
 """
-OnboardingWizard — full-screen first-run profile setup.
+OnboardingWizard - guided first-run profile setup.
 
-Displayed as index 2 of the root QStackedWidget so the main app is
-never visible in the background.  Emits `finished` when done or skipped.
+Displayed as index 2 of the root QStackedWidget so the main app is never
+visible in the background. Emits ``finished`` when done or skipped.
 
-4 steps:
-  1. About You         — name, household size
-  2. Dietary Needs     — requirements + allergens
-  3. Your Lifestyle    — scenario chips
-  4. Food Preferences  — cuisines, cooking skill, weekly goal
+This flow is intentionally input-light: every decision is made with guided
+selection cards so the setup feels like part of the product instead of a form.
 """
+
 from __future__ import annotations
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QSize, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QScrollArea, QFrame,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from models.database import Database
 from utils.theme import manager
 
 
-# ── Data definitions ──────────────────────────────────────────────────────────
-
 _DIETARY = [
-    ("vegetarian",  "Vegetarian"),
-    ("vegan",       "Vegan"),
+    ("vegetarian", "Vegetarian"),
+    ("vegan", "Vegan"),
     ("gluten_free", "Gluten-Free"),
-    ("dairy_free",  "Dairy-Free"),
-    ("nut_free",    "Nut-Free"),
-    ("halal",       "Halal"),
-    ("kosher",      "Kosher"),
-    ("keto",        "Keto / Low-carb"),
-    ("paleo",       "Paleo"),
-    ("low_fodmap",  "Low-FODMAP"),
+    ("dairy_free", "Dairy-Free"),
+    ("nut_free", "Nut-Free"),
+    ("halal", "Halal"),
+    ("kosher", "Kosher"),
+    ("keto", "Keto / Low-carb"),
+    ("paleo", "Paleo"),
+    ("low_fodmap", "Low-FODMAP"),
 ]
 
 _ALLERGENS = [
     ("shellfish", "Shellfish"),
-    ("eggs",      "Eggs"),
-    ("soy",       "Soy"),
-    ("peanuts",   "Peanuts"),
+    ("eggs", "Eggs"),
+    ("soy", "Soy"),
+    ("peanuts", "Peanuts"),
     ("tree_nuts", "Tree Nuts"),
-    ("fish",      "Fish"),
-    ("wheat",     "Wheat"),
-    ("sesame",    "Sesame"),
+    ("fish", "Fish"),
+    ("wheat", "Wheat"),
+    ("sesame", "Sesame"),
 ]
 
 _SCENARIOS = [
-    ("fa5s.layer-group",  "meal_prep",         "I meal prep in batches"),
-    ("fa5s.child",        "cooking_for_kids",  "I cook for kids"),
-    ("fa5s.heartbeat",    "weight_loss",        "I'm focused on weight loss"),
-    ("fa5s.dumbbell",     "muscle_building",   "I'm building muscle"),
-    ("fa5s.bolt",         "quick_meals",       "I need quick weeknight meals"),
-    ("fa5s.globe",        "adventurous",       "I love trying new cuisines"),
-    ("fa5s.piggy-bank",   "budget_cooking",    "I cook on a budget"),
-    ("fa5s.leaf",         "healthy_eating",    "I prefer healthy whole foods"),
-    ("fa5s.book-open",    "learning_to_cook",  "I'm learning to cook"),
-    ("fa5s.utensils",     "dinner_parties",    "I host dinner parties"),
+    ("meal_prep", "Meal Prep", "Cook once and reuse meals through the week.", "fa5s.layer-group"),
+    ("cooking_for_kids", "Cooking for Kids", "Bias toward flexible family dinners.", "fa5s.child"),
+    ("weight_loss", "Weight Focus", "Prefer lighter meals and clearer nutrition.", "fa5s.heartbeat"),
+    ("muscle_building", "High Protein", "Push protein-forward meals and recovery fuel.", "fa5s.dumbbell"),
+    ("quick_meals", "Fast Nights", "Prioritise lower-friction weekday cooking.", "fa5s.bolt"),
+    ("adventurous", "New Flavours", "Keep the week varied and more exploratory.", "fa5s.globe"),
+    ("budget_cooking", "Budget Cooking", "Prefer lower-cost staples and pantry wins.", "fa5s.piggy-bank"),
+    ("healthy_eating", "Whole Foods", "Lean toward balanced and less processed meals.", "fa5s.leaf"),
+    ("learning_to_cook", "Learning", "Keep recipes more approachable and guided.", "fa5s.book-open"),
+    ("dinner_parties", "Hosting", "Leave room for showpiece or shareable dishes.", "fa5s.utensils"),
 ]
 
 _CUISINES = [
-    ("italian",        "Italian"),
-    ("asian",          "Asian"),
-    ("mexican",        "Mexican"),
-    ("indian",         "Indian"),
-    ("mediterranean",  "Mediterranean"),
-    ("american",       "American"),
+    ("italian", "Italian"),
+    ("asian", "Asian"),
+    ("mexican", "Mexican"),
+    ("indian", "Indian"),
+    ("mediterranean", "Mediterranean"),
+    ("american", "American"),
     ("middle_eastern", "Middle Eastern"),
-    ("french",         "French"),
-    ("japanese",       "Japanese"),
-    ("thai",           "Thai"),
-    ("greek",          "Greek"),
-    ("spanish",        "Spanish"),
-    ("korean",         "Korean"),
-    ("british",        "British"),
+    ("french", "French"),
+    ("japanese", "Japanese"),
+    ("thai", "Thai"),
+    ("greek", "Greek"),
+    ("spanish", "Spanish"),
+    ("korean", "Korean"),
+    ("british", "British"),
 ]
 
 _HOUSEHOLD = [
-    ("just_me",    "Just me"),
-    ("2_people",   "2 people"),
-    ("3_4_people", "3–4 people"),
-    ("5_plus",     "5+ people"),
+    ("just_me", "Just Me", "Mostly solo cooking and simpler portion planning.", "fa5s.user"),
+    ("2_people", "Two People", "Balanced planning for a pair or couple.", "fa5s.user-friends"),
+    ("3_4_people", "3-4 People", "More shared meals and steadier shopping volume.", "fa5s.users"),
+    ("5_plus", "5+ People", "Larger batches, more overlap, more coordination.", "fa5s.home"),
 ]
 
 _SKILL = [
-    ("beginner",     "Beginner"),
-    ("intermediate", "Intermediate"),
-    ("advanced",     "Advanced"),
+    ("beginner", "Beginner", "Clearer recipes, fewer moving parts.", "fa5s.seedling"),
+    ("intermediate", "Intermediate", "A mix of fast wins and proper cooking sessions.", "fa5s.fire"),
+    ("advanced", "Advanced", "More ambitious ideas and broader recipe variety.", "fa5s.star"),
 ]
 
 _GOAL = [
-    ("1_2",    "1–2 meals/week"),
-    ("3_4",    "3–4 meals/week"),
-    ("5_plus", "5+ meals/week"),
+    ("1_2", "1-2 Meals", "Keep planning light and flexible.", "fa5s.calendar-day"),
+    ("3_4", "3-4 Meals", "A steady weekly rhythm for home cooking.", "fa5s.calendar-week"),
+    ("5_plus", "5+ Meals", "Lean on DishBoard for the full week.", "fa5s.calendar-alt"),
 ]
 
-STEP_TITLES = [
-    "About you",
-    "Dietary needs",
-    "Your cooking style",
-    "Your preferences",
+_STEP_META = [
+    {
+        "eyebrow": "Profile setup",
+        "title": "Shape the way DishBoard plans with you.",
+        "subtitle": "Start with your kitchen size and the type of week you are cooking for.",
+    },
+    {
+        "eyebrow": "Food guardrails",
+        "title": "Set the rules Dishy should always respect.",
+        "subtitle": "Pick any dietary needs or allergens that matter. Leave the rest blank.",
+    },
+    {
+        "eyebrow": "Cooking rhythm",
+        "title": "Tell DishBoard what real life looks like.",
+        "subtitle": "These signals help shape recipe style, pacing, and planning suggestions.",
+    },
+    {
+        "eyebrow": "Taste profile",
+        "title": "Tune recommendations to your flavour and pace.",
+        "subtitle": "Choose the cuisines, skill level, and weekly cooking volume you want the app to bias toward.",
+    },
 ]
 
 
-# ── Style helpers ─────────────────────────────────────────────────────────────
-
-def _chip_on() -> str:
-    return (
-        "QPushButton {"
-        " background: rgba(255,107,53,0.15); color: #ff6b35;"
-        " border: 1.5px solid #ff6b35; border-radius: 16px;"
-        " font-size: 13px; padding: 6px 16px;"
-        "}"
-    )
+def _read_csv_setting(db: Database, key: str) -> set[str]:
+    return {item for item in str(db.get_setting(key, "") or "").split(",") if item}
 
 
-def _chip_off() -> str:
-    return (
-        f"QPushButton {{"
-        f" background: {manager.c('rgba(255,255,255,0.05)', 'rgba(0,0,0,0.05)')};"
-        f" color: {manager.c('#999', '#666')};"
-        f" border: 1px solid {manager.c('#333', '#ddd')};"
-        " border-radius: 16px; font-size: 13px; padding: 6px 16px;"
-        f"}}"
-        f"QPushButton:hover {{"
-        f" border-color: rgba(255,107,53,0.6);"
-        f" color: {manager.c('#ddd', '#333')};"
-        "}"
-    )
+def _label_for(options: list[tuple], key: str, fallback: str = "Not set yet") -> str:
+    for entry in options:
+        if entry[0] == key:
+            return entry[1]
+    return fallback
 
 
-def _sel_on() -> str:
-    return (
-        "QPushButton {"
-        " background: rgba(255,107,53,0.12); color: #ff6b35;"
-        " border: 2px solid #ff6b35; border-radius: 10px;"
-        " font-size: 14px; font-weight: 600; padding: 10px 22px;"
-        "}"
-    )
+class _ChoiceCard(QFrame):
+    clicked = Signal(str)
 
+    def __init__(
+        self,
+        key: str,
+        title: str,
+        subtitle: str = "",
+        *,
+        icon_name: str = "",
+        compact: bool = False,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._key = key
+        self._icon_name = icon_name
+        self._compact = compact
+        self._checked = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setObjectName("onboarding-choice-card")
 
-def _sel_off() -> str:
-    return (
-        f"QPushButton {{"
-        f" background: {manager.c('rgba(255,255,255,0.04)', 'rgba(0,0,0,0.04)')};"
-        f" color: {manager.c('#999', '#666')};"
-        f" border: 1px solid {manager.c('#333', '#ddd')};"
-        " border-radius: 10px; font-size: 14px; padding: 10px 22px;"
-        f"}}"
-        f"QPushButton:hover {{"
-        f" border-color: rgba(255,107,53,0.5);"
-        f" color: {manager.c('#ddd', '#333')};"
-        "}"
-    )
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8 if not compact else 6)
 
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(10)
 
-def _sub_label(text: str) -> QLabel:
-    lbl = QLabel(text)
-    lbl.setStyleSheet(
-        f"font-size: 11px; font-weight: 700; letter-spacing: 1px;"
-        f" color: {manager.c('#555', '#aaa')}; background: transparent;"
-        f" text-transform: uppercase;"
-    )
-    return lbl
+        self._icon_lbl = QLabel()
+        self._icon_lbl.setFixedSize(28 if compact else 34, 28 if compact else 34)
+        self._icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._icon_lbl.setStyleSheet("background: transparent;")
+        top.addWidget(self._icon_lbl, 0, Qt.AlignmentFlag.AlignTop)
 
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(3)
 
-def _sep_line() -> QFrame:
-    sep = QFrame()
-    sep.setFrameShape(QFrame.Shape.HLine)
-    sep.setStyleSheet(
-        f"color: {manager.c('#222', '#e0e0e0')};"
-        f" background: {manager.c('#222', '#e0e0e0')};"
-        " border: none; max-height: 1px;"
-    )
-    return sep
+        self._title_lbl = QLabel(title)
+        self._title_lbl.setWordWrap(True)
+        text_col.addWidget(self._title_lbl)
 
+        self._subtitle_lbl = QLabel(subtitle)
+        self._subtitle_lbl.setWordWrap(True)
+        self._subtitle_lbl.setVisible(bool(subtitle))
+        text_col.addWidget(self._subtitle_lbl)
 
-def _chip_rows(options: list[tuple], saved_set: set,
-               per_row: int = 5) -> tuple[QWidget, dict]:
-    """Build chips in rows of `per_row`. Returns (container, {key: button})."""
-    btns: dict[str, QPushButton] = {}
-    container = QWidget()
-    container.setStyleSheet("background: transparent;")
-    vlay = QVBoxLayout(container)
-    vlay.setContentsMargins(0, 0, 0, 0)
-    vlay.setSpacing(8)
+        top.addLayout(text_col, 1)
+        layout.addLayout(top)
 
-    for row_start in range(0, len(options), per_row):
-        row_items = options[row_start: row_start + per_row]
-        row_w = QWidget()
-        row_w.setStyleSheet("background: transparent;")
-        row_l = QHBoxLayout(row_w)
-        row_l.setContentsMargins(0, 0, 0, 0)
-        row_l.setSpacing(8)
-        row_l.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        for key, label in row_items:
-            active = key in saved_set
-            btn = QPushButton(label)
-            btn.setCheckable(True)
-            btn.setChecked(active)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(_chip_on() if active else _chip_off())
-            btn.toggled.connect(
-                lambda checked, b=btn: b.setStyleSheet(_chip_on() if checked else _chip_off())
-            )
-            row_l.addWidget(btn)
-            btns[key] = btn
-        vlay.addWidget(row_w)
-    return container, btns
+        self.setMinimumHeight(76 if compact else 104)
+        self._apply_style()
 
+    def key(self) -> str:
+        return self._key
 
-def _selector_row(options: list[tuple], saved: str) -> tuple[QWidget, dict]:
-    """Exclusive row of selector buttons, all same size, centered."""
-    btns: dict[str, QPushButton] = {}
-    container = QWidget()
-    container.setStyleSheet("background: transparent;")
-    row = QHBoxLayout(container)
-    row.setContentsMargins(0, 0, 0, 0)
-    row.setSpacing(12)
-    row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    def is_checked(self) -> bool:
+        return self._checked
 
-    def _select(chosen: str):
-        for k, b in btns.items():
-            b.setStyleSheet(_sel_on() if k == chosen else _sel_off())
+    def set_checked(self, checked: bool) -> None:
+        checked = bool(checked)
+        if self._checked == checked:
+            return
+        self._checked = checked
+        self._apply_style()
 
-    for key, label in options:
-        btn = QPushButton(label)
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setStyleSheet(_sel_on() if key == saved else _sel_off())
-        btn.clicked.connect(lambda _, k=key: _select(k))
-        row.addWidget(btn)
-        btns[key] = btn
-    return container, btns
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self._key)
+        super().mousePressEvent(event)
 
+    def _apply_style(self) -> None:
+        icon_color = "#ff6b35" if self._checked else manager.c("#8c867e", "#8b8176")
+        card_bg = "rgba(255,107,53,0.12)" if self._checked else manager.c("#171a1f", "#fffaf4")
+        border = "rgba(255,107,53,0.52)" if self._checked else manager.c("#2b3036", "#ddd2c5")
+        title_color = "#ff6b35" if self._checked else manager.c("#f2eee8", "#181510")
+        subtitle_color = manager.c("#d2b7a8", "#826f61") if self._checked else manager.c("#8c867e", "#8b8176")
+        icon_name = self._icon_name or "fa5s.check-circle"
+        size = 16 if self._compact else 18
+        self._icon_lbl.setPixmap(qta.icon(icon_name, color=icon_color).pixmap(QSize(size, size)))
+        self.setStyleSheet(
+            "QFrame#onboarding-choice-card {"
+            f" background: {card_bg};"
+            f" border: 1px solid {border};"
+            " border-radius: 16px;"
+            "}"
+            "QFrame#onboarding-choice-card:hover {"
+            " border-color: rgba(255,107,53,0.42);"
+            "}"
+        )
+        self._title_lbl.setStyleSheet(
+            f"color: {title_color};"
+            f" font-size: {12 if self._compact else 14}px; font-weight: 700;"
+            " background: transparent; border: none;"
+        )
+        self._subtitle_lbl.setStyleSheet(
+            f"color: {subtitle_color};"
+            f" font-size: {11 if self._compact else 12}px; line-height: 1.45;"
+            " background: transparent; border: none;"
+        )
 
-# ── Onboarding wizard ─────────────────────────────────────────────────────────
 
 class OnboardingWizard(QWidget):
     """Full-screen onboarding flow. Add to root QStackedWidget at index 2."""
 
     finished = Signal()
 
-    STEPS = 4
-
     def __init__(self, db: Database, parent=None):
         super().__init__(parent)
         self._db = db
         self._step = 0
-        self.setStyleSheet(
-            f"background: {manager.c('#090909', '#f0f0f0')};"
-        )
+        self._profile_name = str(self._db.get_setting("user_name", "") or "").strip()
+
+        self._household_cards: dict[str, _ChoiceCard] = {}
+        self._dietary_cards: dict[str, _ChoiceCard] = {}
+        self._allergen_cards: dict[str, _ChoiceCard] = {}
+        self._scenario_cards: dict[str, _ChoiceCard] = {}
+        self._cuisine_cards: dict[str, _ChoiceCard] = {}
+        self._skill_cards: dict[str, _ChoiceCard] = {}
+        self._goal_cards: dict[str, _ChoiceCard] = {}
+
+        self.setObjectName("onboarding-root")
+        self.setStyleSheet(f"background: {manager.c('#111317', '#f6f1ea')};")
         self._build_ui()
         self._go_to(0)
+        self._refresh_profile_snapshot()
 
-    # ── Build ─────────────────────────────────────────────────────────────────
-
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Top bar (progress + title) ────────────────────────────────────────
-        top_bar = QWidget()
-        top_bar.setFixedHeight(72)
-        top_bar.setStyleSheet(
-            f"background: {manager.c('#0d0d0d', '#fff')};"
-            f" border-bottom: 1px solid {manager.c('#1e1e1e', '#e0e0e0')};"
-        )
-        top_layout = QHBoxLayout(top_bar)
-        top_layout.setContentsMargins(0, 0, 0, 0)
-
-        top_inner = QWidget()
-        top_inner.setFixedWidth(600)
-        top_inner.setStyleSheet("background: transparent;")
-        top_inner_layout = QHBoxLayout(top_inner)
-        top_inner_layout.setContentsMargins(0, 0, 0, 0)
-        top_inner_layout.setSpacing(12)
-
-        icon_lbl = QLabel()
-        icon_lbl.setPixmap(qta.icon("fa5s.utensils", color="#ff6b35").pixmap(QSize(18, 18)))
-        icon_lbl.setStyleSheet("background: transparent;")
-        top_inner_layout.addWidget(icon_lbl)
-
-        self._title_lbl = QLabel("About you")
-        self._title_lbl.setStyleSheet(
-            f"font-size: 17px; font-weight: 700;"
-            f" color: {manager.c('#f0f0f0', '#1a1a1a')}; background: transparent;"
-        )
-        top_inner_layout.addWidget(self._title_lbl)
-        top_inner_layout.addStretch()
-
-        # Progress dots
-        self._dots: list[QLabel] = []
-        for i in range(self.STEPS):
-            dot = QLabel()
-            dot.setFixedSize(10, 10)
-            dot.setStyleSheet("border-radius: 5px;")
-            self._dots.append(dot)
-            top_inner_layout.addWidget(dot)
-            top_inner_layout.addSpacing(4)
-
-        top_layout.addStretch()
-        top_layout.addWidget(top_inner)
-        top_layout.addStretch()
-        root.addWidget(top_bar)
-
-        # ── Scrollable centre column ──────────────────────────────────────────
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet(
-            "QScrollArea { border: none; background: transparent; }"
-            "QScrollBar:vertical { width: 4px; background: transparent; }"
-            f"QScrollBar::handle:vertical {{ background: {manager.c('#2a2a2a', '#ccc')};"
-            " border-radius: 2px; min-height: 20px; }"
+            "QScrollArea { background: transparent; border: none; }"
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
+            "QScrollBar:vertical { width: 6px; background: transparent; margin: 0; }"
+            f"QScrollBar::handle:vertical {{ background: {manager.c('#2b3036', '#cfc2b5')}; border-radius: 3px; min-height: 24px; }}"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         )
 
-        scroll_content = QWidget()
-        scroll_content.setStyleSheet("background: transparent;")
-        scroll_outer = QVBoxLayout(scroll_content)
-        scroll_outer.setContentsMargins(0, 0, 0, 0)
-        scroll_outer.setSpacing(0)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(36, 32, 36, 32)
+        content_layout.setSpacing(0)
 
-        # Centre the 600px column
-        centre_row = QHBoxLayout()
-        centre_row.setContentsMargins(0, 0, 0, 0)
-        centre_row.addStretch()
+        shell_row = QHBoxLayout()
+        shell_row.setContentsMargins(0, 0, 0, 0)
+        shell_row.addStretch()
 
-        self._col = QWidget()
-        self._col.setFixedWidth(600)
-        self._col.setStyleSheet("background: transparent;")
-        self._col_layout = QVBoxLayout(self._col)
-        self._col_layout.setContentsMargins(0, 48, 0, 48)
-        self._col_layout.setSpacing(0)
+        shell = QWidget()
+        shell.setMaximumWidth(1180)
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(22)
 
-        # Build steps and add to col
-        self._step_widgets = [
-            self._build_step1(),
-            self._build_step2(),
-            self._build_step3(),
-            self._build_step4(),
+        shell_layout.addWidget(self._build_header())
+
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(22)
+        body.addWidget(self._build_profile_panel())
+        body.addWidget(self._build_step_panel(), 1)
+
+        shell_layout.addLayout(body)
+        shell_row.addWidget(shell)
+        shell_row.addStretch()
+
+        content_layout.addLayout(shell_row)
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        root.addWidget(scroll)
+
+    def _build_header(self) -> QWidget:
+        card = QFrame()
+        card.setStyleSheet(
+            f"background: {manager.c('#171a1f', '#fffaf4')};"
+            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
+            "border-radius: 22px;"
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(28, 26, 28, 24)
+        layout.setSpacing(16)
+
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(14)
+
+        badge = QLabel("First-run setup")
+        badge.setStyleSheet(
+            "background: rgba(255,107,53,0.14); color: #ff6b35;"
+            "border: 1px solid rgba(255,107,53,0.32); border-radius: 11px;"
+            "padding: 5px 10px; font-size: 11px; font-weight: 700;"
+        )
+        top.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        top.addStretch()
+
+        brand = QLabel()
+        brand.setPixmap(qta.icon("fa5s.utensils", color="#ff6b35").pixmap(QSize(18, 18)))
+        top.addWidget(brand, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(top)
+
+        title = QLabel("Build a profile that feels like the rest of the app.")
+        title.setWordWrap(True)
+        title.setStyleSheet(
+            f"color: {manager.c('#f2eee8', '#181510')};"
+            "font-size: 30px; font-weight: 800; line-height: 1.15; background: transparent;"
+        )
+        layout.addWidget(title)
+
+        subtitle = QLabel(
+            "This setup now behaves like a guided planning session: choose the signals that matter, "
+            "skip the form-filling, and move straight into a DishBoard that already understands your week."
+        )
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet(
+            f"color: {manager.c('#8c867e', '#7b7268')};"
+            "font-size: 14px; line-height: 1.55; background: transparent;"
+        )
+        layout.addWidget(subtitle)
+
+        self._progress_row = QHBoxLayout()
+        self._progress_row.setContentsMargins(0, 6, 0, 0)
+        self._progress_row.setSpacing(8)
+        self._progress_bars: list[QFrame] = []
+        for _ in _STEP_META:
+            bar = QFrame()
+            bar.setFixedHeight(8)
+            bar.setStyleSheet("border-radius: 4px;")
+            self._progress_bars.append(bar)
+            self._progress_row.addWidget(bar, 1)
+        layout.addLayout(self._progress_row)
+        return card
+
+    def _build_profile_panel(self) -> QWidget:
+        card = QFrame()
+        card.setFixedWidth(340)
+        card.setStyleSheet(
+            f"background: {manager.c('#171a1f', '#fffaf4')};"
+            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
+            "border-radius: 22px;"
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(20)
+
+        icon_wrap = QLabel()
+        icon_wrap.setPixmap(qta.icon("fa5s.robot", color="#ff6b35").pixmap(QSize(26, 26)))
+        icon_wrap.setStyleSheet(
+            "background: rgba(255,107,53,0.12); border: 1px solid rgba(255,107,53,0.28);"
+            "border-radius: 16px; padding: 12px;"
+        )
+        icon_wrap.setFixedSize(52, 52)
+        icon_wrap.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon_wrap, 0, Qt.AlignmentFlag.AlignLeft)
+
+        intro = QLabel("Your setup snapshot")
+        intro.setStyleSheet(
+            f"color: {manager.c('#f2eee8', '#181510')}; font-size: 21px; font-weight: 800; background: transparent;"
+        )
+        layout.addWidget(intro)
+
+        blurb = QLabel(
+            "Each choice here changes how DishBoard plans, searches, and recommends. "
+            "Nothing is locked in - you can refine it later in Settings."
+        )
+        blurb.setWordWrap(True)
+        blurb.setStyleSheet(
+            f"color: {manager.c('#8c867e', '#7b7268')}; font-size: 13px; line-height: 1.55; background: transparent;"
+        )
+        layout.addWidget(blurb)
+
+        highlights = [
+            ("fa5s.calendar-alt", "Weekly plans will feel more relevant from the first screen."),
+            ("fa5s.book-open", "Recipe search and Dishy prompts will start with better defaults."),
+            ("fa5s.shopping-basket", "Shopping and kitchen suggestions will stay aligned with your real routine."),
         ]
-        for sw in self._step_widgets:
-            sw.setVisible(False)
-            self._col_layout.addWidget(sw)
-
-        centre_row.addWidget(self._col)
-        centre_row.addStretch()
-        scroll_outer.addLayout(centre_row)
-        scroll_outer.addStretch()
-
-        scroll.setWidget(scroll_content)
-        root.addWidget(scroll, 1)
-
-        # ── Bottom bar (back / skip / next) ───────────────────────────────────
-        bot_bar = QWidget()
-        bot_bar.setFixedHeight(72)
-        bot_bar.setStyleSheet(
-            f"background: {manager.c('#0d0d0d', '#fff')};"
-            f" border-top: 1px solid {manager.c('#1e1e1e', '#e0e0e0')};"
-        )
-        bot_layout = QHBoxLayout(bot_bar)
-        bot_layout.setContentsMargins(0, 0, 0, 0)
-
-        bot_inner = QWidget()
-        bot_inner.setFixedWidth(600)
-        bot_inner.setStyleSheet("background: transparent;")
-        bot_inner_layout = QHBoxLayout(bot_inner)
-        bot_inner_layout.setContentsMargins(0, 0, 0, 0)
-        bot_inner_layout.setSpacing(12)
-
-        self._back_btn = QPushButton("← Back")
-        self._back_btn.setFixedHeight(40)
-        self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._back_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none;"
-            f" color: {manager.c('#666', '#888')}; font-size: 14px; }}"
-            "QPushButton:hover { color: #ff6b35; }"
-        )
-        self._back_btn.clicked.connect(self._on_back)
-        bot_inner_layout.addWidget(self._back_btn)
-        bot_inner_layout.addStretch()
-
-        self._skip_btn = QPushButton("Skip for now")
-        self._skip_btn.setFixedHeight(40)
-        self._skip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._skip_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none;"
-            f" color: {manager.c('#555', '#aaa')}; font-size: 14px; }}"
-            "QPushButton:hover { color: #ff6b35; }"
-        )
-        self._skip_btn.clicked.connect(self._on_skip)
-        bot_inner_layout.addWidget(self._skip_btn)
-        bot_inner_layout.addSpacing(16)
-
-        self._next_btn = QPushButton("Next  →")
-        self._next_btn.setFixedSize(160, 44)
-        self._next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._next_btn.setStyleSheet(
-            "QPushButton {"
-            " background: #ff6b35; color: #fff;"
-            " border-radius: 10px; font-size: 15px; font-weight: 700; border: none;"
-            "}"
-            "QPushButton:hover { background: #e05a28; }"
-        )
-        self._next_btn.clicked.connect(self._on_next)
-        bot_inner_layout.addWidget(self._next_btn)
-
-        bot_layout.addStretch()
-        bot_layout.addWidget(bot_inner)
-        bot_layout.addStretch()
-        root.addWidget(bot_bar)
-
-    # ── Step builders ─────────────────────────────────────────────────────────
-
-    def _heading(self, emoji: str, title: str, subtitle: str = "") -> QWidget:
-        w = QWidget()
-        w.setStyleSheet("background: transparent;")
-        vl = QVBoxLayout(w)
-        vl.setContentsMargins(0, 0, 0, 0)
-        vl.setSpacing(6)
-
-        emoji_lbl = QLabel(emoji)
-        emoji_lbl.setStyleSheet("font-size: 32px; background: transparent;")
-        vl.addWidget(emoji_lbl)
-
-        h = QLabel(title)
-        h.setStyleSheet(
-            f"font-size: 26px; font-weight: 800;"
-            f" color: {manager.c('#f0f0f0', '#1a1a1a')}; background: transparent;"
-        )
-        vl.addWidget(h)
-
-        if subtitle:
-            s = QLabel(subtitle)
-            s.setWordWrap(True)
-            s.setStyleSheet(
-                f"font-size: 14px; color: {manager.c('#666', '#888')}; background: transparent;"
-            )
-            vl.addWidget(s)
-        return w
-
-    def _build_step1(self) -> QWidget:
-        w = QWidget()
-        w.setStyleSheet("background: transparent;")
-        vl = QVBoxLayout(w)
-        vl.setContentsMargins(0, 0, 0, 0)
-        vl.setSpacing(0)
-
-        vl.addWidget(self._heading("👋", "Welcome to DishBoard",
-                                   "Let's personalise your experience. Dishy will use this to tailor every suggestion."))
-        vl.addSpacing(36)
-
-        vl.addWidget(_sub_label("Your name"))
-        vl.addSpacing(10)
-        self._name_input = QLineEdit()
-        self._name_input.setPlaceholderText("e.g. Alex")
-        self._name_input.setFixedHeight(48)
-        self._name_input.setStyleSheet(
-            f"QLineEdit {{"
-            f" background: {manager.c('#1a1a1a', '#fff')};"
-            f" color: {manager.c('#f0f0f0', '#1a1a1a')};"
-            f" border: 1px solid {manager.c('#333', '#ddd')};"
-            " border-radius: 10px; padding: 0 16px; font-size: 15px;"
-            f"}}"
-            "QLineEdit:focus { border-color: #ff6b35; }"
-        )
-        vl.addWidget(self._name_input)
-
-        vl.addSpacing(32)
-        vl.addWidget(_sep_line())
-        vl.addSpacing(28)
-
-        vl.addWidget(_sub_label("You're cooking for"))
-        vl.addSpacing(12)
-        hh_w, self._household_btns = _selector_row(_HOUSEHOLD, "")
-        vl.addWidget(hh_w)
-
-        vl.addStretch()
-        return w
-
-    def _build_step2(self) -> QWidget:
-        w = QWidget()
-        w.setStyleSheet("background: transparent;")
-        vl = QVBoxLayout(w)
-        vl.setContentsMargins(0, 0, 0, 0)
-        vl.setSpacing(0)
-
-        vl.addWidget(self._heading("🥗", "Dietary needs",
-                                   "Select everything that applies — Dishy will always respect these."))
-        vl.addSpacing(32)
-
-        vl.addWidget(_sub_label("Dietary requirements"))
-        vl.addSpacing(12)
-        diet_w, self._dietary_btns = _chip_rows(_DIETARY, set(), per_row=5)
-        vl.addWidget(diet_w)
-
-        vl.addSpacing(28)
-        vl.addWidget(_sep_line())
-        vl.addSpacing(24)
-
-        vl.addWidget(_sub_label("Allergens to always avoid"))
-        vl.addSpacing(12)
-        allergen_w, self._allergen_btns = _chip_rows(_ALLERGENS, set(), per_row=5)
-        vl.addWidget(allergen_w)
-
-        vl.addStretch()
-        return w
-
-    def _build_step3(self) -> QWidget:
-        w = QWidget()
-        w.setStyleSheet("background: transparent;")
-        vl = QVBoxLayout(w)
-        vl.setContentsMargins(0, 0, 0, 0)
-        vl.setSpacing(0)
-
-        vl.addWidget(self._heading("🍳", "Your cooking style",
-                                   "Tick everything that sounds like you."))
-        vl.addSpacing(28)
-
-        import qtawesome as qta
-        self._scenario_btns: dict[str, QPushButton] = {}
-        for icon_name, key, label in _SCENARIOS:
+        for icon_name, text in highlights:
             row = QHBoxLayout()
             row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(14)
+            row.setSpacing(10)
+            icon = QLabel()
+            icon.setPixmap(qta.icon(icon_name, color="#ff6b35").pixmap(QSize(14, 14)))
+            icon.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            icon.setStyleSheet("background: transparent;")
+            row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
 
-            icon_lbl = QLabel()
-            icon_lbl.setPixmap(
-                qta.icon(icon_name, color=manager.c("#555", "#bbb")).pixmap(QSize(16, 16))
+            label = QLabel(text)
+            label.setWordWrap(True)
+            label.setStyleSheet(
+                f"color: {manager.c('#c4b9af', '#6f665d')}; font-size: 12px; line-height: 1.5; background: transparent;"
             )
-            icon_lbl.setFixedSize(24, 24)
-            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            icon_lbl.setStyleSheet("background: transparent;")
-            row.addWidget(icon_lbl)
+            row.addWidget(label, 1)
+            layout.addLayout(row)
 
-            btn = QPushButton(label)
-            btn.setCheckable(True)
-            btn.setChecked(False)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFixedHeight(38)
-            btn.setStyleSheet(_chip_off())
-            btn.toggled.connect(
-                lambda checked, b=btn: b.setStyleSheet(_chip_on() if checked else _chip_off())
+        snapshot = QFrame()
+        snapshot.setStyleSheet(
+            f"background: {manager.c('#13161a', '#f4ede4')};"
+            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
+            "border-radius: 18px;"
+        )
+        snap_layout = QVBoxLayout(snapshot)
+        snap_layout.setContentsMargins(16, 16, 16, 16)
+        snap_layout.setSpacing(12)
+
+        snap_title = QLabel("Current profile")
+        snap_title.setStyleSheet(
+            f"color: {manager.c('#f2eee8', '#181510')}; font-size: 13px; font-weight: 700; background: transparent;"
+        )
+        snap_layout.addWidget(snap_title)
+
+        self._snapshot_rows: dict[str, QLabel] = {}
+        for key, label_text in [
+            ("name", "Display name"),
+            ("household", "Household"),
+            ("focus", "Cooking rhythm"),
+            ("flavour", "Taste profile"),
+        ]:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(10)
+
+            label = QLabel(label_text)
+            label.setStyleSheet(
+                f"color: {manager.c('#8c867e', '#867c72')}; font-size: 11px; font-weight: 700; background: transparent;"
             )
-            row.addWidget(btn)
+            row.addWidget(label)
             row.addStretch()
-            self._scenario_btns[key] = btn
-            vl.addLayout(row)
-            vl.addSpacing(6)
 
-        vl.addStretch()
-        return w
+            value = QLabel("Not set yet")
+            value.setStyleSheet(
+                f"color: {manager.c('#f2eee8', '#181510')}; font-size: 12px; font-weight: 600; background: transparent;"
+            )
+            row.addWidget(value)
+            snap_layout.addLayout(row)
+            self._snapshot_rows[key] = value
 
-    def _build_step4(self) -> QWidget:
-        w = QWidget()
-        w.setStyleSheet("background: transparent;")
-        vl = QVBoxLayout(w)
-        vl.setContentsMargins(0, 0, 0, 0)
-        vl.setSpacing(0)
+        layout.addWidget(snapshot)
+        layout.addStretch()
+        return card
 
-        vl.addWidget(self._heading("🌍", "Your preferences",
-                                   "Help Dishy recommend the perfect meals for you."))
-        vl.addSpacing(28)
+    def _build_step_panel(self) -> QWidget:
+        card = QFrame()
+        card.setStyleSheet(
+            f"background: {manager.c('#171a1f', '#fffaf4')};"
+            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
+            "border-radius: 22px;"
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(28, 28, 28, 24)
+        layout.setSpacing(18)
 
-        vl.addWidget(_sub_label("Favourite cuisines"))
-        vl.addSpacing(12)
-        cuisine_w, self._cuisine_btns = _chip_rows(_CUISINES, set(), per_row=5)
-        vl.addWidget(cuisine_w)
+        self._step_badge = QLabel()
+        self._step_badge.setStyleSheet(
+            "background: rgba(255,107,53,0.14); color: #ff6b35;"
+            "border: 1px solid rgba(255,107,53,0.28); border-radius: 11px;"
+            "padding: 5px 10px; font-size: 11px; font-weight: 700;"
+        )
+        layout.addWidget(self._step_badge, 0, Qt.AlignmentFlag.AlignLeft)
 
-        vl.addSpacing(28)
-        vl.addWidget(_sep_line())
-        vl.addSpacing(24)
+        self._step_title_lbl = QLabel()
+        self._step_title_lbl.setWordWrap(True)
+        self._step_title_lbl.setStyleSheet(
+            f"color: {manager.c('#f2eee8', '#181510')}; font-size: 26px; font-weight: 800; line-height: 1.15; background: transparent;"
+        )
+        layout.addWidget(self._step_title_lbl)
 
-        vl.addWidget(_sub_label("Cooking skill level"))
-        vl.addSpacing(12)
-        skill_w, self._skill_btns = _selector_row(_SKILL, "")
-        vl.addWidget(skill_w)
+        self._step_subtitle_lbl = QLabel()
+        self._step_subtitle_lbl.setWordWrap(True)
+        self._step_subtitle_lbl.setStyleSheet(
+            f"color: {manager.c('#8c867e', '#7b7268')}; font-size: 14px; line-height: 1.55; background: transparent;"
+        )
+        layout.addWidget(self._step_subtitle_lbl)
 
-        vl.addSpacing(28)
-        vl.addWidget(_sep_line())
-        vl.addSpacing(24)
+        self._step_container = QVBoxLayout()
+        self._step_container.setContentsMargins(0, 6, 0, 0)
+        self._step_container.setSpacing(0)
+        layout.addLayout(self._step_container, 1)
 
-        vl.addWidget(_sub_label("Weekly home cooking goal"))
-        vl.addSpacing(12)
-        goal_w, self._goal_btns = _selector_row(_GOAL, "")
-        vl.addWidget(goal_w)
+        self._step_widgets = [
+            self._build_step_one(),
+            self._build_step_two(),
+            self._build_step_three(),
+            self._build_step_four(),
+        ]
+        for widget in self._step_widgets:
+            widget.setVisible(False)
+            self._step_container.addWidget(widget)
 
-        vl.addStretch()
-        return w
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 18, 0, 0)
+        footer.setSpacing(12)
 
-    # ── Navigation ────────────────────────────────────────────────────────────
+        self._back_btn = QPushButton("Back")
+        self._back_btn.setFixedHeight(42)
+        self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._back_btn.setStyleSheet(
+            f"QPushButton {{ background: {manager.c('#13161a', '#f4ede4')}; color: {manager.c('#a39d95', '#71685d')};"
+            f" border: 1px solid {manager.c('#2b3036', '#ddd2c5')}; border-radius: 12px; padding: 0 18px; font-size: 13px; font-weight: 600; }}"
+            "QPushButton:hover { border-color: rgba(255,107,53,0.32); color: #ff6b35; }"
+        )
+        self._back_btn.clicked.connect(self._on_back)
+        footer.addWidget(self._back_btn)
 
-    def _go_to(self, step: int):
-        self._step = step
+        footer.addStretch()
 
-        for i, sw in enumerate(self._step_widgets):
-            sw.setVisible(i == step)
+        self._skip_btn = QPushButton("Skip setup")
+        self._skip_btn.setFixedHeight(42)
+        self._skip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._skip_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #ff6b35; border: none; font-size: 13px; font-weight: 700; padding: 0 8px; }"
+            "QPushButton:hover { color: #ff7a48; }"
+        )
+        self._skip_btn.clicked.connect(self._on_skip)
+        footer.addWidget(self._skip_btn)
 
-        self._title_lbl.setText(STEP_TITLES[step])
-        self._back_btn.setVisible(step > 0)
+        self._next_btn = QPushButton("Next")
+        self._next_btn.setFixedSize(168, 44)
+        self._next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._next_btn.setStyleSheet(
+            "QPushButton { background: #ff6b35; color: #fff7f1; border: 1px solid rgba(255,107,53,0.42);"
+            " border-radius: 12px; font-size: 14px; font-weight: 700; }"
+            "QPushButton:hover { background: #ff7a48; border-color: rgba(255,107,53,0.62); }"
+        )
+        self._next_btn.clicked.connect(self._on_next)
+        footer.addWidget(self._next_btn)
 
-        if step == self.STEPS - 1:
-            self._next_btn.setText("Done  ✓")
-            self._skip_btn.setVisible(False)
-        else:
-            self._next_btn.setText("Next  →")
-            self._skip_btn.setVisible(True)
+        layout.addLayout(footer)
+        return card
 
-        for i, dot in enumerate(self._dots):
-            if i < step:
-                dot.setStyleSheet(
-                    "border-radius: 5px; background: rgba(255,107,53,0.4);"
-                )
-            elif i == step:
-                dot.setStyleSheet(
-                    "border-radius: 5px; background: #ff6b35;"
-                )
+    def _build_step_one(self) -> QWidget:
+        wrapper = QWidget()
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+
+        info = QFrame()
+        info.setStyleSheet(
+            f"background: {manager.c('#13161a', '#f4ede4')}; border: 1px solid {manager.c('#2b3036', '#ddd2c5')}; border-radius: 18px;"
+        )
+        info_layout = QVBoxLayout(info)
+        info_layout.setContentsMargins(18, 16, 18, 16)
+        info_layout.setSpacing(10)
+
+        title = QLabel("No typing required here.")
+        title.setStyleSheet(
+            f"color: {manager.c('#f2eee8', '#181510')}; font-size: 15px; font-weight: 700; background: transparent;"
+        )
+        info_layout.addWidget(title)
+
+        text = QLabel(
+            "We are intentionally keeping onboarding selection-based. "
+            "If you want a custom display name later, you can add it in Settings without interrupting setup."
+        )
+        text.setWordWrap(True)
+        text.setStyleSheet(
+            f"color: {manager.c('#8c867e', '#7b7268')}; font-size: 12px; line-height: 1.55; background: transparent;"
+        )
+        info_layout.addWidget(text)
+
+        self._identity_lbl = QLabel()
+        self._identity_lbl.setWordWrap(True)
+        self._identity_lbl.setStyleSheet(
+            "background: rgba(255,107,53,0.12); color: #ff6b35; border: 1px solid rgba(255,107,53,0.22);"
+            "border-radius: 12px; padding: 10px 12px; font-size: 12px; font-weight: 600;"
+        )
+        info_layout.addWidget(self._identity_lbl)
+        layout.addWidget(info)
+
+        layout.addWidget(self._section_label("Who are you cooking for this week?"))
+        saved = str(self._db.get_setting("user_household_size", "") or "").strip()
+        layout.addWidget(self._build_card_grid(_HOUSEHOLD, self._household_cards, saved, columns=2, compact=False))
+        layout.addStretch()
+        return wrapper
+
+    def _build_step_two(self) -> QWidget:
+        wrapper = QWidget()
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+
+        layout.addWidget(self._section_label("Dietary needs"))
+        layout.addWidget(
+            self._build_card_grid(
+                [(key, label, "", "fa5s.leaf") for key, label in _DIETARY],
+                self._dietary_cards,
+                _read_csv_setting(self._db, "dietary_prefs"),
+                columns=3,
+                compact=True,
+                multi=True,
+            )
+        )
+
+        layout.addWidget(self._section_label("Always avoid"))
+        layout.addWidget(
+            self._build_card_grid(
+                [(key, label, "", "fa5s.exclamation-triangle") for key, label in _ALLERGENS],
+                self._allergen_cards,
+                _read_csv_setting(self._db, "allergens"),
+                columns=3,
+                compact=True,
+                multi=True,
+            )
+        )
+        layout.addStretch()
+        return wrapper
+
+    def _build_step_three(self) -> QWidget:
+        wrapper = QWidget()
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+
+        layout.addWidget(self._section_label("What should the app bias toward?"))
+        saved = _read_csv_setting(self._db, "lifestyle_scenarios")
+        layout.addWidget(self._build_card_grid(_SCENARIOS, self._scenario_cards, saved, columns=2, compact=False, multi=True))
+        layout.addStretch()
+        return wrapper
+
+    def _build_step_four(self) -> QWidget:
+        wrapper = QWidget()
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+
+        layout.addWidget(self._section_label("Favourite cuisines"))
+        layout.addWidget(
+            self._build_card_grid(
+                [(key, label, "", "fa5s.globe") for key, label in _CUISINES],
+                self._cuisine_cards,
+                _read_csv_setting(self._db, "cuisine_preferences"),
+                columns=3,
+                compact=True,
+                multi=True,
+            )
+        )
+
+        layout.addWidget(self._section_label("Cooking skill"))
+        layout.addWidget(
+            self._build_card_grid(
+                _SKILL,
+                self._skill_cards,
+                str(self._db.get_setting("cooking_skill", "") or "").strip(),
+                columns=3,
+                compact=False,
+            )
+        )
+
+        layout.addWidget(self._section_label("Meals you want to cook each week"))
+        layout.addWidget(
+            self._build_card_grid(
+                _GOAL,
+                self._goal_cards,
+                str(self._db.get_setting("weekly_cooking_goal", "") or "").strip(),
+                columns=3,
+                compact=False,
+            )
+        )
+        layout.addStretch()
+        return wrapper
+
+    def _section_label(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet(
+            f"color: {manager.c('#f2eee8', '#181510')}; font-size: 14px; font-weight: 700; background: transparent;"
+        )
+        return label
+
+    def _build_card_grid(
+        self,
+        options: list[tuple],
+        bucket: dict[str, _ChoiceCard],
+        saved,
+        *,
+        columns: int,
+        compact: bool,
+        multi: bool = False,
+    ) -> QWidget:
+        selected = set(saved) if multi else {saved} if saved else set()
+        container = QWidget()
+        grid = QGridLayout(container)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(12)
+
+        for idx, entry in enumerate(options):
+            key, title = entry[0], entry[1]
+            subtitle = entry[2] if len(entry) > 2 else ""
+            icon_name = entry[3] if len(entry) > 3 else ""
+            card = _ChoiceCard(key, title, subtitle, icon_name=icon_name, compact=compact)
+            card.set_checked(key in selected)
+            if multi:
+                card.clicked.connect(lambda selected_key, cards=bucket: self._toggle_multi(cards, selected_key))
             else:
-                dot.setStyleSheet(
-                    f"border-radius: 5px; background: {manager.c('#333', '#ccc')};"
-                )
+                card.clicked.connect(lambda selected_key, cards=bucket: self._set_single(cards, selected_key))
+            bucket[key] = card
+            row = idx // max(1, columns)
+            col = idx % max(1, columns)
+            grid.addWidget(card, row, col)
 
-    def _on_next(self):
-        self._save_step(self._step)
-        if self._step < self.STEPS - 1:
-            self._go_to(self._step + 1)
+        for col in range(columns):
+            grid.setColumnStretch(col, 1)
+        return container
+
+    def _toggle_multi(self, cards: dict[str, _ChoiceCard], key: str) -> None:
+        card = cards.get(key)
+        if card is None:
+            return
+        card.set_checked(not card.is_checked())
+        self._refresh_profile_snapshot()
+
+    def _set_single(self, cards: dict[str, _ChoiceCard], key: str) -> None:
+        for name, card in cards.items():
+            card.set_checked(name == key)
+        self._refresh_profile_snapshot()
+
+    def _selected_single(self, cards: dict[str, _ChoiceCard]) -> str:
+        for key, card in cards.items():
+            if card.is_checked():
+                return key
+        return ""
+
+    def _selected_multi(self, cards: dict[str, _ChoiceCard]) -> list[str]:
+        return [key for key, card in cards.items() if card.is_checked()]
+
+    def _refresh_profile_snapshot(self) -> None:
+        name_value = self._profile_name or "Add later in Settings"
+        self._snapshot_rows["name"].setText(name_value)
+
+        household = _label_for(_HOUSEHOLD, self._selected_single(self._household_cards))
+        self._snapshot_rows["household"].setText(household)
+
+        focus_items = self._selected_multi(self._scenario_cards)
+        if focus_items:
+            focus_text = ", ".join(_label_for(_SCENARIOS, key) for key in focus_items[:2])
+            if len(focus_items) > 2:
+                focus_text += f" +{len(focus_items) - 2}"
         else:
-            self._db.set_setting("onboarding_complete", "1")
-            self.finished.emit()
+            focus_text = "Not set yet"
+        self._snapshot_rows["focus"].setText(focus_text)
 
-    def _on_back(self):
-        if self._step > 0:
-            self._go_to(self._step - 1)
+        cuisines = self._selected_multi(self._cuisine_cards)
+        if cuisines:
+            flavour = ", ".join(_label_for(_CUISINES, key) for key in cuisines[:2])
+            if len(cuisines) > 2:
+                flavour += f" +{len(cuisines) - 2}"
+        else:
+            flavour = "Not set yet"
+        self._snapshot_rows["flavour"].setText(flavour)
 
-    def _on_skip(self):
-        self._save_step(self._step)
+        if self._profile_name:
+            identity_text = f"Display name ready: {self._profile_name}"
+        else:
+            identity_text = "Display name will stay open until you set one in Settings."
+        self._identity_lbl.setText(identity_text)
+
+    def _go_to(self, step: int) -> None:
+        self._step = max(0, min(step, len(_STEP_META) - 1))
+        meta = _STEP_META[self._step]
+
+        for idx, widget in enumerate(self._step_widgets):
+            widget.setVisible(idx == self._step)
+
+        self._step_badge.setText(f"{meta['eyebrow']}  |  Step {self._step + 1} of {len(_STEP_META)}")
+        self._step_title_lbl.setText(meta["title"])
+        self._step_subtitle_lbl.setText(meta["subtitle"])
+
+        for idx, bar in enumerate(self._progress_bars):
+            if idx < self._step:
+                bar.setStyleSheet("background: rgba(255,107,53,0.36); border-radius: 4px;")
+            elif idx == self._step:
+                bar.setStyleSheet("background: #ff6b35; border-radius: 4px;")
+            else:
+                bar.setStyleSheet(f"background: {manager.c('#2b3036', '#ddd2c5')}; border-radius: 4px;")
+
+        self._back_btn.setVisible(self._step > 0)
+        is_last = self._step == len(_STEP_META) - 1
+        self._next_btn.setText("Finish setup" if is_last else "Next")
+
+    def _persist_all(self) -> None:
+        if self._profile_name:
+            self._db.set_setting("user_name", self._profile_name)
+
+        self._db.set_setting("user_household_size", self._selected_single(self._household_cards))
+        self._db.set_setting("dietary_prefs", ",".join(self._selected_multi(self._dietary_cards)))
+        self._db.set_setting("allergens", ",".join(self._selected_multi(self._allergen_cards)))
+        self._db.set_setting("lifestyle_scenarios", ",".join(self._selected_multi(self._scenario_cards)))
+        self._db.set_setting("cuisine_preferences", ",".join(self._selected_multi(self._cuisine_cards)))
+        self._db.set_setting("cooking_skill", self._selected_single(self._skill_cards))
+        self._db.set_setting("weekly_cooking_goal", self._selected_single(self._goal_cards))
+
+    def _on_next(self) -> None:
+        self._persist_all()
+        if self._step < len(_STEP_META) - 1:
+            self._go_to(self._step + 1)
+            return
         self._db.set_setting("onboarding_complete", "1")
         self.finished.emit()
 
-    # ── Save helpers ──────────────────────────────────────────────────────────
+    def _on_back(self) -> None:
+        self._persist_all()
+        if self._step > 0:
+            self._go_to(self._step - 1)
 
-    def _save_step(self, step: int):
-        if step == 0:
-            name = self._name_input.text().strip()
-            if name:
-                self._db.set_setting("user_name", name)
-            chosen_hh = self._get_selected_selector(self._household_btns, _HOUSEHOLD)
-            if chosen_hh:
-                self._db.set_setting("user_household_size", chosen_hh)
-
-        elif step == 1:
-            diet = ",".join(k for k, b in self._dietary_btns.items() if b.isChecked())
-            self._db.set_setting("dietary_prefs", diet)
-            allergens = ",".join(k for k, b in self._allergen_btns.items() if b.isChecked())
-            self._db.set_setting("allergens", allergens)
-
-        elif step == 2:
-            scenarios = ",".join(k for k, b in self._scenario_btns.items() if b.isChecked())
-            self._db.set_setting("lifestyle_scenarios", scenarios)
-
-        elif step == 3:
-            cuisines = ",".join(k for k, b in self._cuisine_btns.items() if b.isChecked())
-            self._db.set_setting("cuisine_preferences", cuisines)
-            chosen_skill = self._get_selected_selector(self._skill_btns, _SKILL)
-            if chosen_skill:
-                self._db.set_setting("cooking_skill", chosen_skill)
-            chosen_goal = self._get_selected_selector(self._goal_btns, _GOAL)
-            if chosen_goal:
-                self._db.set_setting("weekly_cooking_goal", chosen_goal)
-
-    @staticmethod
-    def _get_selected_selector(btns: dict, options: list[tuple]) -> str:
-        """Return the key of whichever selector button has the active style."""
-        for key, _ in options:
-            if key in btns and "rgba(255,107,53" in btns[key].styleSheet():
-                return key
-        return ""
+    def _on_skip(self) -> None:
+        self._persist_all()
+        self._db.set_setting("onboarding_complete", "1")
+        self.finished.emit()

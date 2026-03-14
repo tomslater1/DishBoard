@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 from models.database import Database
 from auth.supabase_client import get_client
+from auth.session_manager import ensure_valid_session
 from utils.data_validators import sanitize_cloud_row
 
 
@@ -82,6 +83,11 @@ def _is_uuid(value: str) -> bool:
         return False
 
 
+def _is_db_locked_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "database is locked" in msg or "database table is locked" in msg
+
+
 class CloudSyncService:
     """Handles push/pull between local SQLite and Supabase for one user."""
 
@@ -113,6 +119,8 @@ class CloudSyncService:
     def sync(self) -> SyncResult:
         """Full push + pull cycle. Called by the background timer."""
         result = SyncResult()
+        if not self._ensure_auth(result):
+            return result
         push_r = self.push_all()
         pull_r = self.pull_all()
         result.pushed = push_r.pushed
@@ -148,6 +156,8 @@ class CloudSyncService:
     def push_all(self) -> SyncResult:
         """Upload local changes to Supabase."""
         result = SyncResult()
+        if not self._ensure_auth(result):
+            return result
         client = get_client()
         if client is None:
             result.errors.append("Supabase client not available")
@@ -175,6 +185,8 @@ class CloudSyncService:
     def pull_all(self) -> SyncResult:
         """Download cloud changes into local SQLite."""
         result = SyncResult()
+        if not self._ensure_auth(result):
+            return result
         client = get_client()
         if client is None:
             result.errors.append("Supabase client not available")
@@ -208,6 +220,16 @@ class CloudSyncService:
             db.close()
 
         return result
+
+    def _ensure_auth(self, result: SyncResult) -> bool:
+        """Refresh stored auth before touching Supabase tables."""
+        session = ensure_valid_session(min_ttl_seconds=180)
+        if session is None:
+            msg = "Supabase session missing or expired; please sign in again"
+            result.errors.append(msg)
+            _log(f"ERROR: {msg}")
+            return False
+        return True
 
     # ── Push helpers ──────────────────────────────────────────────────────────
 
@@ -243,6 +265,12 @@ class CloudSyncService:
                     result.errors.append(msg)
                     _log(f"WARN: {msg}")
             except Exception as e:
+                if _is_db_locked_error(e):
+                    try:
+                        db.conn.rollback()
+                    except Exception:
+                        pass
+                    raise
                 msg = f"{table} insert failed: {e}"
                 result.errors.append(msg)
                 _log(f"ERROR: {msg}")
@@ -265,6 +293,12 @@ class CloudSyncService:
                         db.conn.commit()
                 result.pushed += 1
             except Exception as e:
+                if _is_db_locked_error(e):
+                    try:
+                        db.conn.rollback()
+                    except Exception:
+                        pass
+                    raise
                 msg = f"{table} update failed: {e}"
                 result.errors.append(msg)
                 _log(f"ERROR: {msg}")
@@ -475,6 +509,12 @@ class CloudSyncService:
                     db.upsert_row_from_cloud(table, filtered, effective_map)
                     result.pulled += 1
                 except Exception as row_err:
+                    if _is_db_locked_error(row_err):
+                        try:
+                            db.conn.rollback()
+                        except Exception:
+                            pass
+                        raise
                     row_id = str(cloud_row.get("id", "?"))
                     msg = f"{table} row pull failed (id={row_id}): {row_err}"
                     result.errors.append(msg)

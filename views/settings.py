@@ -4,7 +4,7 @@ import qtawesome as qta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QLineEdit, QCheckBox,
-    QFrame, QFileDialog, QStackedWidget,
+    QComboBox, QFileDialog, QStackedWidget,
 )
 from PySide6.QtCore import Qt, QSize, Signal
 
@@ -13,6 +13,8 @@ from utils.data_service import get_db
 from utils.data_validators import sanitize_import_row
 from utils.theme import manager
 from utils.themed_dialog import ThemedMessageBox
+from utils.ai_memory import memory_source_summary
+from utils.system_visibility import _age_seconds, describe_snapshot, describe_sync_runtime
 from utils.version import APP_VERSION, VERSION_HISTORY
 from utils.recipe_health import validate_recipe
 from utils.ui_tokens import (
@@ -25,7 +27,9 @@ from views.settings_helpers import (
     make_sep as _make_sep,
     selector_style as _selector_style,
     card_widget as _card_widget,
+    refresh_surface_styles as _refresh_surface_styles,
 )
+from widgets.page_scaffold import PageScaffold, StatusBanner
 
 
 def _danger_button_style() -> str:
@@ -39,6 +43,14 @@ def _danger_button_style() -> str:
         "  background-color: rgba(220,53,69,0.18); border-color: rgba(220,53,69,0.55);"
         "}"
         "QPushButton:disabled { color: #9a5b64; border-color: rgba(220,53,69,0.14); background-color: rgba(220,53,69,0.04); }"
+    )
+
+
+def _subtle_surface_style() -> str:
+    return (
+        f"background: {manager.c('#14191d', '#fffaf3')};"
+        "border: none;"
+        "border-radius: 14px;"
     )
 
 
@@ -223,7 +235,6 @@ class _ProfilePage(QWidget):
         diet_flow2_layout = QHBoxLayout(diet_flow2)
         diet_flow2_layout.setContentsMargins(0, 0, 0, 0)
         diet_flow2_layout.setSpacing(6)
-        overflow_keys = list(self._dietary_btns.keys())[5:]
         # Re-do chip layout as two proper rows
         # Clear and rebuild with 5 per row
         for w in [diet_flow, diet_flow2]:
@@ -1196,12 +1207,14 @@ class _MonitoringPage(QWidget):
         self._db = db or get_db()
         self._sync_fn = None
         self._sync_service = None
+        self._visibility_service = None
         self._advanced_visible = False
         self._metric_values: dict[str, QLabel] = {}
         self._metric_subs: dict[str, QLabel] = {}
         self._metric_cards: list[QWidget] = []
         self._muted_labels: list[QLabel] = []
         self._title_labels: list[QLabel] = []
+        self._memory_summary_lbl: QLabel | None = None
         self._build()
 
     def set_sync_fn(self, fn):
@@ -1222,7 +1235,23 @@ class _MonitoringPage(QWidget):
             )
         self.refresh()
 
+    def set_visibility_service(self, service) -> None:
+        if self._visibility_service is service:
+            return
+        if self._visibility_service is not None:
+            try:
+                self._visibility_service.snapshot_changed.disconnect(self._on_visibility_snapshot_changed)
+            except Exception:
+                pass
+        self._visibility_service = service
+        if service is not None:
+            service.snapshot_changed.connect(self._on_visibility_snapshot_changed)
+        self.refresh()
+
     def _on_runtime_status_changed(self, _status: dict) -> None:
+        self.refresh()
+
+    def _on_visibility_snapshot_changed(self, _snapshot) -> None:
         self.refresh()
 
     def _active_user_id(self) -> str:
@@ -1272,6 +1301,16 @@ class _MonitoringPage(QWidget):
         self._analytics_status_lbl.setWordWrap(True)
         self._muted_labels.append(self._analytics_status_lbl)
         top_l.addWidget(self._analytics_status_lbl)
+
+        self._severity_summary_lbl = QLabel("")
+        self._severity_summary_lbl.setWordWrap(True)
+        self._muted_labels.append(self._severity_summary_lbl)
+        top_l.addWidget(self._severity_summary_lbl)
+
+        self._attention_reasons_lbl = QLabel("")
+        self._attention_reasons_lbl.setWordWrap(True)
+        self._muted_labels.append(self._attention_reasons_lbl)
+        top_l.addWidget(self._attention_reasons_lbl)
 
         self._sync_integrity_lbl = QLabel("")
         self._sync_integrity_lbl.setWordWrap(True)
@@ -1350,6 +1389,58 @@ class _MonitoringPage(QWidget):
 
         btn_row.addStretch()
         top_l.addLayout(btn_row)
+
+        top_l.addWidget(_make_sep())
+        actions_title = QLabel("Recommended Actions")
+        actions_title.setObjectName("card-body")
+        top_l.addWidget(actions_title)
+        self._recommended_actions_lbl = QLabel("")
+        self._recommended_actions_lbl.setWordWrap(True)
+        self._muted_labels.append(self._recommended_actions_lbl)
+        top_l.addWidget(self._recommended_actions_lbl)
+
+        top_l.addWidget(_make_sep())
+        freshness_title = QLabel("Module Freshness")
+        freshness_title.setObjectName("card-body")
+        top_l.addWidget(freshness_title)
+        self._module_freshness_lbl = QLabel("")
+        self._module_freshness_lbl.setWordWrap(True)
+        self._muted_labels.append(self._module_freshness_lbl)
+        top_l.addWidget(self._module_freshness_lbl)
+
+        top_l.addWidget(_make_sep())
+        recent_title = QLabel("Recent Changes")
+        recent_title.setObjectName("card-body")
+        top_l.addWidget(recent_title)
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(8)
+        self._module_filter = QComboBox()
+        self._module_filter.addItems(["All modules", "System", "Recipes", "Planner", "Shopping", "Pantry", "Nutrition", "Dishy"])
+        self._module_filter.currentIndexChanged.connect(self.refresh)
+        filter_row.addWidget(self._module_filter)
+        self._severity_filter = QComboBox()
+        self._severity_filter.addItems(["All severities", "Critical", "Warning", "Info", "Quiet"])
+        self._severity_filter.currentIndexChanged.connect(self.refresh)
+        filter_row.addWidget(self._severity_filter)
+        self._activity_filter = QComboBox()
+        self._activity_filter.addItems(["All activity", "Sync", "AI", "Job", "User changes", "Notifications"])
+        self._activity_filter.currentIndexChanged.connect(self.refresh)
+        filter_row.addWidget(self._activity_filter)
+        filter_row.addStretch()
+        top_l.addLayout(filter_row)
+        self._recent_changes_lbl = QLabel("")
+        self._recent_changes_lbl.setWordWrap(True)
+        self._muted_labels.append(self._recent_changes_lbl)
+        top_l.addWidget(self._recent_changes_lbl)
+
+        top_l.addWidget(_make_sep())
+        active_title = QLabel("Active Work")
+        active_title.setObjectName("card-body")
+        top_l.addWidget(active_title)
+        self._active_work_lbl = QLabel("")
+        self._active_work_lbl.setWordWrap(True)
+        self._muted_labels.append(self._active_work_lbl)
+        top_l.addWidget(self._active_work_lbl)
         outer.addWidget(top_card)
 
         # Controls card
@@ -1395,6 +1486,27 @@ class _MonitoringPage(QWidget):
             self._memory_toggle,
             "Lets Dishy use your recent app context for better answers.",
         ))
+
+        controls_l.addWidget(_make_sep())
+        memory_title = QLabel("Dishy Memory")
+        memory_title.setObjectName("card-body")
+        controls_l.addWidget(memory_title)
+        self._memory_summary_lbl = QLabel("")
+        self._memory_summary_lbl.setWordWrap(True)
+        self._muted_labels.append(self._memory_summary_lbl)
+        controls_l.addWidget(self._memory_summary_lbl)
+        memory_btn_row = QHBoxLayout()
+        memory_btn_row.setSpacing(8)
+        self._memory_refresh_btn = QPushButton("Refresh Memory View")
+        self._memory_refresh_btn.setFixedHeight(34)
+        self._memory_refresh_btn.clicked.connect(self.refresh)
+        memory_btn_row.addWidget(self._memory_refresh_btn)
+        self._memory_clear_btn = QPushButton("Clear Dishy Chat Memory")
+        self._memory_clear_btn.setFixedHeight(34)
+        self._memory_clear_btn.clicked.connect(self._clear_dishy_memory)
+        memory_btn_row.addWidget(self._memory_clear_btn)
+        memory_btn_row.addStretch()
+        controls_l.addLayout(memory_btn_row)
 
         outer.addWidget(controls_card)
 
@@ -1497,6 +1609,17 @@ class _MonitoringPage(QWidget):
         if self._sync_fn:
             self._sync_fn()
 
+    def _clear_dishy_memory(self):
+        self._db.clear_dishy_history()
+        if self._sync_fn:
+            self._sync_fn()
+        self.refresh()
+        ThemedMessageBox.information(
+            self,
+            "Dishy chat memory cleared",
+            "Saved Dishy chat history was removed. Profile, recipes, planner, pantry, and nutrition data are unchanged.",
+        )
+
     def _refresh_remote_flags(self):
         svc = self._flags_service()
         count, reason = svc.refresh_remote_from_supabase()
@@ -1516,45 +1639,81 @@ class _MonitoringPage(QWidget):
         self.refresh()
 
     def _run_integrity_repair(self):
-        report = self._db.run_sync_integrity_repair()
-        ThemedMessageBox.information(
-            self,
-            "Integrity repair complete",
-            f"Re-linked meal slots: {report.get('linked_slots', 0)}\n"
-            f"Removed orphan slots: {report.get('removed_orphans', 0)}",
-        )
-        if self._sync_fn:
-            self._sync_fn()
-        self.refresh()
+        handle = None
+        if self._visibility_service is not None:
+            handle = self._visibility_service.start_work(
+                "monitoring.integrity.repair",
+                "job",
+                "system",
+                "Repairing sync integrity",
+                "Re-linking meal slots and clearing orphan sync state.",
+                timeout_seconds=120,
+                attention_reason="job_running",
+            )
+        try:
+            report = self._db.run_sync_integrity_repair()
+            if handle is not None:
+                handle.finish()
+            ThemedMessageBox.information(
+                self,
+                "Integrity repair complete",
+                f"Re-linked meal slots: {report.get('linked_slots', 0)}\n"
+                f"Removed orphan slots: {report.get('removed_orphans', 0)}",
+            )
+            if self._sync_fn:
+                self._sync_fn()
+            self.refresh()
+        except Exception as exc:
+            if handle is not None:
+                handle.fail(str(exc))
+            raise
 
     def _run_integrity_scan(self):
-        report = self._db.run_integrity_scan()
-        sync = report.get("sync", {}) or {}
-        issues = report.get("table_issues", {}) or {}
-        issue_count = int(report.get("issue_count", 0) or 0)
-        status = "Healthy" if report.get("healthy") else "Needs attention"
-        detail_lines = [
-            f"Status: {status}",
-            "",
-            f"Issue count: {issue_count}",
-            f"Pending tombstones: {int(sync.get('pending_tombstones', 0) or 0)}",
-            f"Orphan meal slots: {int(sync.get('orphan_meal_slots', 0) or 0)}",
-            "",
-            "Table checks:",
-            f"- Recipes with empty title: {int(issues.get('recipes_empty_title', 0) or 0)}",
-            f"- Shopping items with empty name: {int(issues.get('shopping_empty_name', 0) or 0)}",
-            f"- Pantry items with empty name: {int(issues.get('pantry_empty_name', 0) or 0)}",
-            f"- Nutrition rows missing core fields: {int(issues.get('nutrition_missing_core', 0) or 0)}",
-            f"- Dishy chat rows missing core fields: {int(issues.get('dishy_chat_missing_core', 0) or 0)}",
-            f"- Meal slots with invalid day/type/week: {int(issues.get('meal_slots_invalid_shape', 0) or 0)}",
-            f"- Meal slot duplicate keys: {int(issues.get('meal_slots_duplicate_keys', 0) or 0)}",
-        ]
-        ThemedMessageBox.information(
-            self,
-            "Integrity scan report",
-            "\n".join(detail_lines),
-        )
-        self.refresh()
+        handle = None
+        if self._visibility_service is not None:
+            handle = self._visibility_service.start_work(
+                "monitoring.integrity.scan",
+                "job",
+                "system",
+                "Running integrity scan",
+                "Scanning sync state and table shapes for consistency issues.",
+                timeout_seconds=120,
+                attention_reason="job_running",
+            )
+        try:
+            report = self._db.run_integrity_scan()
+            if handle is not None:
+                handle.finish()
+            sync = report.get("sync", {}) or {}
+            issues = report.get("table_issues", {}) or {}
+            issue_count = int(report.get("issue_count", 0) or 0)
+            status = "Healthy" if report.get("healthy") else "Needs attention"
+            detail_lines = [
+                f"Status: {status}",
+                "",
+                f"Issue count: {issue_count}",
+                f"Pending tombstones: {int(sync.get('pending_tombstones', 0) or 0)}",
+                f"Orphan meal slots: {int(sync.get('orphan_meal_slots', 0) or 0)}",
+                "",
+                "Table checks:",
+                f"- Recipes with empty title: {int(issues.get('recipes_empty_title', 0) or 0)}",
+                f"- Shopping items with empty name: {int(issues.get('shopping_empty_name', 0) or 0)}",
+                f"- Pantry items with empty name: {int(issues.get('pantry_empty_name', 0) or 0)}",
+                f"- Nutrition rows missing core fields: {int(issues.get('nutrition_missing_core', 0) or 0)}",
+                f"- Dishy chat rows missing core fields: {int(issues.get('dishy_chat_missing_core', 0) or 0)}",
+                f"- Meal slots with invalid day/type/week: {int(issues.get('meal_slots_invalid_shape', 0) or 0)}",
+                f"- Meal slot duplicate keys: {int(issues.get('meal_slots_duplicate_keys', 0) or 0)}",
+            ]
+            ThemedMessageBox.information(
+                self,
+                "Integrity scan report",
+                "\n".join(detail_lines),
+            )
+            self.refresh()
+        except Exception as exc:
+            if handle is not None:
+                handle.fail(str(exc))
+            raise
 
     def refresh(self):
         from utils.ai_limits import get_daily_limit, get_usage, utc_day_str
@@ -1589,29 +1748,31 @@ class _MonitoringPage(QWidget):
                 runtime = self._sync_service.runtime_status() or {}
             except Exception:
                 runtime = {}
+        snapshot = None
+        if self._visibility_service is not None:
+            try:
+                snapshot = self._visibility_service.snapshot()
+            except Exception:
+                snapshot = None
         startup_report = get_last_health_report(self._db)
         analytics = get_analytics_status(self._db, uid)
 
         # Headline status
         short_uid = (uid[:8] + "…") if len(uid) > 8 else (uid or "not signed in")
-        if runtime.get("circuit_open"):
-            health = "Recovering"
-        elif errored or int(runtime.get("consecutive_failures", 0) or 0) > 0:
-            health = "Needs attention"
-        else:
-            health = "Healthy"
+        health = "Healthy"
+        summary_line = "System status: Healthy"
+        runtime_headline, runtime_detail = describe_sync_runtime(runtime)
+        if snapshot is not None:
+            headline, detail = describe_snapshot(snapshot)
+            health = headline
+            summary_line = detail
+            runtime_headline, runtime_detail = describe_sync_runtime(snapshot.sync_runtime)
         self._status_lbl.setText(
-            f"Account: {short_uid}  |  System status: {health}"
+            f"Account: {short_uid}  |  {health}"
         )
-        retry_in = int(runtime.get("retry_in_seconds", 0) or 0)
-        runtime_state = "Live"
-        if runtime.get("circuit_open"):
-            runtime_state = f"Paused ({retry_in}s)"
-        elif retry_in > 0:
-            runtime_state = f"Retrying in {retry_in}s"
         self._runtime_health_lbl.setText(
-            f"Cloud sync runtime: {runtime_state} · "
-            f"failures={int(runtime.get('consecutive_failures', 0) or 0)} · "
+            f"{summary_line} · "
+            f"Cloud sync: {runtime_headline} · "
             f"startup auto-repair: "
             f"tombstones={int(startup_report.get('invalid_tombstones_removed', 0) or 0)}, "
             f"slots fixed={int(startup_report.get('linked_meal_slots', 0) or 0)}, "
@@ -1634,6 +1795,22 @@ class _MonitoringPage(QWidget):
             f"Analytics: {analytics_state} · host={host_label} · "
             f"last event={analytics.get('last_event_at') or 'none yet'}"
         )
+        if snapshot is not None:
+            reasons = ", ".join(reason.replace("_", " ") for reason in snapshot.attention_reasons) or "none"
+            self._severity_summary_lbl.setText(
+                f"Severity: {snapshot.severity.title()} · overall state: {snapshot.overall_state.replace('_', ' ')}"
+            )
+            self._attention_reasons_lbl.setText(f"Why you're seeing this: {reasons}")
+            if snapshot.recommended_actions:
+                self._recommended_actions_lbl.setText(
+                    " · ".join(action.label for action in snapshot.recommended_actions)
+                )
+            else:
+                self._recommended_actions_lbl.setText("No actions needed right now.")
+        else:
+            self._severity_summary_lbl.setText("Severity: n/a")
+            self._attention_reasons_lbl.setText("Why you're seeing this: unavailable")
+            self._recommended_actions_lbl.setText("No actions available.")
 
         integrity = self._db.get_sync_integrity_report()
         pending_unsynced = sum(int(v or 0) for v in (integrity.get("unsynced_rows") or {}).values())
@@ -1658,6 +1835,54 @@ class _MonitoringPage(QWidget):
             f"{suggestion}"
         )
 
+        if snapshot is not None:
+            freshness_lines = []
+            for item in snapshot.module_freshness:
+                confidence = " · low confidence" if item.confidence == "weak" else ""
+                freshness_lines.append(
+                    f"{item.label}: {item.state}{confidence} · {item.detail} · age={item.freshness_age_seconds}s · unsynced={item.unsynced_count}"
+                )
+            self._module_freshness_lbl.setText("\n".join(freshness_lines[:7]))
+
+            module_filter = self._module_filter.currentText()
+            severity_filter = self._severity_filter.currentText().lower().replace(" severities", "").strip()
+            activity_filter = self._activity_filter.currentText()
+            filtered_digest = []
+            for item in snapshot.feed_summary:
+                if module_filter != "All modules" and item.module != module_filter.lower():
+                    continue
+                if severity_filter != "all" and item.severity != severity_filter:
+                    continue
+                if activity_filter == "Sync" and item.activity_type != "sync":
+                    continue
+                if activity_filter == "AI" and item.activity_type != "ai":
+                    continue
+                if activity_filter == "Job" and item.activity_type != "job":
+                    continue
+                if activity_filter == "User changes" and item.activity_type != "user_change":
+                    continue
+                if activity_filter == "Notifications" and item.activity_type != "notification":
+                    continue
+                filtered_digest.append(item)
+            recent_lines = []
+            for item in filtered_digest[:10]:
+                count = f" ×{item.count}" if item.count > 1 else ""
+                detail = f" · {item.detail}" if item.detail else ""
+                recent_lines.append(f"[{item.severity}] {item.title}{count}{detail}")
+            self._recent_changes_lbl.setText("\n".join(recent_lines) or "No matching changes for the current filters.")
+
+            if snapshot.active_work:
+                lines = []
+                for work in snapshot.active_work[:6]:
+                    lines.append(f"{work.title} · {work.detail} · started {_age_seconds(work.started_at)}s ago")
+                self._active_work_lbl.setText("\n".join(lines))
+            else:
+                self._active_work_lbl.setText("No active background work.")
+        else:
+            self._module_freshness_lbl.setText("Visibility service unavailable.")
+            self._recent_changes_lbl.setText("Recent changes will appear once visibility is active.")
+            self._active_work_lbl.setText("Active work will appear once visibility is active.")
+
         self._metric_values["recipes"].setText(str(counts["recipes"]))
         self._metric_subs["recipes"].setText("Saved")
         self._metric_values["meal_plans"].setText(str(counts["meal_plans"]))
@@ -1675,10 +1900,19 @@ class _MonitoringPage(QWidget):
             f"Background jobs: total={len(jobs)}, running={running}, errors={errored}\n"
             f"Telemetry events shown (latest): {len(events)}\n"
             f"AI blocked today: {blocked}\n"
-            f"Sync resilience: retry_in={retry_in}s, circuit_open={bool(runtime.get('circuit_open'))}, "
+            f"Sync resilience: retry_in={int(runtime.get('retry_in_seconds', 0) or 0)}s, circuit_open={bool(runtime.get('circuit_open'))}, "
             f"last_success={runtime.get('last_success_at') or 'n/a'}, "
             f"last_failure={runtime.get('last_failure_at') or 'n/a'}"
         )
+        memory = memory_source_summary(self._db)
+        if self._memory_summary_lbl:
+            counts = memory.get("counts", {})
+            self._memory_summary_lbl.setText(
+                f"Dishy can currently draw from profile={counts.get('profile', 0)}, recipes={counts.get('recipe', 0)}, "
+                f"planner={counts.get('meal_plan', 0)}, pantry={counts.get('pantry', 0)}, shopping={counts.get('shopping', 0)}, "
+                f"nutrition={counts.get('nutrition', 0)}, chat snippets={counts.get('chat', 0)} across "
+                f"{memory.get('chat_sessions', 0)} saved chat session(s)."
+            )
 
         # Toggle states
         svc = self._flags_service()
@@ -2531,14 +2765,14 @@ class _NutritionGoalsPage(QWidget):
 # ── Settings view ─────────────────────────────────────────────────────────────
 
 _NAV_ITEMS = [
-    ("fa5s.user-circle",  "Account"),          # index 0
-    ("fa5s.id-card",      "Profile"),          # index 1
-    ("fa5s.robot",        "Dishy"),             # index 2
-    ("fa5s.bullseye",     "Nutrition Goals"),   # index 3
-    ("fa5s.sliders-h",    "Preferences"),       # index 4
-    ("fa5s.database",     "Data && Backup"),     # index 5
-    ("fa5s.chart-line",   "Monitoring"),        # index 6
-    ("fa5s.list-alt",     "Version History"),   # index 7
+    ("preferences", "everyday", "fa5s.sliders-h", "Preferences"),
+    ("nutrition", "everyday", "fa5s.bullseye", "Nutrition Goals"),
+    ("profile", "everyday", "fa5s.id-card", "Profile"),
+    ("account", "everyday", "fa5s.user-circle", "Account"),
+    ("dishy", "everyday", "fa5s.robot", "Dishy"),
+    ("data", "advanced", "fa5s.database", "Data & Backup"),
+    ("monitoring", "advanced", "fa5s.chart-line", "Monitoring"),
+    ("history", "advanced", "fa5s.list-alt", "Version History"),
 ]
 
 
@@ -2551,6 +2785,7 @@ class SettingsView(QWidget):
         self.setObjectName("view-container")
         self._db = db or get_db()
         self._nav_btns: list[QPushButton] = []
+        self._group_labels: list[QLabel] = []
         self._build_ui()
 
     def _build_ui(self):
@@ -2558,51 +2793,54 @@ class SettingsView(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Header ────────────────────────────────────────────────────────────
-        hdr = QWidget()
-        hdr.setStyleSheet(
-            f"background: {manager.c('#0a0a0a', '#f0f0f0')};"
-            f" border-bottom: 1px solid {manager.c('#1c1c1c', '#dddddd')};"
+        scaffold = PageScaffold(
+            "Settings",
+            "Start with Preferences, Nutrition Goals, Profile, and Account. Backup and diagnostics stay available lower down when you need them.",
+            eyebrow="Preferences",
+            parent=self,
+            quiet_header=True,
         )
-        hdr.setFixedHeight(64)
-        self._hdr = hdr
-        hdr_layout = QHBoxLayout(hdr)
-        hdr_layout.setContentsMargins(32, 0, 32, 0)
+        self._scaffold = scaffold
+        root.addWidget(scaffold)
+        scaffold.set_banner(
+            StatusBanner(
+                "Everyday settings come first. Advanced tools stay available in a separate section so the page is easier to scan.",
+                "system",
+                scaffold,
+            )
+        )
 
-        page_title = QLabel("Settings")
-        page_title.setObjectName("page-title")
-        page_sub = QLabel("Personalise and manage your DishBoard")
-        page_sub.setObjectName("page-date")
-        hdr_layout.addWidget(page_title)
-        hdr_layout.addSpacing(12)
-        hdr_layout.addWidget(page_sub)
-        hdr_layout.addStretch()
-        root.addWidget(hdr)
-
-        # ── Body: nav + content ───────────────────────────────────────────────
-        body = QWidget()
-        body.setStyleSheet("background: transparent;")
-        body_layout = QHBoxLayout(body)
+        shell = QWidget()
+        shell.setStyleSheet(self._shell_style())
+        self._shell = shell
+        body_layout = QHBoxLayout(shell)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
 
-        # Left nav strip
         nav = QWidget()
-        nav.setFixedWidth(200)
-        nav.setStyleSheet(
-            f"background: {manager.c('#0d0d0d', '#f8f8f8')};"
-            f" border-right: 1px solid {manager.c('#1c1c1c', '#e0e0e0')};"
-        )
+        nav.setFixedWidth(228)
+        nav.setStyleSheet(self._nav_style())
         self._nav = nav
         nav_layout = QVBoxLayout(nav)
-        nav_layout.setContentsMargins(12, 20, 12, 20)
-        nav_layout.setSpacing(4)
+        nav_layout.setContentsMargins(14, 18, 14, 18)
+        nav_layout.setSpacing(6)
 
-        for idx, (icon_name, label) in enumerate(_NAV_ITEMS):
+        current_group = None
+        for idx, (key, group, icon_name, label) in enumerate(_NAV_ITEMS):
+            if group != current_group:
+                if current_group is not None:
+                    nav_layout.addSpacing(10)
+                    nav_layout.addWidget(_make_sep())
+                    nav_layout.addSpacing(10)
+                group_label = QLabel("Everyday" if group == "everyday" else "Advanced")
+                group_label.setStyleSheet(self._group_label_style())
+                nav_layout.addWidget(group_label)
+                self._group_labels.append(group_label)
+                current_group = group
             btn = QPushButton(f"  {label}")
             btn.setIcon(qta.icon(icon_name, color=manager.c("#888888", "#666666")))
             btn.setIconSize(QSize(14, 14))
-            btn.setFixedHeight(40)
+            btn.setFixedHeight(42)
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda _, i=idx: self._select_page(i))
@@ -2612,47 +2850,110 @@ class SettingsView(QWidget):
         nav_layout.addStretch()
         body_layout.addWidget(nav)
 
-        # Right content area: stacked pages each wrapped in a scroll area
+        content = QWidget()
+        content.setStyleSheet(self._content_panel_style())
+        self._content_panel = content
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
         self._stack = QStackedWidget()
         self._stack.setStyleSheet("background: transparent;")
 
-        pages = [
-            _AccountPage(),            # index 0
-            _ProfilePage(db=self._db),            # index 1
-            _DishyPrefsPage(db=self._db),         # index 2
-            _NutritionGoalsPage(db=self._db),     # index 3
-            _AppPrefsPage(db=self._db),           # index 4
-            _DataPage(db=self._db),               # index 5
-            _MonitoringPage(db=self._db),         # index 6
-            _VersionHistoryPage(),     # index 7
+        page_defs = [
+            ("preferences", _AppPrefsPage(db=self._db)),
+            ("nutrition", _NutritionGoalsPage(db=self._db)),
+            ("profile", _ProfilePage(db=self._db)),
+            ("account", _AccountPage()),
+            ("dishy", _DishyPrefsPage(db=self._db)),
+            ("data", _DataPage(db=self._db)),
+            ("monitoring", _MonitoringPage(db=self._db)),
+            ("history", _VersionHistoryPage()),
         ]
-        self._pages = pages
+        self._pages = [page for _, page in page_defs]
+        self._page_keys = [key for key, _ in page_defs]
+        self._page_index_by_key = {key: idx for idx, key in enumerate(self._page_keys)}
+        self._page_by_key = {key: page for key, page in page_defs}
         self._scroll_areas: list[QScrollArea] = []
 
-        for page in pages:
+        for _key, page in page_defs:
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-            scroll.verticalScrollBar().setStyleSheet(
-                "QScrollBar:vertical { width: 5px; background: transparent; }"
-                f"QScrollBar::handle:vertical {{ background: {manager.c('#2a2a2a', '#cccccc')};"
-                " border-radius: 2px; min-height: 20px; }"
-                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-            )
+            scroll.verticalScrollBar().setStyleSheet(self._scrollbar_style())
             self._scroll_areas.append(scroll)
             inner = QWidget()
             inner.setStyleSheet("background: transparent;")
             inner_layout = QVBoxLayout(inner)
-            inner_layout.setContentsMargins(28, 24, 28, 28)
+            inner_layout.setContentsMargins(32, 28, 32, 32)
             inner_layout.setSpacing(0)
             inner_layout.addWidget(page)
             scroll.setWidget(inner)
             self._stack.addWidget(scroll)
 
-        body_layout.addWidget(self._stack, 1)
-        root.addWidget(body, 1)
+        content_layout.addWidget(self._stack, 1)
+        body_layout.addWidget(content, 1)
+        scaffold.body_layout().addWidget(shell, 1)
 
         self._select_page(0)
+
+    def _shell_style(self) -> str:
+        return (
+            f"background: {manager.c('#0f1215', '#fbf6ef')};"
+            " border: none;"
+            " border-radius: 18px;"
+        )
+
+    def _nav_style(self) -> str:
+        return (
+            f"background: {manager.c('#111418', '#f8f1e7')};"
+            f" border-right: 1px solid {manager.c('rgba(255,255,255,0.04)', 'rgba(0,0,0,0.05)')};"
+            " border-top-left-radius: 18px; border-bottom-left-radius: 18px;"
+        )
+
+    def _content_panel_style(self) -> str:
+        return (
+            f"background: {manager.c('#12161b', '#fffdf9')};"
+            " border-top-right-radius: 18px; border-bottom-right-radius: 18px;"
+        )
+
+    def _group_label_style(self) -> str:
+        return (
+            f"color: {manager.c('#817a72', '#8b8176')};"
+            " font-size: 11px; font-weight: 700; letter-spacing: 1.3px;"
+            " text-transform: uppercase; background: transparent;"
+        )
+
+    def _scrollbar_style(self) -> str:
+        return (
+            "QScrollBar:vertical { width: 5px; background: transparent; }"
+            f"QScrollBar::handle:vertical {{ background: {manager.c('#3a414a', '#cdbfae')};"
+            " border-radius: 2px; min-height: 20px; }"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        )
+
+    def _nav_button_style(self, active: bool) -> str:
+        if active:
+            return (
+                "QPushButton {"
+                f" background: {manager.c('rgba(255,107,53,0.10)', 'rgba(255,107,53,0.08)')};"
+                f" color: {manager.c('#f0ebe5', '#271d15')};"
+                " border: none; border-radius: 10px;"
+                " font-size: 13px; font-weight: 600;"
+                " text-align: left; padding: 0 12px;"
+                "}"
+            )
+        return (
+            "QPushButton {"
+            f" background: transparent; color: {manager.c('#999188', '#6a6158')};"
+            " border: none; border-radius: 8px;"
+            " font-size: 13px; font-weight: 500; text-align: left; padding: 0 12px;"
+            "}"
+            "QPushButton:hover {"
+            f" background: {manager.c('rgba(255,255,255,0.04)', 'rgba(255,107,53,0.05)')};"
+            f" color: {manager.c('#ebe4dc', '#221d18')};"
+            "}"
+        )
 
     def _select_page(self, index: int):
         self._stack.setCurrentIndex(index)
@@ -2663,29 +2964,26 @@ class SettingsView(QWidget):
                 pass
         for i, btn in enumerate(self._nav_btns):
             is_active = i == index
-            icon_name, label = _NAV_ITEMS[i]
-            icon_color = "#ff6b35" if is_active else manager.c("#888888", "#666666")
+            _key, _group, icon_name, _label = _NAV_ITEMS[i]
+            icon_color = manager.c("#ff7a47", "#d75a27") if is_active else manager.c("#93887d", "#6b635a")
             btn.setIcon(qta.icon(icon_name, color=icon_color))
             btn.setChecked(is_active)
-            btn.setStyleSheet(
-                (
-                    "QPushButton {"
-                    " background: rgba(255,107,53,0.12); color: #ff6b35;"
-                    " border: 1px solid rgba(255,107,53,0.35); border-radius: 8px;"
-                    " font-size: 13px; font-weight: 600; text-align: left; padding: 0 12px;"
-                    "}"
-                ) if is_active else (
-                    "QPushButton {"
-                    f" background: transparent; color: {manager.c('#888888', '#555555')};"
-                    " border: 1px solid transparent; border-radius: 8px;"
-                    " font-size: 13px; font-weight: 500; text-align: left; padding: 0 12px;"
-                    "}"
-                    "QPushButton:hover {"
-                    f" background: {manager.c('rgba(255,255,255,0.05)', 'rgba(0,0,0,0.05)')};"
-                    f" color: {manager.c('#c0c0c0', '#333333')};"
-                    "}"
-                )
-            )
+            btn.setStyleSheet(self._nav_button_style(is_active))
+
+    def show_root_page(self):
+        """Return Settings to its default everyday section."""
+        self._select_page(0)
+
+    def activate_settings(self, section: str = "preferences") -> None:
+        """Palette-safe entrypoint for section-aware settings navigation."""
+        index = self._page_index_by_key.get(str(section or "").strip(), 0)
+        self._select_page(index)
+
+    def palette_sections(self) -> list[dict]:
+        return [
+            {"key": key, "label": label, "group": group}
+            for key, group, _icon_name, label in _NAV_ITEMS
+        ]
 
     # ── Public API (called by MainWindow) ──────────────────────────────────────
 
@@ -2695,14 +2993,19 @@ class SettingsView(QWidget):
             if hasattr(page, "set_sync_fn"):
                 page.set_sync_fn(fn)
 
+    def set_visibility_service(self, service) -> None:
+        for page in self._pages:
+            if hasattr(page, "set_visibility_service"):
+                page.set_visibility_service(service)
+
     def set_data_management_callbacks(self, meal_plan_fn=None, shopping_fn=None, recipes_fn=None):
-        data_page = self._pages[5]   # _DataPage is at index 5
+        data_page = self._page_by_key["data"]
         data_page.set_refresh_callbacks(meal_plan_fn, shopping_fn, recipes_fn)
 
     def set_account_info(self, user: dict | None, sync_service) -> None:
         """Called by DishBoard.py after login to populate the Account page."""
-        account_page = self._pages[0]
-        monitoring_page = self._pages[6]
+        account_page = self._page_by_key["account"]
+        monitoring_page = self._page_by_key["monitoring"]
         account_page.set_user(user, sync_service)
         if hasattr(monitoring_page, "set_sync_service"):
             monitoring_page.set_sync_service(sync_service)
@@ -2716,20 +3019,13 @@ class SettingsView(QWidget):
         account_page.sign_out_requested.connect(self.sign_out_requested.emit)
 
     def apply_theme(self, mode: str):
-        self._hdr.setStyleSheet(
-            f"background: {manager.c('#0a0a0a', '#f0f0f0')};"
-            f" border-bottom: 1px solid {manager.c('#1c1c1c', '#dddddd')};"
-        )
-        self._nav.setStyleSheet(
-            f"background: {manager.c('#0d0d0d', '#f8f8f8')};"
-            f" border-right: 1px solid {manager.c('#1c1c1c', '#e0e0e0')};"
-        )
-        scrollbar_style = (
-            "QScrollBar:vertical { width: 5px; background: transparent; }"
-            f"QScrollBar::handle:vertical {{ background: {manager.c('#2a2a2a', '#cccccc')};"
-            " border-radius: 2px; min-height: 20px; }"
-            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-        )
+        _refresh_surface_styles(self)
+        self._shell.setStyleSheet(self._shell_style())
+        self._nav.setStyleSheet(self._nav_style())
+        self._content_panel.setStyleSheet(self._content_panel_style())
+        for label in self._group_labels:
+            label.setStyleSheet(self._group_label_style())
+        scrollbar_style = self._scrollbar_style()
         for scroll in self._scroll_areas:
             scroll.verticalScrollBar().setStyleSheet(scrollbar_style)
         for page in self._pages:

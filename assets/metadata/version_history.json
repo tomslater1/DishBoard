@@ -1,5 +1,68 @@
 [
   {
+    "version": "v0.71",
+    "title": "Onboarding refresh, cleanup pass, and shopping/home polish",
+    "changes": [
+      "Removed orphaned modules, dead helpers, and stale imports/locals left behind by earlier refactors without changing any live user flows",
+      "Redesigned first-run onboarding into a guided card-based setup that fits the calmer warm-neutral app theme and removes freeform text boxes from the flow",
+      "Rebuilt the app tour as a curated, theme-aligned walkthrough with corrected page order, clearer copy, and more reliable readable messaging",
+      "Replaced the Shopping List smart-summary sentence with a cleaner estimated total treatment and then reduced its chrome further so it sits quietly in the page header",
+      "Removed the noisy planning-mode status sentence from Meal Planner and rewrote the Home page subtitle so it reflects the page's real role as a live operational overview"
+    ]
+  },
+  {
+    "version": "v0.70",
+    "title": "System visibility completion without persistent shell chrome",
+    "changes": [
+      "Completed the Phase 1 system state visibility work by consolidating sync/runtime/activity freshness into the shared visibility service and Monitoring-driven operational summary",
+      "Removed the always-on shell monitoring strip and contextual page warning banner after validating that they added noise without enough user value",
+      "Kept the shared visibility model active for Monitoring, account sync copy, workflow instrumentation, AI/runtime tracking, and recent-change digest generation",
+      "Standardized Dishy, recipe nutrition/enrichment, and Monitoring integrity actions on scoped visibility work handles so background state cannot get stuck in a phantom in-progress state",
+      "Expanded visibility policy coverage for severity, attention reasons, digest grouping, recommended actions, stale-work cleanup, and confidence-aware module freshness"
+    ]
+  },
+  {
+    "version": "v0.69",
+    "title": "Command panel completion and mixed-search workflow release",
+    "changes": [
+      "Completed the first Phase 1 command panel as a mixed-result `Cmd/Ctrl+K` workspace instead of a command-only launcher",
+      "Added unified search across saved recipes, pantry items, shopping items, current-week meal-plan entries, settings sections, and recent Dishy sessions",
+      "Added inline quick-add flows for pantry items, shopping items, nutrition logging, and meal-slot planning with explicit confirmation before save",
+      "Added recent-item persistence for command panel actions and routed that metadata through the existing cloud sync path so panel activity is not local-only",
+      "Added typo-tolerant saved-recipe suggestions while typing in meal-planning flows, quieter dropdown-style suggestions, outside-click dismissal, and themed selector popups",
+      "Normalized command panel display text for recipe titles/tags with underscores or ampersands so saved recipes render correctly in results, suggestions, and recents"
+    ]
+  },
+  {
+    "version": "v0.68",
+    "title": "Phase 1 UI system cleanup and restrained redesign foundation",
+    "changes": [
+      "Completed the Phase 1 UI system cleanup foundation with shared page-shell primitives, calmer spacing discipline, and a more consistent cross-app toolbar, stat-strip, chip, tooltip, and empty-state language",
+      "Shifted the app toward a restrained dark-first visual system with warmer neutral surfaces, quieter passive controls, softer borders, and orange as the primary cross-product action accent",
+      "Reworked Recipes into a calmer search-first workspace with cleaner result rows, reduced action density, toned-down metadata, and a themed Dishy nutrition loading dialog",
+      "Reduced clutter across Home, Meal Planner, Nutrition, Shopping, My Kitchen, Help, and Settings by moving low-frequency actions into overflow, simplifying helper copy, and flattening overly busy section chrome",
+      "Reframed Dishy as a clearer flagship workspace with calmer main-view chrome and matching bubble/dialog styling instead of a separate green-heavy sub-product",
+      "Updated Settings and Help to fit the new support-page treatment, prioritised everyday settings before advanced/diagnostic controls, and improved light-mode consistency",
+      "Replaced the old unreliable recipe-search path with direct scrapeable recipe-site discovery so in-app web recipe search returns multiple usable results again"
+    ]
+  },
+  {
+    "version": "v0.67",
+    "title": "Planner intelligence, proactive nutrition coaching, and reusable routines",
+    "changes": [
+      "Meal Planner now supports planning modes for Balanced, High Protein, Pantry First, Low Effort, Family Friendly, Budget, Meal Prep, and Reduce Waste workflows",
+      "Added reusable planner templates plus a cross-session planner summary so users can save and re-apply routine weeks quickly",
+      "Meal slots now carry prep, leftover, template, and editor metadata for clearer shared-household collaboration and meal-prep routing",
+      "Optimizer now supports meal-prep leftovers and pantry-expiry rescue logic, routing batch-cook dinners into later lunches when appropriate",
+      "Planner shopping generation now skips pantry overlaps and consolidates items before pushing them into the Shopping List",
+      "Shopping List now shows a smarter summary with estimated spend, aisle-group count, and My Kitchen overlap hints",
+      "Nutrition now includes a Dishy Coach trends card with adherence, weekly protein consistency, and practical next-step guidance",
+      "Recipe detail views now support serving-scale controls with recalculated ingredient amounts and clearer quality scoring",
+      "Monitoring now exposes Dishy memory source summaries and one-click chat-memory clearing alongside the existing memory toggle",
+      "Dishy system instructions were updated to reflect pantry-aware shopping, planning modes, leftovers, and proactive reduce-waste behaviour"
+    ]
+  },
+  {
     "version": "v0.66",
     "title": "Windows compatibility and cross-platform release tooling",
     "changes": [

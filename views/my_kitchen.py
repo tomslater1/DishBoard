@@ -10,13 +10,14 @@ from PySide6.QtCore import Qt, QSize
 from models.database import Database
 from utils.data_service import get_db
 from utils.theme import manager as _tm
-from utils.macro_goals import get_macro_goals, get_broadcaster
+from utils.macro_goals import MACRO_SPECS, get_macro_goals, get_broadcaster
 from views.nutrition import MacroRing
 from views.shopping_list import CATEGORIES, _categorize
 from views.my_kitchen_storage import (
     _STORAGE_CATEGORIES, _categorize_kitchen_item, _TABS as _KITCHEN_TABS,
     _days_until_expiry, get_pantry_broadcaster,
 )
+from widgets.page_scaffold import PageScaffold, StatStrip
 
 
 def _greeting() -> str:
@@ -36,11 +37,11 @@ def _week_start() -> str:
     return (today - timedelta(days=today.weekday())).isoformat()
 
 
-def _card_header(icon_name: str, icon_colour: str, label: str) -> QHBoxLayout:
+def _card_header(icon_name: str, label: str) -> QHBoxLayout:
     """Shared header row used by all cards for visual consistency."""
     hdr = QHBoxLayout()
     ic = QLabel()
-    ic.setPixmap(qta.icon(icon_name, color=icon_colour).pixmap(QSize(13, 13)))
+    ic.setPixmap(qta.icon(icon_name, color=_tm.c("#8d867d", "#756d63")).pixmap(QSize(13, 13)))
     ic.setStyleSheet("background: transparent;")
     lbl = QLabel(label)
     lbl.setObjectName("section-label")
@@ -61,7 +62,7 @@ def _stat_card(icon_name: str, value: str, label: str, colour: str, on_click=Non
     row.setContentsMargins(18, 12, 18, 12)
     row.setSpacing(12)
     icon_lbl = QLabel()
-    icon_lbl.setPixmap(qta.icon(icon_name, color=colour).pixmap(QSize(20, 20)))
+    icon_lbl.setPixmap(qta.icon(icon_name, color=_tm.c("#f1ece5", "#2d241c")).pixmap(QSize(18, 18)))
     icon_lbl.setStyleSheet("background: transparent;")
     icon_lbl.setFixedSize(20, 20)
     text_col = QVBoxLayout()
@@ -83,14 +84,6 @@ _DISHY_CHIPS = [
     ("Give me a meal plan for this week", "fa5s.calendar-alt"),
     ("High-protein dinner ideas",          "fa5s.fire"),
 ]
-
-_DASH_MACROS = [
-    ("kcal",      "Calories", "kcal", "#ff6b35"),
-    ("protein_g", "Protein",  "g",    "#4fc3f7"),
-    ("carbs_g",   "Carbs",    "g",    "#aed581"),
-    ("fat_g",     "Fat",      "g",    "#ffb74d"),
-]
-
 
 class _ExpiryAlertCard(QWidget):
     """
@@ -140,7 +133,7 @@ class _ExpiryAlertCard(QWidget):
 
         # Warning icon
         icon_lbl = QLabel()
-        icon_lbl.setPixmap(qta.icon("fa5s.exclamation-triangle", color="#f0a500").pixmap(QSize(14, 14)))
+        icon_lbl.setPixmap(qta.icon("fa5s.exclamation-triangle", color="#ff6b35").pixmap(QSize(14, 14)))
         icon_lbl.setStyleSheet("background: transparent;")
         self._inner_layout.addWidget(icon_lbl)
 
@@ -221,7 +214,7 @@ class _KitchenPreviewCard(QWidget):
     def _build_header(self) -> QHBoxLayout:
         hdr = QHBoxLayout()
         ic = QLabel()
-        ic.setPixmap(qta.icon("fa5s.box-open", color="#e8924a").pixmap(QSize(20, 20)))
+        ic.setPixmap(qta.icon("fa5s.box-open", color=_tm.c("#8d867d", "#756d63")).pixmap(QSize(18, 18)))
         ic.setStyleSheet("background: transparent;")
         title_lbl = QLabel("MY KITCHEN")
         title_lbl.setStyleSheet(
@@ -476,55 +469,54 @@ class MyKitchenView(QWidget):
 
         content = QWidget()
         content.setStyleSheet("background: transparent;")
-        content.setMinimumHeight(760)  # prevents row_b from crushing at small window heights
+        content.setMinimumHeight(760)
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(28, 20, 28, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        layout.addLayout(self._header())
-        layout.addLayout(self._stats())
+        scaffold = PageScaffold(
+            "Home",
+            "A live overview of today's meals, nutrition, shopping, and kitchen state so you can see what needs attention next.",
+            eyebrow="Food Operations",
+            parent=content,
+            quiet_header=True,
+        )
+        scaffold.set_stats(self._stats())
+        layout.addWidget(scaffold)
+        body = scaffold.body_layout()
 
-        # Row A — Today's Plan | Recent Recipes (Dishy moved to bottom-left)
         row_a = QHBoxLayout()
-        row_a.setSpacing(12)
+        row_a.setSpacing(14)
         plan_card = self._today_plan()
-        plan_card.setMinimumHeight(200)
+        plan_card.setMinimumHeight(240)
         recent_card = self._recent_recipes()
-        recent_card.setMinimumHeight(200)
-        row_a.addWidget(plan_card, 1)
-        row_a.addWidget(recent_card, 1)
-        layout.addLayout(row_a)
-
-        # Compact quick-action strip
-        layout.addWidget(self._quick_actions_strip())
-
-        # Expiry alert banner (hidden when nothing is expiring)
+        recent_card.setMinimumHeight(240)
+        right_stack = QWidget()
+        right_stack.setStyleSheet("background: transparent;")
+        right_stack_layout = QVBoxLayout(right_stack)
+        right_stack_layout.setContentsMargins(0, 0, 0, 0)
+        right_stack_layout.setSpacing(14)
         self._expiry_card = _ExpiryAlertCard(self._db, self._navigate_to, self._trigger_dishy)
-        layout.addWidget(self._expiry_card)
+        right_stack_layout.addWidget(self._expiry_card)
+        right_stack_layout.addWidget(recent_card, 1)
+        row_a.addWidget(plan_card, 5)
+        row_a.addWidget(right_stack, 4)
+        body.addLayout(row_a)
 
-        # Row B — [Macro Rings + Dishy stacked] | Shopping Preview | Favourites
         row_b = QHBoxLayout()
-        row_b.setSpacing(12)
-
-        left_col = QWidget()
-        left_col.setStyleSheet("background: transparent;")
-        left_col.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        left_col.setMinimumHeight(280)
-        left_vbox = QVBoxLayout(left_col)
-        left_vbox.setContentsMargins(0, 0, 0, 0)
-        left_vbox.setSpacing(12)
-        left_vbox.addWidget(self._macro_card(), 1)
-        left_vbox.addWidget(self._dishy_teaser(), 1)
+        row_b.setSpacing(14)
 
         shopping_card = self._shopping_preview()
-        shopping_card.setMinimumHeight(280)
+        shopping_card.setMinimumHeight(300)
         self._kitchen_preview = _KitchenPreviewCard(self._db, self._navigate_to)
-        self._kitchen_preview.setMinimumHeight(280)
+        self._kitchen_preview.setMinimumHeight(300)
+        macro_card = self._macro_card()
+        macro_card.setMinimumHeight(300)
 
-        row_b.addWidget(left_col, 5)
+        row_b.addWidget(macro_card, 4)
         row_b.addWidget(shopping_card, 3)
         row_b.addWidget(self._kitchen_preview, 3)
-        layout.addLayout(row_b, 1)
+        body.addLayout(row_b, 1)
 
         scroll.setWidget(content)
         self._outer.addWidget(scroll)
@@ -538,24 +530,7 @@ class MyKitchenView(QWidget):
 
     # ── Header ─────────────────────────────────────────────────────────────
 
-    def _header(self) -> QHBoxLayout:
-        layout = QHBoxLayout()
-        left = QVBoxLayout()
-        left.setSpacing(2)
-        left.setContentsMargins(0, 0, 0, 0)
-        greeting = QLabel(_greeting())
-        greeting.setObjectName("page-title")
-        date_lbl = QLabel(_date_str())
-        date_lbl.setObjectName("page-date")
-        left.addWidget(greeting)
-        left.addWidget(date_lbl)
-        layout.addLayout(left)
-        layout.addStretch()
-        return layout
-
-    # ── Stats ───────────────────────────────────────────────────────────────
-
-    def _stats(self) -> QHBoxLayout:
+    def _stats(self) -> StatStrip:
         try:
             saved = self._db.conn.execute("SELECT COUNT(*) FROM recipes").fetchone()[0]
             items = self._db.conn.execute(
@@ -566,12 +541,11 @@ class MyKitchenView(QWidget):
             ).fetchone()[0]
         except Exception:
             saved = items = meals = 0
-        row = QHBoxLayout()
-        row.setSpacing(12)
-        row.addWidget(_stat_card("fa5s.calendar-check", str(meals), "Meals this week", "#4caf8a", lambda: self._navigate_to(2)))
-        row.addWidget(_stat_card("fa5s.book-open",       str(saved), "Saved recipes",   "#7c6af7", lambda: self._navigate_to(1)))
-        row.addWidget(_stat_card("fa5s.shopping-basket", str(items), "Items in list",   "#f0a500", lambda: self._navigate_to(5)))
-        return row
+        strip = StatStrip(self, density="compact", max_visible=3)
+        strip.add_stat("meals", str(meals), "Meals this week", "#ff6b35")
+        strip.add_stat("recipes", str(saved), "Saved recipes", "#ff6b35")
+        strip.add_stat("shopping", str(items), "Items in list", "#ff6b35")
+        return strip
 
     # ── Today's Plan ────────────────────────────────────────────────────────
 
@@ -585,7 +559,7 @@ class MyKitchenView(QWidget):
         # ── Header ──
         hdr = QHBoxLayout()
         ic = QLabel()
-        ic.setPixmap(qta.icon("fa5s.sun", color="#4caf8a").pixmap(QSize(20, 20)))
+        ic.setPixmap(qta.icon("fa5s.sun", color=_tm.c("#8d867d", "#756d63")).pixmap(QSize(18, 18)))
         ic.setStyleSheet("background: transparent;")
         title = QLabel("TODAY'S PLAN")
         title.setStyleSheet(
@@ -618,10 +592,10 @@ class MyKitchenView(QWidget):
 
         layout.addStretch(1)
         meal_defs = [
-            ("breakfast", "fa5s.egg",            "#ff9a5c", "BREAKFAST"),
-            ("lunch",     "fa5s.utensils",       "#34d399", "LUNCH"),
-            ("dinner",    "fa5s.concierge-bell", "#60a5fa", "DINNER"),
-            ("snack",     "fa5s.apple-alt",      "#f0a500", "SNACK"),
+            ("breakfast", "fa5s.egg",            "#ff6b35", "BREAKFAST"),
+            ("lunch",     "fa5s.utensils",       "#ff6b35", "LUNCH"),
+            ("dinner",    "fa5s.concierge-bell", "#ff6b35", "DINNER"),
+            ("snack",     "fa5s.apple-alt",      "#ff6b35", "SNACK"),
         ]
         for i, (meal_type, icon_name, colour, label) in enumerate(meal_defs):
             layout.addWidget(self._plan_row(label, icon_name, colour, meals_today.get(meal_type, "")))
@@ -691,7 +665,7 @@ class MyKitchenView(QWidget):
         # ── Header ──
         hdr = QHBoxLayout()
         ic = QLabel()
-        ic.setPixmap(qta.icon("fa5s.book-open", color="#7c6af7").pixmap(QSize(20, 20)))
+        ic.setPixmap(qta.icon("fa5s.book-open", color=_tm.c("#8d867d", "#756d63")).pixmap(QSize(18, 18)))
         ic.setStyleSheet("background: transparent;")
         title = QLabel("RECENT RECIPES")
         title.setStyleSheet(
@@ -749,7 +723,7 @@ class MyKitchenView(QWidget):
         rl.setSpacing(12)
         rl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         ic = QLabel()
-        ic.setPixmap(qta.icon("fa5s.utensils", color="#7c6af7").pixmap(QSize(16, 16)))
+        ic.setPixmap(qta.icon("fa5s.utensils", color=_tm.c("#8d867d", "#756d63")).pixmap(QSize(14, 14)))
         ic.setStyleSheet("background: transparent;")
         ic.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         info_col = QVBoxLayout()
@@ -917,15 +891,13 @@ class MyKitchenView(QWidget):
         for icon_name, label, colour, cb in [
             ("fa5s.search",        "Recipes",      "#7c6af7", lambda: self._navigate_to(1)),
             ("fa5s.calendar-plus", "Meal Planner", "#4caf8a", lambda: self._navigate_to(2)),
-            ("fa5s.heartbeat",     "Nutrition",    "#e05c7a", lambda: self._navigate_to(3)),
             ("fa5s.shopping-cart", "Shopping",     "#f0a500", lambda: self._navigate_to(5)),
-            ("fa5s.robot",         "Dishy",        "#34d399", lambda: self._navigate_to(6)),
         ]:
             btn = QPushButton()
             btn.setObjectName("quick-action-btn")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            btn.setFixedHeight(38)
+            btn.setFixedHeight(34)
             btn.clicked.connect(cb)
             bl = QHBoxLayout(btn)
             bl.setContentsMargins(0, 0, 0, 0)
@@ -951,10 +923,10 @@ class MyKitchenView(QWidget):
         card = QWidget()
         card.setObjectName("card")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(18, 14, 18, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(18, 14, 18, 18)
+        layout.setSpacing(12)
 
-        hdr = _card_header("fa5s.heartbeat", "#e05c7a", "TODAY'S INTAKE")
+        hdr = _card_header("fa5s.heartbeat", "TODAY'S INTAKE")
         nav_btn = QPushButton("Full log →")
         nav_btn.setObjectName("ghost-btn")
         nav_btn.setFixedHeight(22)
@@ -962,15 +934,16 @@ class MyKitchenView(QWidget):
         hdr.addWidget(nav_btn)
         layout.addLayout(hdr)
 
-        rings_row = QHBoxLayout()
-        rings_row.setSpacing(0)
-        rings_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        rings_grid = QGridLayout()
+        rings_grid.setContentsMargins(0, 4, 0, 0)
+        rings_grid.setHorizontalSpacing(4)
+        rings_grid.setVerticalSpacing(12)
         db_goals = get_macro_goals(self._db)
-        for key, label, unit, colour in _DASH_MACROS:
-            ring = MacroRing(colour, db_goals.get(key, 0.0), unit, size=90)
+        for idx, (key, label, _default, unit, colour) in enumerate(MACRO_SPECS):
+            ring = MacroRing(colour, db_goals.get(key, 0.0), unit, size=100)
             self._macro_rings[key] = ring
             cell = QVBoxLayout()
-            cell.setSpacing(4)
+            cell.setSpacing(6)
             cell.setContentsMargins(0, 0, 0, 0)
             cell.setAlignment(Qt.AlignmentFlag.AlignHCenter)
             cell.addWidget(ring, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -985,11 +958,9 @@ class MyKitchenView(QWidget):
             w.setStyleSheet("background: transparent;")
             w.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             w.setLayout(cell)
-            rings_row.addWidget(w)
+            rings_grid.addWidget(w, idx // 3, idx % 3)
 
-        layout.addStretch(1)
-        layout.addLayout(rings_row)
-        layout.addStretch(1)
+        layout.addLayout(rings_grid)
         return card
 
     def _refresh_macros(self):
@@ -1046,7 +1017,7 @@ class MyKitchenView(QWidget):
 
         hdr = QHBoxLayout()
         basket_ic = QLabel()
-        basket_ic.setPixmap(qta.icon("fa5s.shopping-basket", color="#f0a500").pixmap(QSize(20, 20)))
+        basket_ic.setPixmap(qta.icon("fa5s.shopping-basket", color=_tm.c("#8d867d", "#756d63")).pixmap(QSize(18, 18)))
         basket_ic.setStyleSheet("background: transparent;")
         title_lbl = QLabel("SHOPPING LIST")
         title_lbl.setStyleSheet(
@@ -1075,7 +1046,6 @@ class MyKitchenView(QWidget):
         if items:
             # Group items by category
             from collections import defaultdict
-            cat_map = {c[0]: c for c in CATEGORIES}
             grouped: dict = defaultdict(list)
             for item in items:
                 grouped[_categorize(item["name"])].append(item)
@@ -1206,4 +1176,3 @@ class MyKitchenView(QWidget):
             layout.addStretch()
 
         return card
-

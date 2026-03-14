@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QSize, QTimer, QEvent, Signal
 
 from api.claude_ai import ClaudeAI
-from api.dishy_tools import TOOLS, TOOL_STATUS_MESSAGES, summarise_tool_calls
+from api.dishy_tool_specs import TOOLS
+from api.dishy_tools import TOOL_STATUS_MESSAGES, summarise_tool_calls
+from utils.service_hub import registry as service_registry
 from utils.workers import run_async
 from utils.theme import manager as theme_manager
 
@@ -26,7 +28,7 @@ FAB_SIZE = 54
 GAP      = 10
 MARGIN   = 20
 
-DISHY_GREEN = "#34d399"
+DISHY_GREEN = "#ff6b35"
 
 
 def _clean(text: str) -> str:
@@ -135,8 +137,8 @@ class _MiniAvatar(QWidget):
     def apply_theme(self, _mode: str):
         r = int(self._size / 2)
         self.setStyleSheet(
-            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #4ef2bc,stop:1 #1ea86e);"
-            f"border: 1px solid {theme_manager.c('rgba(52,211,153,0.45)', 'rgba(52,211,153,0.40)')};"
+            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ff8a5d,stop:1 #df5b2c);"
+            f"border: 1px solid {theme_manager.c('rgba(255,107,53,0.42)', 'rgba(255,107,53,0.34)')};"
             f"border-radius: {r}px;"
         )
 
@@ -161,13 +163,13 @@ class _MiniPillBubble(QWidget):
     def apply_theme(self, mode: str):
         is_dark = mode == "dark"
         if self._is_user:
-            bg = "rgba(52,211,153,0.18)" if is_dark else "#e8fbf3"
-            border = "rgba(52,211,153,0.55)" if is_dark else "#66cda5"
-            text = "#e9fff5" if is_dark else "#0f3a2c"
+            bg = "rgba(255,107,53,0.16)" if is_dark else "#fff0e7"
+            border = "rgba(255,107,53,0.38)" if is_dark else "#efb89e"
+            text = "#fff1ea" if is_dark else "#5e2a1b"
         else:
-            bg = "#151e2a" if is_dark else "#ffffff"
-            border = "#2e3c52" if is_dark else "#d7e1ee"
-            text = "#e8edf8" if is_dark else "#1a2435"
+            bg = "#14191d" if is_dark else "#fffaf3"
+            border = "#282e35" if is_dark else "#e1d5c8"
+            text = "#ece6df" if is_dark else "#201912"
         self.setStyleSheet(
             f"background: {bg}; border: 1px solid {border}; border-radius: 12px;"
         )
@@ -212,9 +214,9 @@ class _MiniActionSummary(QWidget):
             pill = QLabel(f"✓  {text}")
             pill.setStyleSheet(
                 "QLabel {"
-                " color: #34d399;"
-                f" background: {theme_manager.c('rgba(52,211,153,0.16)', 'rgba(52,211,153,0.12)')};"
-                " border: 1px solid rgba(52,211,153,0.40);"
+                " color: #ff6b35;"
+                f" background: {theme_manager.c('rgba(255,107,53,0.14)', 'rgba(255,107,53,0.10)')};"
+                " border: 1px solid rgba(255,107,53,0.30);"
                 " border-radius: 9px;"
                 f" padding: 4px 10px; font-size: 11px; font-weight: 700; {_MINI_FONT}"
                 "}"
@@ -289,6 +291,7 @@ class DishyBubble(QWidget):
         self._page   = "Home"
         self._history: list[dict] = []
         self._typing_indicator: _MiniTypingIndicator | None = None
+        self._visibility_work = None
 
         # Set by MainWindow after construction via setup_actions()
         self._actions      = None   # DishyActions | None
@@ -308,6 +311,10 @@ class DishyBubble(QWidget):
         self._actions    = actions
         self._refresh_cb = refresh_callback
 
+    @staticmethod
+    def _visibility_service():
+        return service_registry.get("visibility")
+
     # ──────────────────────────────────────────── build
 
     def _build_ui(self):
@@ -324,15 +331,15 @@ class DishyBubble(QWidget):
         self._fab.setToolTip("Ask Dishy")
         self._fab.setStyleSheet(
             "QPushButton {"
-            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #4ef2bc,stop:1 #1ea86e);"
+            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ff8a5d,stop:1 #df5b2c);"
             "  border-radius: 27px;"
             "  border: 2px solid rgba(255,255,255,0.24);"
             "}"
             "QPushButton:hover {"
-            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #5df8c6,stop:1 #2abf85);"
+            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ff956d,stop:1 #ea6332);"
             "}"
             "QPushButton:pressed {"
-            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #34d399,stop:1 #157f54);"
+            "  background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #ff6b35,stop:1 #be4a22);"
             "}"
         )
         self._fab.clicked.connect(self._toggle)
@@ -425,22 +432,22 @@ class DishyBubble(QWidget):
     def _apply_input_style(self):
         self._input.setStyleSheet(
             "QLineEdit {"
-            f"  background: {theme_manager.c('#141e2b', '#ffffff')};"
-            f"  color: {theme_manager.c('#eef4ff', '#142133')};"
-            f"  border: 1.3px solid {theme_manager.c('#2f3d52', '#d5deea')};"
+            f"  background: {theme_manager.c('#151a1f', '#ffffff')};"
+            f"  color: {theme_manager.c('#efe8e0', '#17130f')};"
+            f"  border: 1.3px solid {theme_manager.c('#273038', '#ddd2c6')};"
             "  border-radius: 11px;"
             "  padding: 0 12px;"
             "  font-size: 13px;"
             f"  font-weight: 600; {_MINI_FONT}"
-            "  selection-background-color: #34d399;"
+            "  selection-background-color: #ff6b35;"
             "  selection-color: #000000;"
             "}"
             "QLineEdit:focus {"
-            "  border-color: #34d399;"
-            f"  background: {theme_manager.c('#182536', '#ffffff')};"
+            "  border-color: #ff6b35;"
+            f"  background: {theme_manager.c('#181d22', '#ffffff')};"
             "}"
             "QLineEdit::placeholder {"
-            f"  color: {theme_manager.c('#7d90aa', '#8ea0b8')};"
+            f"  color: {theme_manager.c('#8a8177', '#93877b')};"
             "}"
         )
 
@@ -448,61 +455,61 @@ class DishyBubble(QWidget):
         self._scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
             "QScrollBar:vertical { width: 5px; background: transparent; margin: 4px 0; }"
-            f"QScrollBar::handle:vertical {{ background: {theme_manager.c('#33445d', '#b9c7d9')};"
+            f"QScrollBar::handle:vertical {{ background: {theme_manager.c('#353c45', '#c7baaa')};"
             " border-radius: 2px; min-height: 24px; }"
-            f"QScrollBar::handle:vertical:hover {{ background: {theme_manager.c('#48607f', '#9fb0c6')}; }}"
+            f"QScrollBar::handle:vertical:hover {{ background: {theme_manager.c('#474f59', '#b7a792')}; }}"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         )
 
     def _apply_panel_theme(self):
         self._panel.setStyleSheet(
             "QWidget#dishy-panel {"
-            f"  background: {theme_manager.c('#111a26', '#f8fbff')};"
+            f"  background: {theme_manager.c('#101417', '#f6f2ed')};"
             "  border-radius: 16px;"
-            f"  border: 1px solid {theme_manager.c('#243347', '#d8e2ef')};"
+            f"  border: 1px solid {theme_manager.c('#20262d', '#ddd2c6')};"
             "}"
         )
         self._panel_header.setStyleSheet(
             "QWidget#dishy-mini-header {"
-            f" background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.16),stop:1 rgba(52,211,153,0.05))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(52,211,153,0.11),stop:1 rgba(52,211,153,0.03))')};"
+            f" background: {theme_manager.c('qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(255,107,53,0.14),stop:1 rgba(255,107,53,0.04))', 'qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(255,107,53,0.10),stop:1 rgba(255,107,53,0.03))')};"
             " border-radius: 16px 16px 0 0;"
-            f" border-bottom: 1px solid {theme_manager.c('rgba(52,211,153,0.28)', 'rgba(52,211,153,0.24)')};"
+            f" border-bottom: 1px solid {theme_manager.c('rgba(255,107,53,0.18)', 'rgba(255,107,53,0.15)')};"
             "}"
         )
         self._title_lbl.setStyleSheet(
             "background: transparent; border: none;"
-            f"color: {theme_manager.c('#f4f8ff', '#122033')}; font-size: 16px; font-weight: 800; {_MINI_FONT}"
+            f"color: {theme_manager.c('#f3ede5', '#221911')}; font-size: 16px; font-weight: 800; {_MINI_FONT}"
         )
         self._page_badge.setStyleSheet(
-            f"color: {theme_manager.c('#9fb0c9', '#60748d')}; font-size: 10px; font-weight: 700; {_MINI_FONT}"
-            f" background: {theme_manager.c('rgba(255,255,255,0.08)', '#ecf2f8')};"
-            f" border: 1px solid {theme_manager.c('#2f3d52', '#d5deea')};"
+            f"color: {theme_manager.c('#948a7f', '#766a5d')}; font-size: 10px; font-weight: 700; {_MINI_FONT}"
+            f" background: {theme_manager.c('rgba(255,255,255,0.06)', '#f1e7dc')};"
+            f" border: 1px solid {theme_manager.c('#273038', '#e0d3c5')};"
             " border-radius: 6px; padding: 0 8px;"
         )
-        self._close_btn.setIcon(qta.icon("fa5s.times", color=theme_manager.c("#a6b6cc", "#6d8098")))
+        self._close_btn.setIcon(qta.icon("fa5s.times", color=theme_manager.c("#998f84", "#7b7065")))
         self._close_btn.setStyleSheet(
             "QPushButton {"
-            f" background: {theme_manager.c('rgba(255,255,255,0.08)', '#ecf2f8')};"
+            f" background: {theme_manager.c('rgba(255,255,255,0.06)', '#f1e7dc')};"
             " border: none; border-radius: 14px;"
             "}"
             "QPushButton:hover {"
-            f" background: {theme_manager.c('rgba(255,255,255,0.14)', '#e2ebf5')};"
+            f" background: {theme_manager.c('rgba(255,255,255,0.10)', '#eadccd')};"
             "}"
         )
         self._chat_container.setStyleSheet(
-            f"QWidget#dishy-mini-chat {{ background: {theme_manager.c('#111a26', '#f8fbff')}; }}"
+            f"QWidget#dishy-mini-chat {{ background: {theme_manager.c('#101417', '#f6f2ed')}; }}"
         )
         self._panel_footer.setStyleSheet(
             "QWidget#dishy-mini-footer {"
-            f" background: {theme_manager.c('#111a26', '#f8fbff')};"
+            f" background: {theme_manager.c('#101417', '#f6f2ed')};"
             " border-radius: 0 0 16px 16px;"
-            f" border-top: 1px solid {theme_manager.c('#243347', '#d8e2ef')};"
+            f" border-top: 1px solid {theme_manager.c('#20262d', '#ddd2c6')};"
             "}"
         )
         self._send_btn.setStyleSheet(
-            "QPushButton { background: #34d399; border-radius: 11px; border: none; }"
-            "QPushButton:hover { background: #2ec48d; }"
-            f"QPushButton:disabled {{ background: {theme_manager.c('#2a4a3e', '#b9c8c0')}; }}"
+            "QPushButton { background: #ff6b35; border-radius: 11px; border: none; }"
+            "QPushButton:hover { background: #f07b47; }"
+            f"QPushButton:disabled {{ background: {theme_manager.c('#533124', '#d8c3b6')}; }}"
         )
         self._apply_input_style()
         self._apply_scroll_style()
@@ -625,12 +632,25 @@ class DishyBubble(QWidget):
 
         if actions is not None:
             actions.clear_pending()
+            vis = self._visibility_service()
+            if vis is not None:
+                self._visibility_work = vis.start_work(
+                    "dishy.bubble.chat",
+                    "ai",
+                    "dishy",
+                    "Dishy is replying",
+                    "Working through your latest request.",
+                    timeout_seconds=180,
+                    attention_reason="ai_in_progress",
+                )
 
             def _tool_handler(name: str, inp: dict) -> str:
                 # Push a status update to the typing indicator (thread-safe via queue)
                 status = TOOL_STATUS_MESSAGES.get(name, "Working...")
                 if self._typing_indicator is not None:
                     self._typing_indicator.update_status(status)
+                if self._visibility_work is not None:
+                    self._visibility_work.update(status)
                 result = actions.execute(name, inp)
                 pending_tool_names.append(name)
                 return result
@@ -644,6 +664,17 @@ class DishyBubble(QWidget):
                 on_error=self._on_error,
             )
         else:
+            vis = self._visibility_service()
+            if vis is not None:
+                self._visibility_work = vis.start_work(
+                    "dishy.bubble.chat",
+                    "ai",
+                    "dishy",
+                    "Dishy is replying",
+                    "Working through your latest request.",
+                    timeout_seconds=180,
+                    attention_reason="ai_in_progress",
+                )
             run_async(
                 _claude.chat, full_msg,
                 history=history_snap,
@@ -662,6 +693,9 @@ class DishyBubble(QWidget):
 
     def _on_reply(self, reply: str, tool_names: list, actions):
         try:
+            if self._visibility_work is not None:
+                self._visibility_work.finish()
+                self._visibility_work = None
             self._remove_typing_indicator()
 
             # Show one consolidated pill per tool category
@@ -697,6 +731,9 @@ class DishyBubble(QWidget):
             pass
 
     def _on_error(self, err: str):
+        if self._visibility_work is not None:
+            self._visibility_work.fail(err)
+            self._visibility_work = None
         self._remove_typing_indicator()
         err_lower = err.lower()
         _is_auth = False

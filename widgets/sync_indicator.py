@@ -11,7 +11,6 @@ import qtawesome as qta
 from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel
 
-from utils.theme import manager as theme_manager
 
 
 _STATES = {

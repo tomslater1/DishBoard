@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+    QDialog, QVBoxLayout, QLabel,
     QPushButton, QLineEdit, QWidget,
 )
 

@@ -54,6 +54,8 @@ The main themes were:
 This handover was updated again for the `v0.71` onboarding/cleanup/shopping polish pass.
 
 Recent changes recorded here:
+- Post-`v0.71` follow-up fixes were applied after validating the Windows package. Dishy’s SQLite crash was traced to cross-thread reuse of a shared connection during background-worker activity. [models/database.py](./models/database.py) now manages one SQLite connection per thread behind the shared `Database` wrapper, keeping WAL/autocommit semantics while preventing the worker-thread `sqlite3.ProgrammingError` that broke Dishy in the Windows package. [api/dishy_tools.py](./api/dishy_tools.py) also now closes its temporary context/memory DB handles more reliably, and [tests/test_database_connection.py](./tests/test_database_connection.py) includes a regression test that uses the same `Database` instance from the main thread and a worker thread.
+- The onboarding refresh in [views/onboarding.py](./views/onboarding.py) was visually flattened again after review. The heavy boxed shell, progress bars, info panel borders, and outlined button/card treatment were removed in favour of the quieter background-only styling used elsewhere in the app. Functionally the guided selection flow is unchanged; this was a theming/chrome pass only.
 - `v0.71` packages the cleanup and first-run flow refresh that followed the visibility release. Dead/orphaned modules and stale helpers were removed across the runtime, onboarding in [views/onboarding.py](./views/onboarding.py) was rebuilt as a guided selection flow with no freeform text boxes, and the tour in [views/app_tour.py](./views/app_tour.py) was rewritten as a curated theme-aligned walkthrough with corrected page order and more reliable readable copy. Shopping List in [views/shopping_list.py](./views/shopping_list.py) now surfaces a much quieter estimated-total treatment instead of the old smart-summary sentence, [views/meal_planner.py](./views/meal_planner.py) no longer carries the noisy planning-mode banner text, and Home copy in [views/my_kitchen.py](./views/my_kitchen.py) was updated so the page describes itself as the live operational overview it actually is. Coverage for this release was exercised through [tests/test_gui_smoke.py](./tests/test_gui_smoke.py), the existing grocery consolidation tests, and the full suite.
 - `v0.70` finishes the Phase 1 system visibility work without forcing permanent chrome into every page. [utils/system_visibility.py](./utils/system_visibility.py) now holds the shared severity/freshness/digest/action policy, [views/settings.py](./views/settings.py) and [views/settings_account.py](./views/settings_account.py) consume that shared model for Monitoring/account sync language, and high-value producers in [views/dishy.py](./views/dishy.py), [widgets/dishy_bubble.py](./widgets/dishy_bubble.py), [views/recipes.py](./views/recipes.py), and Monitoring integrity actions now use scoped visibility work handles so active/failing background work cannot get stuck. The attempted shell strip and page banner were removed from [main_window.py](./main_window.py) after validation because they added noise without enough user value, so Monitoring remains the detailed operational drill-down rather than the app carrying permanent status chrome on every page. Coverage for the current visibility state lives in [tests/test_system_visibility.py](./tests/test_system_visibility.py), [tests/test_system_visibility_gui.py](./tests/test_system_visibility_gui.py), and [tests/test_gui_smoke.py](./tests/test_gui_smoke.py).
 - `v0.69` closes the first major command workflow milestone. The old command-only launcher is now a mixed-result command panel: [widgets/command_palette.py](./widgets/command_palette.py) renders the `Cmd/Ctrl+K` overlay, [main_window.py](./main_window.py) owns result gathering/execution/recent persistence, and the core views expose palette-safe highlight/open/save APIs so the panel can navigate and act without private-widget reach-ins. The shipped surface now includes commands, recent usage, saved recipe/pantry/shopping/planner/settings/Dishy search results, inline quick-add flows, outside-click dismissal, themed selectors, and typo-tolerant saved-recipe suggestions while typing. Coverage for this release sits in [tests/test_command_palette.py](./tests/test_command_palette.py) and [tests/test_gui_smoke.py](./tests/test_gui_smoke.py).
@@ -71,6 +73,7 @@ Recent changes recorded here:
 - Dishy remains a flagship destination and was explicitly not removed. [views/dishy.py](./views/dishy.py) was rebalanced toward a calmer dedicated workspace: quieter header chrome, fewer visible quick prompts, less prominent utility controls, and a stronger focus on the conversation canvas and input area.
 - GUI smoke coverage was expanded in [tests/test_gui_smoke.py](./tests/test_gui_smoke.py), and [tests/test_design_system_smoke.py](./tests/test_design_system_smoke.py) was added to instantiate the shared page-shell primitives in both dark and light theme modes.
 - SQLite connections now enable WAL mode plus a 30 second busy timeout in [models/database.py](./models/database.py) to reduce transient multi-connection lock failures during startup sync.
+- The shared database wrapper in [models/database.py](./models/database.py) now maintains thread-local SQLite connections for shared `Database` instances. This keeps background workers, theme-triggered reload paths, and Dishy tool execution from tripping over SQLite’s same-thread connection rule while still allowing one high-level `Database` object to be passed around the app.
 - Cloud sync now treats SQLite lock errors as retryable cycle failures instead of logging long per-row cascades in [auth/cloud_sync.py](./auth/cloud_sync.py).
 - The documentation rule is now explicit: every meaningful future change must also update [HANDOVER.md](./HANDOVER.md).
 - Cross-platform support is now a standing release rule for both Windows and macOS, and handover or user-facing text should not imply a single-platform app unless a feature is genuinely platform-specific.
@@ -395,12 +398,18 @@ The following checks were run successfully on Windows after the refactor:
 - packaging smoke tests
 - `scripts/pre_release_checks.py`
 - `build_windows.ps1`
+- targeted Dishy/database regression tests after the post-`v0.71` SQLite threading fix
+- onboarding styling sanity check via `py_compile views/onboarding.py`
 
-At the end of this refactor, the test suite passed with 47 tests.
+At the end of the latest Windows validation pass, the pre-release suite passed with 91 tests.
 
 The Windows package build produced:
 - `dist/DishBoard/`
 - `dist/DishBoard-v0.66-windows.zip`
+
+The later post-`v0.71` repair build also produced a fresh local Windows artifact for release validation:
+- `dist_release/DishBoard/`
+- `dist_release/DishBoard-v0.71-windows-fixed.zip`
 
 ## Important Behavioural Notes
 

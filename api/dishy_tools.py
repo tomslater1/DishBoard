@@ -205,6 +205,7 @@ class DishyActions:
         Build a live context block injected into every Dishy message so it knows
         the user's current data without having to ask.  Called on the main thread.
         """
+        db = None
         try:
             db    = self._open_db()
             today = date.today().isoformat()
@@ -491,6 +492,12 @@ class DishyActions:
             return "\n".join(lines)
         except Exception:
             return ""
+        finally:
+            try:
+                if db is not None and db is not self._managed_tool_db:
+                    db.close()
+            except Exception:
+                pass
 
     def get_memory_context(self, query: str) -> str:
         """Return compact, query-targeted memory snippets for the current turn."""
@@ -513,7 +520,7 @@ class DishyActions:
             return ""
         finally:
             try:
-                if db is not None:
+                if db is not None and db is not self._managed_tool_db:
                     db.close()
             except Exception:
                 pass

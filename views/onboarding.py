@@ -209,8 +209,8 @@ class _ChoiceCard(QFrame):
 
     def _apply_style(self) -> None:
         icon_color = "#ff6b35" if self._checked else manager.c("#8c867e", "#8b8176")
-        card_bg = "rgba(255,107,53,0.12)" if self._checked else manager.c("#171a1f", "#fffaf4")
-        border = "rgba(255,107,53,0.52)" if self._checked else manager.c("#2b3036", "#ddd2c5")
+        card_bg = "rgba(255,107,53,0.16)" if self._checked else manager.c("rgba(255,255,255,0.035)", "rgba(255,255,255,0.45)")
+        hover_bg = "rgba(255,107,53,0.12)" if not self._checked else "rgba(255,107,53,0.20)"
         title_color = "#ff6b35" if self._checked else manager.c("#f2eee8", "#181510")
         subtitle_color = manager.c("#d2b7a8", "#826f61") if self._checked else manager.c("#8c867e", "#8b8176")
         icon_name = self._icon_name or "fa5s.check-circle"
@@ -219,11 +219,11 @@ class _ChoiceCard(QFrame):
         self.setStyleSheet(
             "QFrame#onboarding-choice-card {"
             f" background: {card_bg};"
-            f" border: 1px solid {border};"
+            " border: none;"
             " border-radius: 16px;"
             "}"
             "QFrame#onboarding-choice-card:hover {"
-            " border-color: rgba(255,107,53,0.42);"
+            f" background: {hover_bg};"
             "}"
         )
         self._title_lbl.setStyleSheet(
@@ -314,13 +314,12 @@ class OnboardingWizard(QWidget):
     def _build_header(self) -> QWidget:
         card = QFrame()
         card.setStyleSheet(
-            f"background: {manager.c('#171a1f', '#fffaf4')};"
-            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
-            "border-radius: 22px;"
+            "background: transparent;"
+            "border: none;"
         )
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(28, 26, 28, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(14)
 
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
@@ -360,35 +359,24 @@ class OnboardingWizard(QWidget):
         )
         layout.addWidget(subtitle)
 
-        self._progress_row = QHBoxLayout()
-        self._progress_row.setContentsMargins(0, 6, 0, 0)
-        self._progress_row.setSpacing(8)
         self._progress_bars: list[QFrame] = []
-        for _ in _STEP_META:
-            bar = QFrame()
-            bar.setFixedHeight(8)
-            bar.setStyleSheet("border-radius: 4px;")
-            self._progress_bars.append(bar)
-            self._progress_row.addWidget(bar, 1)
-        layout.addLayout(self._progress_row)
         return card
 
     def _build_profile_panel(self) -> QWidget:
         card = QFrame()
         card.setFixedWidth(340)
         card.setStyleSheet(
-            f"background: {manager.c('#171a1f', '#fffaf4')};"
-            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
-            "border-radius: 22px;"
+            "background: transparent;"
+            "border: none;"
         )
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
+        layout.setContentsMargins(10, 18, 18, 18)
+        layout.setSpacing(18)
 
         icon_wrap = QLabel()
         icon_wrap.setPixmap(qta.icon("fa5s.robot", color="#ff6b35").pixmap(QSize(26, 26)))
         icon_wrap.setStyleSheet(
-            "background: rgba(255,107,53,0.12); border: 1px solid rgba(255,107,53,0.28);"
+            "background: rgba(255,107,53,0.12); border: none;"
             "border-radius: 16px; padding: 12px;"
         )
         icon_wrap.setFixedSize(52, 52)
@@ -436,13 +424,12 @@ class OnboardingWizard(QWidget):
 
         snapshot = QFrame()
         snapshot.setStyleSheet(
-            f"background: {manager.c('#13161a', '#f4ede4')};"
-            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
-            "border-radius: 18px;"
+            "background: transparent;"
+            "border: none;"
         )
         snap_layout = QVBoxLayout(snapshot)
-        snap_layout.setContentsMargins(16, 16, 16, 16)
-        snap_layout.setSpacing(12)
+        snap_layout.setContentsMargins(0, 10, 0, 0)
+        snap_layout.setSpacing(10)
 
         snap_title = QLabel("Current profile")
         snap_title.setStyleSheet(
@@ -483,12 +470,11 @@ class OnboardingWizard(QWidget):
     def _build_step_panel(self) -> QWidget:
         card = QFrame()
         card.setStyleSheet(
-            f"background: {manager.c('#171a1f', '#fffaf4')};"
-            f"border: 1px solid {manager.c('#2b3036', '#ddd2c5')};"
-            "border-radius: 22px;"
+            "background: transparent;"
+            "border: none;"
         )
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(28, 28, 28, 24)
+        layout.setContentsMargins(18, 18, 18, 16)
         layout.setSpacing(18)
 
         self._step_badge = QLabel()
@@ -536,9 +522,9 @@ class OnboardingWizard(QWidget):
         self._back_btn.setFixedHeight(42)
         self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._back_btn.setStyleSheet(
-            f"QPushButton {{ background: {manager.c('#13161a', '#f4ede4')}; color: {manager.c('#a39d95', '#71685d')};"
-            f" border: 1px solid {manager.c('#2b3036', '#ddd2c5')}; border-radius: 12px; padding: 0 18px; font-size: 13px; font-weight: 600; }}"
-            "QPushButton:hover { border-color: rgba(255,107,53,0.32); color: #ff6b35; }"
+            f"QPushButton {{ background: {manager.c('rgba(255,255,255,0.04)', 'rgba(255,255,255,0.52)')}; color: {manager.c('#a39d95', '#71685d')};"
+            " border: none; border-radius: 12px; padding: 0 18px; font-size: 13px; font-weight: 600; }}"
+            "QPushButton:hover { background: rgba(255,107,53,0.10); color: #ff6b35; }"
         )
         self._back_btn.clicked.connect(self._on_back)
         footer.addWidget(self._back_btn)
@@ -559,9 +545,9 @@ class OnboardingWizard(QWidget):
         self._next_btn.setFixedSize(168, 44)
         self._next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._next_btn.setStyleSheet(
-            "QPushButton { background: #ff6b35; color: #fff7f1; border: 1px solid rgba(255,107,53,0.42);"
+            "QPushButton { background: #ff6b35; color: #fff7f1; border: none;"
             " border-radius: 12px; font-size: 14px; font-weight: 700; }"
-            "QPushButton:hover { background: #ff7a48; border-color: rgba(255,107,53,0.62); }"
+            "QPushButton:hover { background: #ff7a48; }"
         )
         self._next_btn.clicked.connect(self._on_next)
         footer.addWidget(self._next_btn)
@@ -577,11 +563,11 @@ class OnboardingWizard(QWidget):
 
         info = QFrame()
         info.setStyleSheet(
-            f"background: {manager.c('#13161a', '#f4ede4')}; border: 1px solid {manager.c('#2b3036', '#ddd2c5')}; border-radius: 18px;"
+            "background: transparent; border: none;"
         )
         info_layout = QVBoxLayout(info)
-        info_layout.setContentsMargins(18, 16, 18, 16)
-        info_layout.setSpacing(10)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(8)
 
         title = QLabel("No typing required here.")
         title.setStyleSheet(
@@ -602,8 +588,8 @@ class OnboardingWizard(QWidget):
         self._identity_lbl = QLabel()
         self._identity_lbl.setWordWrap(True)
         self._identity_lbl.setStyleSheet(
-            "background: rgba(255,107,53,0.12); color: #ff6b35; border: 1px solid rgba(255,107,53,0.22);"
-            "border-radius: 12px; padding: 10px 12px; font-size: 12px; font-weight: 600;"
+            "background: transparent; color: #ff6b35; border: none;"
+            "padding: 0; font-size: 12px; font-weight: 600;"
         )
         info_layout.addWidget(self._identity_lbl)
         layout.addWidget(info)

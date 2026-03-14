@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import json
+import threading
 from datetime import datetime, timezone
 
 from utils.paths import get_data_dir
@@ -87,7 +88,12 @@ class Database:
 
     def __init__(self, path: str | None = None):
         self.path = path or default_db_path()
-        self._conn: sqlite3.Connection | None = None
+        self._conns: dict[int, sqlite3.Connection] = {}
+        self._conn_lock = threading.RLock()
+
+    @staticmethod
+    def _thread_key() -> int:
+        return threading.get_ident()
 
     def connect(self):
         # Multiple connections are used by design (UI + background sync workers).
@@ -96,25 +102,56 @@ class Database:
         # Autocommit keeps implicit transactions short across the app's many
         # timers/workers and is safer here than holding a deferred transaction
         # open until some later commit.
-        self._conn = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
-        self._conn.row_factory = sqlite3.Row
-        try:
-            self._conn.execute("PRAGMA journal_mode = WAL")
-        except Exception:
-            pass
-        self._conn.execute("PRAGMA busy_timeout = 30000")
-        self._conn.execute("PRAGMA foreign_keys = ON")
+        thread_key = self._thread_key()
+        with self._conn_lock:
+            existing = self._conns.get(thread_key)
+            if existing is not None:
+                try:
+                    existing.execute("SELECT 1")
+                    return
+                except Exception:
+                    try:
+                        existing.close()
+                    except Exception:
+                        pass
+                    self._conns.pop(thread_key, None)
+
+            conn = sqlite3.connect(
+                self.path,
+                timeout=30.0,
+                isolation_level=None,
+                check_same_thread=False,
+            )
+            conn.row_factory = sqlite3.Row
+            try:
+                conn.execute("PRAGMA journal_mode = WAL")
+            except Exception:
+                pass
+            conn.execute("PRAGMA busy_timeout = 30000")
+            conn.execute("PRAGMA foreign_keys = ON")
+            self._conns[thread_key] = conn
 
     def close(self):
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        with self._conn_lock:
+            conns = list(self._conns.values())
+            self._conns.clear()
+        for conn in conns:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     @property
     def conn(self) -> sqlite3.Connection:
-        if self._conn is None:
+        conn = self._conns.get(self._thread_key())
+        if conn is None:
+            # Shared Database instances can legitimately cross thread boundaries
+            # via worker pools; open a thread-local connection on demand.
+            self.connect()
+            conn = self._conns.get(self._thread_key())
+        if conn is None:
             raise RuntimeError("Database not connected. Call connect() first.")
-        return self._conn
+        return conn
 
     def init_db(self):
         self.conn.executescript("""
